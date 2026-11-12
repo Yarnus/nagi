@@ -1,0 +1,22 @@
+.gradle/
+.kotlin/
+**/build/
+local.properties
+.idea/
+*.iml
+*.jks
+*.keystore
+*.p12
+*.pfx
+.env
+.env.*
+.DS_Store
+
+# Local visual references and generated acceptance evidence
+/Reference/
+/docs/design/evidence/
+
+# Packaged build artifacts, including copies outside build directories
+*.apk
+*.aab
+*.apks
