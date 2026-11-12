@@ -36,7 +36,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nagi-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/debug/app-*-debug.apk
           if-no-files-found: error
           retention-days: 7
       - name: Upload check reports
@@ -105,18 +105,37 @@ jobs:
           python3 - <<'PY'
           import json
           import os
+          import shutil
+          import zipfile
           from pathlib import Path
 
-          metadata = json.loads(Path('app/build/outputs/apk/release/output-metadata.json').read_text())
+          output = Path('app/build/outputs/apk/release')
+          metadata = json.loads((output / 'output-metadata.json').read_text())
+          expected = {'arm64-v8a', 'armeabi-v7a', 'x86_64'}
           elements = metadata['elements']
-          assert len(elements) == 1, 'Expected one universal APK'
-          assert f"v{elements[0]['versionName']}" == os.environ['TAG'], 'Tag must match versionName'
+          assert len(elements) == len(expected), 'Expected three ABI-specific APKs'
+          seen = set()
+          for element in elements:
+              assert f"v{element['versionName']}" == os.environ['TAG'], 'Tag must match versionName'
+              filters = element['filters']
+              assert len(filters) == 1 and filters[0]['filterType'] == 'ABI', 'Expected one ABI filter'
+              abi = filters[0]['value']
+              assert abi in expected and abi not in seen, f'Unexpected or duplicate ABI: {abi}'
+              seen.add(abi)
+              with zipfile.ZipFile(output / element['outputFile']) as apk:
+                  native_abis = {name.split('/')[1] for name in apk.namelist() if name.startswith('lib/') and name.endswith('.so')}
+              assert native_abis == {abi}, f'Native libraries do not match {abi}: {native_abis}'
+          assert seen == expected, 'Missing ABI'
+          Path('dist').mkdir(exist_ok=True)
+          for element in elements:
+              abi = element['filters'][0]['value']
+              shutil.copyfile(output / element['outputFile'], f"dist/nagi-{os.environ['TAG']}-{abi}.apk")
           PY
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
-          mkdir -p dist
-          cp app/build/outputs/apk/release/app-release.apk "dist/nagi-${TAG}.apk"
+          for apk in dist/*.apk; do
+            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk"
+          done
           cd dist
-          sha256sum "nagi-${TAG}.apk" > SHA256SUMS
+          sha256sum ./*.apk > SHA256SUMS
       - name: Remove signing key
         if: always()
         shell: bash
@@ -129,5 +148,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "$TAG" "dist/nagi-${TAG}.apk" dist/SHA256SUMS \
-            --verify-tag --title "Nagi ${TAG}" --generate-notes
+          gh release create "$TAG" dist/*.apk dist/SHA256SUMS \
+            --verify-tag --title "Nagi ${TAG}" --generate-notes \
+            --notes-file .github/release-notes.md

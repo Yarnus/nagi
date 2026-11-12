@@ -33,7 +33,9 @@ Nagi 是一个非官方 NGA Android 客户端，使用 Kotlin 和 Jetpack Compos
 ./gradlew :nga-sdk:check :app:assembleDebug :app:lintDebug :app:testDebugUnitTest
 ```
 
-调试版 APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。
+调试版 APK 位于 `app/build/outputs/apk/debug/app-<abi>-debug.apk`。
+Debug / Release 均按 `arm64-v8a`、`armeabi-v7a`、`x86_64` 分别生成独立 APK。
+大多数现代手机选择 `arm64-v8a`，旧款 32 位 ARM 设备选择 `armeabi-v7a`，Intel 设备或对应模拟器选择 `x86_64`。
 Google / Maven 仓库无法访问时，可追加 `-PchinaMirror` 使用 Aliyun HTTPS 镜像。
 
 仅构建 JVM SDK，不需要 Android SDK：

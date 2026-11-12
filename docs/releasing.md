@@ -6,9 +6,14 @@
 SDK 检查、Android 单元测试、Debug 构建和 lint，提供 7 天保留期的 Debug APK 与检查报告。
 不运行真实 NGA 接口测试或设备插桩测试。项目当前 lint 配置不会因 lint 告警导致构建失败，需查看报告。
 
-只有标签推送且检查成功后才构建签名 Release APK，并创建 GitHub Release，附带 APK 和
+只有标签推送且检查成功后才构建签名 Release APK，并创建 GitHub Release，附带三个独立 APK 和
 `SHA256SUMS`。标签必须是 `vMAJOR.MINOR.PATCH`，指向 `master` 历史中的提交，且版本与 APK
 的 `versionName` 一致。分支和 PR 构建不读取签名 Secrets。
+
+Debug / Release 均通过 ABI splits 生成 `arm64-v8a`、`armeabi-v7a`、`x86_64` 三种 APK，
+不生成通用 APK 或 32 位 x86 APK。发布附件命名为 `nagi-<tag>-<abi>.apk`；发布前会核对三种
+ABI 是否齐全、原生库是否属于对应 ABI，以及每个 APK 的版本和签名。
+安装包选择与验证范围来自[发布说明模板](../.github/release-notes.md)。
 
 ## 首次配置密钥
 
@@ -68,5 +73,5 @@ git push origin v0.1.0
 不要把标签打在未合并分支上，也不要移动已发布标签。
 发布失败时检查 Actions 日志；修复 Secrets 后可重跑失败任务。流程不覆盖已存在的 Release。
 
-工作流检查构建、测试与 APK 签名，但不能证明真机功能或真实 NGA 接口可用。
+工作流检查构建、测试、APK 架构与签名，但不能证明三种架构的设备运行行为或真实 NGA 接口可用。
 首次发布前应在设备上安装测试，并记录签名证书指纹；后续用新 APK 覆盖安装验证升级与数据保留。
