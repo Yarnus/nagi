@@ -1,5 +1,10 @@
 # Nagi
 
+[![Build](https://github.com/Yarnus/nagi/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/Yarnus/nagi/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/Yarnus/nagi)](https://github.com/Yarnus/nagi/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Yarnus/nagi/total)](https://github.com/Yarnus/nagi/releases)
+[![License: GPL v2](https://img.shields.io/badge/License-GPL_v2-blue.svg)](LICENSE)
+
 Nagi 是一个非官方 NGA Android 客户端，使用 Kotlin 和 Jetpack Compose，侧重论坛阅读。
 
 ## 功能
