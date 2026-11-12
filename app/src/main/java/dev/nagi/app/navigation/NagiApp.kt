@@ -21,6 +21,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -100,6 +101,7 @@ fun NagiApp(
                 val favoriteForumKeys = remember(forumFavorites) { forumFavorites.map { it.key }.toSet() }
                 val nav = rememberNavController()
                 val expanded = width == WindowWidthSizeClass.Expanded
+                val topicLinks = rememberTopicLinkHandler { nav.navigate("read/${Uri.encode(it)}") }
                 val returnFromAccountPage: (androidx.navigation.NavBackStackEntry) -> Unit = { source ->
                     if (nav.currentBackStackEntry === source && nav.previousBackStackEntry != null) {
                         nav.popBackStack()
@@ -124,7 +126,7 @@ fun NagiApp(
                         shadowElevation = 0.dp,
                         tonalElevation = 0.dp,
                     ) {
-                        CompositionLocalProvider(LocalOpenUser provides { uid ->
+                        CompositionLocalProvider(LocalUriHandler provides topicLinks, LocalOpenUser provides { uid ->
                             if (uid.matches(Regex("[1-9][0-9]*"))) select("user/${Uri.encode(uid)}/topics")
                         }) {
                             NavHost(nav, startDestination = "forums", modifier = Modifier.safeDrawingPadding().fillMaxSize()) {

@@ -149,5 +149,5 @@ jobs:
         run: |
           set -euo pipefail
           gh release create "$TAG" dist/*.apk dist/SHA256SUMS \
-            --verify-tag --title "Nagi ${TAG}" --generate-notes \
+            --verify-tag --title "Nagi ${TAG}" \
             --notes-file .github/release-notes.md

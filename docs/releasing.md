@@ -13,7 +13,7 @@ SDK 检查、Android 单元测试、Debug 构建和 lint，提供 7 天保留期
 Debug / Release 均通过 ABI splits 生成 `arm64-v8a`、`armeabi-v7a`、`x86_64` 三种 APK，
 不生成通用 APK 或 32 位 x86 APK。发布附件命名为 `nagi-<tag>-<abi>.apk`；发布前会核对三种
 ABI 是否齐全、原生库是否属于对应 ABI，以及每个 APK 的版本和签名。
-安装包选择与验证范围来自[发布说明模板](../.github/release-notes.md)。
+Release 正文仅使用[本次 changelog](../.github/release-notes.md)，不追加安装说明、验证范围或自动生成的提交日志。
 
 ## 首次配置密钥
 
@@ -58,8 +58,9 @@ GitHub 加密保存 Secrets；工作流仅在发布构建步骤中注入密码�
 ## 发布一个版本
 
 1. 修改 `app/build.gradle.kts` 的 `versionName`，并递增 `versionCode`（首个版本可保留 `0.1.0` / `1`）。
-2. 提交并推送到 `master`，等待 CI 通过。
-3. 配置好签名 Secrets 后，在该提交上创建并推送标签：
+2. 将 `.github/release-notes.md` 替换为本版本的 changelog，只写本次用户可见的更新。
+3. 提交并推送到 `master`，等待 CI 通过。
+4. 配置好签名 Secrets 后，在该提交上创建并推送标签：
 
 ```sh
 git switch master

@@ -64,7 +64,13 @@ object ContentParser {
                 val url = resourceUrl(it.groupValues[1], base)
                 "<a href=\"${url.replace("\"", "&quot;")}\">${it.groupValues[2]}</a>"
             }
-        val document = Jsoup.parseBodyFragment(inline)
+        val linked = inline.replace(Regex("""(\{)?\[url\](.*?)\[/url\]""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))) {
+            val label = it.groupValues[2].trim().let { value ->
+                if (it.groupValues[1].isNotEmpty()) value.removeSuffix("}").trim() else value
+            }
+            Element("a").attr("href", resourceUrl(label, base)).text(label).outerHtml()
+        }
+        val document = Jsoup.parseBodyFragment(linked)
         document.select("script,style,iframe,object").remove()
         val blocks = mutableListOf<ContentBlock>()
         val text = StringBuilder()
