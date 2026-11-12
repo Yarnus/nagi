@@ -25,6 +25,12 @@ class NotificationParserAndroidTest {
         assertEquals("456", result.items.single().postId)
     }
 
+    @Test fun unquotedEmptyStringNotificationFeedWorksOnAndroid() {
+        val result = parse("""{"data":{0:""},"time":1}""")
+        assertTrue(result.items.isEmpty())
+        assertNull(result.unreadCount)
+    }
+
     @Test fun keyLookingStringsRemainUnchanged() {
         val result = parse("""{"data":{0:{0:[{0:1,1:7,2:"名字",5:"{0:123, 42:456} and \\\"9:1\\\"",6:123,7:456,9:42}],unread:1}}}""")
         assertTrue(result.items.single().title.startsWith("{0:123, 42:456}"))

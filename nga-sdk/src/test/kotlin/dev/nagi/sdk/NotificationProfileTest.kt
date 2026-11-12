@@ -11,6 +11,12 @@ class NotificationProfileTest {
         assertNull(NgaParser.notifications("""{"data":{"0":{"id":1,"tid":2}}}""").unreadCount)
     }
 
+    @Test fun emptyStringFeedHasNoItemsOrInventedUnreadCount() {
+        val feed = NgaParser.notifications("""{"data":{"0":""},"time":1}""")
+        assertTrue(feed.items.isEmpty())
+        assertNull(feed.unreadCount)
+    }
+
     @Test fun numericEnvelopeUsesAggregateNotGuessedPerItemUnread() {
         val feed = NgaParser.notifications("""{"data":{"0":{"unread":3,"0":[{"0":1,"1":7,"2":"Actor","5":"Title","6":123,"7":456,"9":42}],"1":[{"0":2,"1":8,"2":"Sender"}]}}}""")
         assertEquals(3, feed.unreadCount)
@@ -33,6 +39,11 @@ class NotificationProfileTest {
             """{"data":{"0":{"unread":2,"0":"bad"}}}""",
             """{"data":{"0":{"unread":2,"0":[1]}}}""",
             """{"data":{"unexpected":"value"}}""",
+            """{"data":{"0":"unexpected"}}""",
+            """{"data":{"0":" "}}""",
+            """{"data":{"0":null}}""",
+            """{"data":{"0":0}}""",
+            """{"data":{"0":"","unexpected":"value"}}""",
         ).forEach { raw -> assertThrows(NgaException.Protocol::class.java) { NgaParser.notifications(raw) } }
     }
 
@@ -46,6 +57,19 @@ class NotificationProfileTest {
             assertEquals("noti", request.requestUrl!!.queryParameter("__lib"))
             assertEquals("0", request.requestUrl!!.queryParameter("time_limit"))
             assertEquals(1, server.requestCount)
+        }
+    }
+
+    @Test fun authenticatedEmptyStringFeedDoesNotFailAsMalformed() = kotlinx.coroutines.runBlocking {
+        okhttp3.mockwebserver.MockWebServer().use { server ->
+            server.enqueue(okhttp3.mockwebserver.MockResponse().setBody("""{"data":{0:""},"time":1}"""))
+            val store = MemorySessionStore().apply { saveSession(NgaSession("7", "test")) }
+            val client = HttpNgaClient(server.url("/"), store)
+            val feed = client.getNotificationFeed()
+            assertTrue(feed.items.isEmpty())
+            assertNull(feed.unreadCount)
+            assertEquals(1, server.requestCount)
+            assertEquals("0", server.takeRequest().requestUrl!!.queryParameter("time_limit"))
         }
     }
 

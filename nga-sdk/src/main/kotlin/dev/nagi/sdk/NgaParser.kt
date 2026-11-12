@@ -233,6 +233,8 @@ internal object NgaParser {
 
     fun notifications(raw: String): NotificationFeed {
         val payload = data(raw)
+        // noti/get_all can represent an empty feed as data[0] = "" without a count.
+        if (payload.length() == 1 && payload.opt("0") == "") return NotificationFeed(emptyList(), null)
         val envelope = payload.optJSONObject("0")
         if (envelope != null && envelope.has("unread")) {
             val count = envelope.opt("unread")?.toString()?.toIntOrNull()?.takeIf { it >= 0 }
