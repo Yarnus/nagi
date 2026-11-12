@@ -392,35 +392,7 @@ fun ReaderScreen(
         )
     }
     image?.let { url ->
-        Dialog(onDismissRequest = { image = null }) {
-            FlatCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = NagiThemeTokens.shapes.cardGroup,
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(Space.md),
-                    verticalArrangement = Arrangement.spacedBy(Space.sm),
-                ) {
-                    AsyncImage(
-                        model = url,
-                        contentDescription = "帖子图片",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 160.dp, max = 560.dp)
-                            .clip(RoundedCornerShape(12.dp)),
-                    )
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                        CapsuleButton(
-                            text = "关闭",
-                            onClick = { image = null },
-                            style = CapsuleStyle.Neutral,
-                        )
-                    }
-                }
-            }
-        }
+        ImageViewer(url = url, close = { image = null })
     }
 }
 
