@@ -86,14 +86,18 @@ class CommunityUiTest {
     @Test fun notificationListPreservesItemsWhenRefreshFails() {
         val item = CommunityItem("1", "测试主题", "有人回复了你的帖子", "测试用户", "123", "456", 42, true)
         var opened = ""
+        var markedAll = false
         compose.setContent {
             NagiTheme("dark") {
                 Surface(Modifier.fillMaxSize(), color = dev.nagi.app.ui.theme.NagiThemeTokens.colors.groupedCanvas) {
                     NotificationsScreen(NotificationsState(1, "7", listOf(item), 1, loaded = true, error = "网络失败"),
-                        {}, {}, {}, { opened = it.topicId })
+                        {}, {}, {}, { opened = it.topicId }, markAllRead = { markedAll = true })
                 }
             }
         }
+        compose.onNodeWithText("通知历史和已读状态仅保存在本机，不同步 NGA").assertDoesNotExist()
+        compose.onNodeWithText("全部已读").performClick()
+        compose.runOnIdle { assertTrue(markedAll) }
         compose.onNodeWithText("网络失败").assertIsDisplayed()
         compose.onNodeWithText("未读").assertIsDisplayed()
         compose.onNodeWithText("测试主题").performClick()

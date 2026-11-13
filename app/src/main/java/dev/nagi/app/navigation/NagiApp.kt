@@ -15,6 +15,10 @@ import dev.nagi.app.viewmodel.NotificationsViewModel
 import dev.nagi.app.viewmodel.NotificationsState
 import dev.nagi.app.ui.components.LocalOpenUser
 import dev.nagi.app.ui.components.LocalNotifications
+import dev.nagi.app.ui.components.LocalUserTags
+import dev.nagi.app.ui.components.UserTagAccess
+import dev.nagi.app.viewmodel.UserTagsState
+import dev.nagi.app.viewmodel.UserTagsViewModel
 import dev.nagi.app.ui.library.NotificationsScreen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -71,6 +75,11 @@ fun NagiApp(
     val loadedNotifications by notificationsVm.state.collectAsStateWithLifecycle()
     val notifications = loadedNotifications.takeIf { !account.busy && it.revision == account.revision && it.userId == account.userId }
         ?: NotificationsState(account.revision, account.userId)
+    val tagsVm: UserTagsViewModel = hiltViewModel()
+    val loadedTags by tagsVm.state.collectAsStateWithLifecycle()
+    val tags = loadedTags.takeIf { !account.busy && it.revision == account.revision && it.userId == account.userId }
+        ?: UserTagsState(account.revision, account.userId)
+    val tagAccess = UserTagAccess(tags) { userId, text, done -> tagsVm.save(tags, userId, text, done) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle, notificationsVm) {
         val observer = LifecycleEventObserver { _, event ->
@@ -81,7 +90,8 @@ fun NagiApp(
         notificationsVm.setForeground(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
         onDispose { lifecycle.removeObserver(observer); notificationsVm.setForeground(false) }
     }
-    CompositionLocalProvider(LocalAccountIdentity provides identity, LocalNotifications provides notifications) {
+    CompositionLocalProvider(LocalAccountIdentity provides identity, LocalNotifications provides notifications,
+        LocalUserTags provides tagAccess) {
         NagiTheme(preferences.theme) {
             val colors = NagiThemeTokens.colors
             if (!account.ready) {
@@ -225,9 +235,10 @@ fun NagiApp(
                                 composable("notifications") { entry ->
                                     NotificationsScreen(notifications, { returnFromAccountPage(entry) }, notificationsVm::refresh,
                                         { select("login") }, { item ->
+                                            notificationsVm.markRead(item)
                                             if (item.topicId.matches(Regex("[1-9][0-9]*"))) select("read/${Uri.encode(item.topicId)}")
                                             else select("messages")
-                                        })
+                                        }, markAllRead = notificationsVm::markAllRead)
                                 }
                                 composable("messages") { entry ->
                                     MessagesScreen(null, preferences, { returnFromAccountPage(entry) }, { nav.navigate("message/${Uri.encode(it)}") })

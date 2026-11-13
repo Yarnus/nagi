@@ -34,6 +34,10 @@ class HistoryPersistenceTest {
             assertEquals("Preserved", guest.favorite("123")?.title)
             assertEquals(ReadingPosition("123", 2, 3, 4), guest.position("123"))
             assertTrue(guest.history().first().isEmpty())
+            assertTrue(guest.notifications().first().isEmpty())
+            val notification = LocalNotification("one", "Title", "", "Actor", "123", "0", 42, false)
+            guest.receiveNotifications(listOf(notification))
+            guest.readNotifications(listOf("one"))
             guest.saveHistory(ReadingHistory("123", "Guest title", 2))
             guest.saveHistory(ReadingHistory("456", "Newest", 3))
             assertEquals(listOf("456", "123"), guest.history().first().map { it.topicId })
@@ -42,6 +46,7 @@ class HistoryPersistenceTest {
             databases.close()
             databases = AccountDatabases(context, base)
             assertEquals("Guest title", databases.forUser(null).history().first().last().title)
+            assertTrue(databases.forUser(null).notifications().first().single().read)
             assertEquals("Private title", databases.forUser("7").history().first().single().title)
         } finally {
             databases.close()

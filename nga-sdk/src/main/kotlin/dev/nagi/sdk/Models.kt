@@ -102,6 +102,7 @@ class PublishRequest(
     val action: PublishAction, val forumId: String, val content: String,
     val title: String = "", val topicId: String? = null, val postId: String? = null,
     val collectionId: String? = null,
+    val attachments: List<UploadedAttachment> = emptyList(),
 ) {
     val target = PublishTarget(action, forumId, topicId, postId, collectionId)
     init {

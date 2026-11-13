@@ -69,6 +69,7 @@ internal fun ComposerScreen(
     editValue: ((TextFieldValue) -> Unit)? = null,
     togglePreview: (() -> Unit)? = null,
     initialRecipients: String = "",
+    uploadImage: ((suspend () -> dev.nagi.sdk.ImageUpload) -> Unit)? = null,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
@@ -111,7 +112,7 @@ internal fun ComposerScreen(
         }
     }
     val dismiss = {
-        if (state.phase != ComposePhase.Submitting) {
+        if (state.phase != ComposePhase.Submitting && !state.images.uploading) {
             if (
                 state.phase != ComposePhase.Confirmed &&
                 (state.content.isNotEmpty() || state.title.isNotEmpty() ||
@@ -143,7 +144,7 @@ internal fun ComposerScreen(
             ) {
                 IconButton(
                     onClick = dismiss,
-                    enabled = state.phase != ComposePhase.Submitting,
+                    enabled = state.phase != ComposePhase.Submitting && !state.images.uploading,
                     modifier = Modifier.size(48.dp),
                 ) {
                     Surface(
@@ -277,12 +278,17 @@ internal fun ComposerScreen(
                 )
             }
 
+            state.images.error?.let { Text(it, style = typography.metadata, color = colors.destructive) }
             if (!preview) {
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(Space.sm),
                     verticalArrangement = Arrangement.spacedBy(Space.xs),
                 ) {
+                    if (uploadImage != null && state.target?.action == PublishAction.NEW_TOPIC) ImageUploadButton(
+                        enabled = editable && !state.images.blocked, busy = state.images.uploading,
+                        scopeKey = state.target.toString(), upload = uploadImage,
+                    )
                     SmilePickerButton(value = field, edit = update, enabled = editable)
                     if (showFormatChips) {
                         CapsuleButton(

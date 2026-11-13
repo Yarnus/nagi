@@ -167,6 +167,32 @@ internal object NgaXmlParser {
         return PublishPreparation(decodeNgaEditor(root.field("subject")), decodeNgaEditor(content))
     }
 
+    fun uploadGrant(raw: String, target: PublishTarget, userId: String): UploadGrant {
+        val root = parseRoot(raw)
+        rootErrorOrNull(root)?.let { throw it }
+        val fid = root.field("fid").ifBlank { root.directChild("__F")?.field("fid").orEmpty() }
+        val validTarget = if (target.action == PublishAction.NEW_TOPIC) {
+            root.field("action") == "new" && (target.collectionId != null || fid == target.forumId)
+        } else {
+            root.field("action") == target.action.wireValue && root.field("tid") == target.topicId &&
+                root.field("pid").ifBlank { "0" } == (target.postId ?: "0")
+        }
+        if (!validTarget || root.directChild("__CU")?.field("uid") != userId || fid.isBlank() ||
+            root.field("auth").isBlank() || root.field("attach_url").isBlank()) {
+            throw NgaException.Protocol(ProtocolReason.XML_PUBLISH_MISMATCH)
+        }
+        return UploadGrant(root.field("attach_url"), root.field("auth"), fid)
+    }
+
+    fun uploadedAttachment(raw: String): UploadedAttachment? = try {
+        val root = parseRoot(raw)
+        val url = root.field("url")
+        if (url.startsWith("./mon_") || url.startsWith("mon_") || url.startsWith("https://img.nga.cn/attachments/") ||
+            url.startsWith("https://img8.nga.cn/attachments/")) {
+            UploadedAttachment(root.field("attachments"), root.field("attachments_check"), url)
+        } else null
+    } catch (_: NgaException.Protocol) { null } catch (_: IllegalArgumentException) { null }
+
     private fun rootErrorOrNull(root: Element): NgaException? {
         val explicitError = root.directChild("error")
         if (explicitError != null) return classifyNgaError(explicitError.collectText())

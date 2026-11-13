@@ -245,15 +245,16 @@ internal object NgaParser {
                     val type = item.optString("0")
                     val actorId = item.optString("1")
                     val time = item.optLong("9")
-                    val topic = if (message) "" else item.optString("6")
-                    val post = if (message) "" else item.optString("7", item.optString("8"))
+                    val privateMessage = message || (key == "2" && type.toIntOrNull() in 10..12)
+                    val topic = if (privateMessage) "" else item.optString("6")
+                    val post = if (privateMessage) "" else item.optString("7", item.optString("8"))
                     if (type.isBlank() || !item.has("2")) throw NgaException.Protocol(ProtocolReason.JSON_COMMUNITY_EMPTY)
                     CommunityItem("$key:$type:$actorId:$topic:$post:$time", plain(item.optString("5")),
                         if (message) "收到短消息" else "社区通知", plain(item.optString("2")),
-                        topic, post, time, unread = false, unreadKnown = false, privateMessage = message)
+                        topic, post, time, unread = false, unreadKnown = false, privateMessage = privateMessage)
                 }
             }
-            return NotificationFeed((group("0", false) + group("1", true)).distinctBy { it.id }, count)
+            return NotificationFeed((group("0", false) + group("1", true) + group("2", false)).distinctBy { it.id }, count)
         }
         val items = community(raw)
         return NotificationFeed(items, if (items.all { it.unreadKnown }) items.count { it.unread } else null)

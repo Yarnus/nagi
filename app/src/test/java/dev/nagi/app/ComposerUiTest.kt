@@ -32,6 +32,21 @@ import org.robolectric.annotation.GraphicsMode
 class ComposerUiTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun imageUploadIsOfferedForNewPostsAndBusyStateDisablesSendAndClose() {
+        var state by mutableStateOf(ComposerState(target = PublishTarget(PublishAction.NEW_TOPIC, "7"), title = "Title", content = "Text"))
+        compose.setContent { NagiTheme {
+            ComposerScreen(state, ReadingPreferences(), { _, _ -> }, {}, {}, {}, uploadImage = {})
+        } }
+        compose.onNodeWithText("图片").assertIsEnabled()
+        compose.runOnIdle { state = state.copy(images = DraftImages(uploading = true)) }
+        compose.onNodeWithText("上传中…").assertIsNotEnabled()
+        compose.onNodeWithText("发送").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("关闭发布帖子").assertIsNotEnabled()
+        compose.runOnIdle { state = state.copy(images = DraftImages(blocked = true, error = "图片上传结果不明，请勿重复上传。")) }
+        compose.onNodeWithText("图片").assertIsNotEnabled()
+        compose.onNodeWithText("图片上传结果不明，请勿重复上传。").assertExists()
+    }
+
     @Test fun editPreviewAndKeepDraftOnReturn() {
         var state by mutableStateOf(ComposerState(context = "回复 测试作者 · #12"))
         var closed = false

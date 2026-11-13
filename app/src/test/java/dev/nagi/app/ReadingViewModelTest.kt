@@ -555,6 +555,19 @@ class FakeClient : NgaClient {
 }
 
 class FakeDao : ReadingDao {
+    private val userTags = MutableStateFlow<List<LocalUserTag>>(emptyList())
+    override fun userTags(): Flow<List<LocalUserTag>> = userTags
+    override suspend fun saveUserTag(tag: LocalUserTag) { userTags.update { it.filterNot { old -> old.userId == tag.userId } + tag } }
+    override suspend fun removeUserTag(userId: String) { userTags.update { it.filterNot { tag -> tag.userId == userId } } }
+    private val notifications = MutableStateFlow<List<LocalNotification>>(emptyList())
+    override fun notifications(): Flow<List<LocalNotification>> = notifications
+    override suspend fun receiveNotifications(items: List<LocalNotification>) {
+        notifications.update { old -> (old + items.filterNot { item -> old.any { it.id == item.id } }).distinctBy { it.id }
+            .sortedWith(compareByDescending<LocalNotification> { it.createdAt }.thenBy { it.id }) }
+    }
+    override suspend fun readNotifications(ids: List<String>) {
+        notifications.update { old -> old.map { if (it.id in ids) it.copy(read = true) else it } }
+    }
     val history = MutableStateFlow<List<ReadingHistory>>(emptyList())
     override fun history(): Flow<List<ReadingHistory>> = history
     override suspend fun saveHistory(item: ReadingHistory) {

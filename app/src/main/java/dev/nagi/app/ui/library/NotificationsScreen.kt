@@ -19,7 +19,7 @@ import dev.nagi.sdk.CommunityItem
 @Composable
 fun NotificationsScreen(
     state: NotificationsState, back: () -> Unit, refresh: () -> Unit,
-    login: () -> Unit, open: (CommunityItem) -> Unit,
+    login: () -> Unit, open: (CommunityItem) -> Unit, markAllRead: () -> Unit = {},
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
@@ -30,6 +30,11 @@ fun NotificationsScreen(
         if (state.userId == null) {
             Notice("请先登录 NGA", login)
         } else {
+            if (state.items.any { it.unread }) {
+                Box(Modifier.fillMaxWidth().padding(horizontal = Space.lg)) {
+                    CapsuleButton("全部已读", markAllRead, style = CapsuleStyle.Neutral)
+                }
+            }
             LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(vertical = Space.md)) {
                 if (state.loading) item { LoadingLine() }
                 state.error?.let { error -> item { Notice(error, refresh) } }

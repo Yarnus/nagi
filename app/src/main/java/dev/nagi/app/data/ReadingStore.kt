@@ -37,6 +37,18 @@ data class ReadingHistory(@PrimaryKey val topicId: String, val title: String, va
 
 @Dao
 interface ReadingDao {
+    @Query("SELECT * FROM user_tags")
+    fun userTags(): kotlinx.coroutines.flow.Flow<List<LocalUserTag>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveUserTag(tag: LocalUserTag)
+    @Query("DELETE FROM user_tags WHERE userId = :userId")
+    suspend fun removeUserTag(userId: String)
+    @Query("SELECT * FROM notifications ORDER BY createdAt DESC, id ASC")
+    fun notifications(): kotlinx.coroutines.flow.Flow<List<LocalNotification>>
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun receiveNotifications(items: List<LocalNotification>)
+    @Query("UPDATE notifications SET `read` = 1 WHERE id IN (:ids)")
+    suspend fun readNotifications(ids: List<String>)
     @Query("SELECT * FROM history ORDER BY viewedAt DESC, topicId ASC LIMIT 100")
     fun history(): kotlinx.coroutines.flow.Flow<List<ReadingHistory>>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveHistory(item: ReadingHistory)
@@ -65,13 +77,23 @@ interface ReadingDao {
 }
 
 @Database(
-    entities = [LocalFavorite::class, LocalForumFavorite::class, ReadingPosition::class, ReadingHistory::class],
-    version = 3,
+    entities = [LocalFavorite::class, LocalForumFavorite::class, ReadingPosition::class, ReadingHistory::class, LocalNotification::class, LocalUserTag::class],
+    version = 5,
     exportSchema = false,
 )
 abstract class ReadingDatabase : RoomDatabase() {
     abstract fun readingDao(): ReadingDao
     companion object {
+        val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `user_tags` (`userId` TEXT NOT NULL, `text` TEXT NOT NULL, PRIMARY KEY(`userId`))")
+            }
+        }
+        val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `notifications` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `summary` TEXT NOT NULL, `actor` TEXT NOT NULL, `topicId` TEXT NOT NULL, `postId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `privateMessage` INTEGER NOT NULL, `read` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+            }
+        }
         val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `history` (`topicId` TEXT NOT NULL, `title` TEXT NOT NULL, `viewedAt` INTEGER NOT NULL, PRIMARY KEY(`topicId`))")

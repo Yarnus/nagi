@@ -17,7 +17,7 @@ class AccountDatabases(context: Context, private val name: String = "reading") :
         val file = if (userId == null) "$name.db" else "${name}_$userId.db"
         databases.getOrPut(file) {
             Room.databaseBuilder(context, ReadingDatabase::class.java, file)
-                .addMigrations(ReadingDatabase.MIGRATION_1_2, ReadingDatabase.MIGRATION_2_3).build()
+                .addMigrations(ReadingDatabase.MIGRATION_1_2, ReadingDatabase.MIGRATION_2_3, ReadingDatabase.MIGRATION_3_4, ReadingDatabase.MIGRATION_4_5).build()
         }.readingDao()
     }
 

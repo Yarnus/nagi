@@ -14,6 +14,39 @@ class NotificationsViewModelTest {
     @Before fun setup() = Dispatchers.setMain(dispatcher)
     @After fun cleanup() = Dispatchers.resetMain()
 
+    @Test fun refreshRetainsHistoryReadStateAndNewItemsAcrossRecreationAndAccounts() = runTest(dispatcher) {
+        val store = MemorySessionStore().apply { saveSession(NgaSession("7", "test")); saveSession(NgaSession("8", "other")); selectAccount("7") }
+        val accounts = AccountManager(store, FakeBrowserCookies()).also { it.initialize() }
+        val databases = FakeDaoProvider()
+        val first = CommunityItem("first", "Title", "", "Actor", "2", "3", 42, false, unreadKnown = false)
+        val second = first.copy(id = "second", createdAt = 50)
+        var items = listOf(first)
+        val client = object : NgaClient by FakeClient() {
+            override suspend fun getNotificationFeed() = NotificationFeed(items, 99)
+        }
+        val vm = NotificationsViewModel(client, accounts, databases)
+        vm.setForeground(true); runCurrent()
+        assertEquals(1, vm.state.value.unreadCount)
+        vm.markRead(vm.state.value.items.single()); runCurrent()
+        assertEquals(0, vm.state.value.unreadCount)
+        items = listOf(first, second, second)
+        vm.refresh(); runCurrent()
+        assertEquals(listOf("second", "first"), vm.state.value.items.map { it.id })
+        assertEquals(1, vm.state.value.unreadCount)
+        vm.markAllRead(); runCurrent()
+        items = emptyList(); vm.refresh(); runCurrent()
+        assertEquals(2, vm.state.value.items.size)
+        assertEquals(0, vm.state.value.unreadCount)
+        val restored = NotificationsViewModel(client, accounts, databases)
+        runCurrent()
+        assertEquals(vm.state.value.items, restored.state.value.items)
+        accounts.switchAccount("8"); runCurrent()
+        assertTrue(vm.state.value.items.isEmpty())
+        accounts.switchAccount("7"); runCurrent()
+        assertEquals(2, vm.state.value.items.size)
+        assertEquals(0, vm.state.value.unreadCount)
+    }
+
     @Test fun guestsNeverFetchAndForegroundRequestsCoalesce() = runTest(dispatcher) {
         val store = MemorySessionStore()
         val accounts = AccountManager(store, FakeBrowserCookies()).also { it.initialize() }
@@ -22,14 +55,14 @@ class NotificationsViewModelTest {
         val client = object : NgaClient by FakeClient() {
             override suspend fun getNotificationFeed(): NotificationFeed { calls++; return gate.await() }
         }
-        val vm = NotificationsViewModel(client, accounts)
+        val vm = NotificationsViewModel(client, accounts, FakeDaoProvider())
         vm.setForeground(true); runCurrent()
         assertEquals(0, calls)
         store.saveSession(NgaSession("7", "test")); accounts.initialize(); runCurrent()
         vm.refresh(); vm.setForeground(true); runCurrent()
         assertEquals(1, calls)
         gate.complete(NotificationFeed(emptyList(), 3)); runCurrent()
-        assertEquals(3, vm.state.value.unreadCount)
+        assertEquals(0, vm.state.value.unreadCount)
         vm.setForeground(false); vm.setForeground(true); runCurrent()
         assertEquals(2, calls)
     }
@@ -44,7 +77,7 @@ class NotificationsViewModelTest {
                 return NotificationFeed(listOf(CommunityItem("1", "Title", "", "User", "2", "3", 42, true)), 1)
             }
         }
-        val vm = NotificationsViewModel(client, accounts)
+        val vm = NotificationsViewModel(client, accounts, FakeDaoProvider())
         vm.setForeground(true); runCurrent()
         fail = true; vm.refresh(); runCurrent()
         assertEquals(1, vm.state.value.unreadCount)
@@ -67,11 +100,11 @@ class NotificationsViewModelTest {
                 return NotificationFeed(emptyList(), if (call == 1) 99 else 2)
             }
         }
-        val vm = NotificationsViewModel(client, accounts)
+        val vm = NotificationsViewModel(client, accounts, FakeDaoProvider())
         vm.setForeground(true); runCurrent()
         accounts.switchAccount("8"); runCurrent()
         gate.complete(Unit); runCurrent()
         assertEquals("8", vm.state.value.userId)
-        assertEquals(2, vm.state.value.unreadCount)
+        assertEquals(0, vm.state.value.unreadCount)
     }
 }

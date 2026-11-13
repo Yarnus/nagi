@@ -51,12 +51,13 @@ internal fun ReplyPopup(
     preview: () -> Unit,
     close: () -> Unit,
     expandContext: () -> Unit = {},
+    uploadImage: ((suspend () -> dev.nagi.sdk.ImageUpload) -> Unit)? = null,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
     var discard by remember { mutableStateOf(false) }
     val dismiss = {
-        if (session.phase != ComposePhase.Submitting) {
+        if (session.phase != ComposePhase.Submitting && !session.images.uploading) {
             if (!session.comment && session.input.text.isNotEmpty()) {
                 discard = true
             } else {
@@ -92,7 +93,7 @@ internal fun ReplyPopup(
                     icon = NagiIcons.Close,
                     description = "关闭${if (session.comment) "贴条评论" else "回复"}",
                     onClick = dismiss,
-                    enabled = session.phase != ComposePhase.Submitting,
+                    enabled = session.phase != ComposePhase.Submitting && !session.images.uploading,
                 )
             }
 
@@ -224,6 +225,7 @@ internal fun ReplyPopup(
                         minLines = if (session.comment) 3 else 5,
                     )
                 }
+                session.images.error?.let { Text(it, style = typography.metadata, color = colors.destructive) }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -234,6 +236,10 @@ internal fun ReplyPopup(
                         horizontalArrangement = Arrangement.spacedBy(Space.sm),
                         verticalArrangement = Arrangement.spacedBy(Space.xs),
                     ) {
+                        if (uploadImage != null && !session.comment) ImageUploadButton(
+                            enabled = !session.preview && editable && !session.images.blocked, busy = session.images.uploading,
+                            scopeKey = session.target.toString(), upload = uploadImage,
+                        )
                         SmilePickerButton(value = session.input, edit = edit, enabled = !session.preview && editable)
                         if (!session.comment) {
                             CapsuleButton(

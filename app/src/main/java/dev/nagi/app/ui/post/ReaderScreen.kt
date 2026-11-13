@@ -85,6 +85,7 @@ import dev.nagi.app.ui.components.EdgeAlignedMetaRow
 import dev.nagi.app.ui.components.FlatCard
 import dev.nagi.app.ui.components.FrostedSurface
 import dev.nagi.app.ui.components.GoldTagBadge
+import dev.nagi.app.ui.components.UserTagBadge
 import dev.nagi.app.ui.components.InlineStatusBanner
 import dev.nagi.app.ui.components.LoadingLine
 import dev.nagi.app.ui.components.NagiIcons
@@ -389,6 +390,7 @@ fun ReaderScreen(
             preview = replies::preview,
             close = replies::close,
             expandContext = replies::expandContext,
+            uploadImage = replies::uploadImage,
         )
     }
     image?.let { url ->
@@ -662,19 +664,20 @@ internal fun ReaderPost(
                             .padding(start = Space.md),
                         verticalArrangement = Arrangement.spacedBy(3.dp),
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
+                        FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(Space.xs),
+                            verticalArrangement = Arrangement.spacedBy(Space.xs),
+                            itemVerticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
                                 text = post.author,
-                                modifier = Modifier.weight(1f, fill = false),
                                 style = typography.bodyText.copy(fontWeight = FontWeight.Medium),
                                 color = colors.textPrimary,
                             )
                             if (isAuthor) {
                                 GoldTagBadge(text = "楼主")
                             }
+                            UserTagBadge(post.authorId)
                         }
                         if (metaSegments.isNotEmpty()) {
                             Text(
@@ -745,14 +748,17 @@ internal fun ReaderPost(
                     verticalArrangement = Arrangement.spacedBy(Space.xs),
                 ) {
                     post.comments.take(3).forEach { comment ->
-                        Text(
-                            text = comment.author,
-                            style = typography.capsuleLabel,
-                            color = colors.goldText,
+                        FlowRow(
                             modifier = Modifier.padding(top = 2.dp)
                                 .clickable(enabled = openUser != null && dev.nagi.app.ui.components.isPublicUserId(comment.authorId), onClickLabel = "查看用户详情") { openUser?.invoke(comment.authorId) }
                                 .heightIn(min = 48.dp),
-                        )
+                            horizontalArrangement = Arrangement.spacedBy(Space.xs),
+                            verticalArrangement = Arrangement.spacedBy(Space.xs),
+                            itemVerticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(comment.author, style = typography.capsuleLabel, color = colors.goldText)
+                            UserTagBadge(comment.authorId)
+                        }
                         SelectionContainer { ContentBlocks(comment.content, preferences, onImage) }
                     }
                 }
@@ -794,13 +800,16 @@ internal fun ReaderPost(
                             LazyColumn {
                                 itemsIndexed(post.comments, key = { index, comment -> "${comment.id}:$index" }) { idx, comment ->
                                      Column(Modifier.padding(vertical = 10.dp)) {
-                                        Text(
-                                            text = comment.author,
-                                            style = typography.capsuleLabel,
-                                            color = colors.goldText,
+                                        FlowRow(
                                             modifier = Modifier.heightIn(min = 48.dp)
                                                 .clickable(enabled = openUser != null && dev.nagi.app.ui.components.isPublicUserId(comment.authorId), onClickLabel = "查看用户详情") { expandedComments = false; openUser?.invoke(comment.authorId) },
-                                        )
+                                            horizontalArrangement = Arrangement.spacedBy(Space.xs),
+                                            verticalArrangement = Arrangement.spacedBy(Space.xs),
+                                            itemVerticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text(comment.author, style = typography.capsuleLabel, color = colors.goldText)
+                                            UserTagBadge(comment.authorId)
+                                        }
                                         SelectionContainer { ContentBlocks(comment.content, preferences, onImage) }
                                     }
                                     if (idx < post.comments.lastIndex) {

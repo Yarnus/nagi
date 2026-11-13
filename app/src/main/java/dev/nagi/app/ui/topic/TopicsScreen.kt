@@ -199,6 +199,7 @@ fun TopicsScreen(
             details = composer::details,
             editValue = composer::editValue,
             togglePreview = composer::preview,
+            uploadImage = composer::uploadImage,
         )
     }
 

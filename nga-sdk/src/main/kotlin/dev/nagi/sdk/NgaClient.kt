@@ -10,6 +10,7 @@ import okhttp3.FormBody
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.ResponseBody
@@ -22,6 +23,9 @@ import retrofit2.http.FieldMap
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.POST
 import retrofit2.http.QueryMap
+import retrofit2.http.Multipart
+import retrofit2.http.Part
+import retrofit2.http.Url
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.net.ProtocolException
@@ -56,6 +60,9 @@ interface NgaClient {
     suspend fun setSubforumVisibility(parentForumId: String, filterId: String, visible: Boolean): WriteResult =
         throw UnsupportedOperationException("Subforum settings unavailable")
     suspend fun publish(request: PublishRequest): WriteResult
+    /** Preparation failures throw before upload; upload outcomes never imply a usable receipt. */
+    suspend fun uploadImage(target: PublishTarget, image: ImageUpload): ImageUploadResult =
+        throw UnsupportedOperationException("Image upload unavailable")
 }
 
 enum class NgaDomain(val baseUrl: String) {
@@ -80,6 +87,8 @@ internal fun NgaDomain.readOrigin(): HttpUrl =
     (if (this == NgaDomain.ALTERNATE) NgaDomain.PRIMARY else this).baseUrl.toHttpUrl()
 
 internal interface NgaApi {
+    @Multipart @POST
+    suspend fun upload(@Url url: String, @Part parts: List<MultipartBody.Part>): Response<String>
     @FormUrlEncoded @POST("app_api.php")
     suspend fun forums(@QueryMap query: Map<String, String>, @FieldMap fields: Map<String, String> = emptyMap()): String
     @FormUrlEncoded @POST("thread.php")
@@ -460,12 +469,37 @@ internal class HttpNgaClient(
         parse = { raw, _ -> NgaXmlParser.publishPreparation(raw, target) },
     )
 
+    override suspend fun uploadImage(target: PublishTarget, image: ImageUpload): ImageUploadResult {
+        require(target.action in setOf(PublishAction.NEW_TOPIC, PublishAction.REPLY, PublishAction.QUOTE))
+        val snapshot = sessions.snapshot()
+        val userId = snapshot.session?.userId ?: throw NgaException.Authentication()
+        val grant = exchange(requireAuth = true, expectedSession = snapshot,
+            request = { it.publish(publishParameters(target) + mapOf("lite" to "xml"), emptyMap()) },
+            parse = { NgaXmlParser.uploadGrant(it, target, userId) })
+        val url = origin.resolve(grant.url)?.takeIf(::isTrustedUploadUrl)
+            ?: throw NgaException.Restricted()
+        val parts = imageUploadParts(grant, image, origin.host)
+        var attachment: UploadedAttachment? = null
+        val outcome = write { diagnostic ->
+            exchange(requireAuth = true, isWrite = true, expectedSession = snapshot, recordDiagnostic = diagnostic,
+                request = { it.upload(url.toString(), parts).writeBody() },
+                parse = { raw ->
+                    NgaParser.writeErrorOrNull(raw)?.let { throw it }
+                    attachment = NgaXmlParser.uploadedAttachment(raw)
+                    WriteResult.Confirmed("图片上传已接受")
+                })
+        }
+        return ImageUploadResult(outcome, attachment)
+    }
+
     override suspend fun publish(request: PublishRequest): WriteResult = write { diagnostic ->
         exchange(
             requireAuth = true, isWrite = true, recordDiagnostic = diagnostic,
             request = { it.publishWrite(query() + publishParameters(request.target), mapOf(
                 "step" to "2", "post_subject" to escapeNgaSubmission(request.title),
                 "post_content" to escapeNgaSubmission(request.content),
+                "attachments" to request.attachments.joinToString("\t") { it.name },
+                "attachments_check" to request.attachments.joinToString("\t") { it.check },
             )).writeBody() },
             parse = { NgaParser.publish(it, request.target) },
         )

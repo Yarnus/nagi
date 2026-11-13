@@ -25,11 +25,11 @@ data class ReplySession(
     val target: PublishTarget, val context: String,
     val prefill: String = "", val input: TextFieldValue = TextFieldValue(),
     val phase: ComposePhase = ComposePhase.Preparing, val error: String? = null,
-    val preview: Boolean = false, val expandedContext: Boolean = false,
+    val preview: Boolean = false, val expandedContext: Boolean = false, val images: DraftImages = DraftImages(),
 ) {
     val comment get() = target.action == PublishAction.COMMENT
     val content get() = assembleReply(prefill, input.text)
-    val canSend get() = input.text.isNotBlank() && phase in setOf(ComposePhase.Editing, ComposePhase.Rejected)
+    val canSend get() = !images.uploading && input.text.isNotBlank() && phase in setOf(ComposePhase.Editing, ComposePhase.Rejected)
 }
 
 @HiltViewModel
@@ -40,6 +40,7 @@ class ReplySessionViewModel @Inject constructor(
     private val _session = MutableStateFlow<ReplySession?>(null)
     val session = _session.asStateFlow()
     private var preparation: Job? = null
+    private var upload: Job? = null
     private var generation = 0L
     private fun current() = accounts.state.value.let {
         it.ready && !it.busy && it.userId == owner.userId && it.revision == owner.revision
@@ -49,13 +50,15 @@ class ReplySessionViewModel @Inject constructor(
     }
     private fun pendingKey(target: PublishTarget) = "${owner.userId}:${owner.revision}:$target"
     private fun pending() = saved.get<ArrayList<String>>("replyPendingTargets") ?: arrayListOf()
-    private fun clear() { generation++; preparation?.cancel(); _session.value = null }
-    fun close() { if (_session.value?.phase != ComposePhase.Submitting) clear() }
+    private fun clear() { generation++; preparation?.cancel(); upload?.cancel(); _session.value = null }
+    fun close() { if (_session.value?.phase != ComposePhase.Submitting && _session.value?.images?.uploading != true) clear() }
     fun open(target: PublishTarget, context: String) {
         if (!current() || _session.value != null) return
         require(target.action in setOf(PublishAction.REPLY, PublishAction.COMMENT, PublishAction.QUOTE))
         val interrupted = pendingKey(target) in pending()
-        _session.value = ReplySession(target, context, phase = if (interrupted) ComposePhase.Unconfirmed else ComposePhase.Preparing)
+        val uploadBlocked = pendingKey(target) in saved.get<ArrayList<String>>("replyPendingUploads").orEmpty()
+        _session.value = ReplySession(target, context, phase = if (interrupted) ComposePhase.Unconfirmed else ComposePhase.Preparing,
+            images = DraftImages(blocked = uploadBlocked, error = if (uploadBlocked) "上次图片上传结果不明，请勿重复上传。" else null))
         if (!interrupted) prepare()
     }
     fun prepare() {
@@ -83,6 +86,42 @@ class ReplySessionViewModel @Inject constructor(
     }
     fun expandContext() { _session.value = _session.value?.let { it.copy(expandedContext = !it.expandedContext) } }
     fun preview() { _session.value = _session.value?.let { it.copy(preview = !it.preview) } }
+    fun uploadImage(read: suspend () -> ImageUpload) {
+        val session = _session.value ?: return
+        if (!current() || session.comment || session.phase !in setOf(ComposePhase.Editing, ComposePhase.Rejected) ||
+            session.images.uploading || session.images.blocked) return
+        val token = generation
+        _session.value = session.copy(images = session.images.copy(uploading = true, error = null))
+        upload = viewModelScope.launch {
+            var started = false
+            try {
+                val image = read()
+                if (!current() || token != generation) return@launch
+                saved["replyPendingUploads"] = ArrayList((saved.get<ArrayList<String>>("replyPendingUploads").orEmpty() + pendingKey(session.target)).distinct())
+                started = true
+                val result = client.uploadImage(session.target, image)
+                if (!current() || token != generation) return@launch
+                val attachment = result.attachment
+                val blocked = result.outcome !is WriteResult.Rejected && attachment == null
+                if (!blocked) saved["replyPendingUploads"] = ArrayList(saved.get<ArrayList<String>>("replyPendingUploads").orEmpty().filterNot { it == pendingKey(session.target) })
+                _session.value = _session.value?.let { latest -> latest.copy(
+                    input = if (attachment != null) insertImage(latest.input, attachment) else latest.input,
+                    images = latest.images.copy(uploading = false, blocked = blocked, error = result.feedback(),
+                        attachments = latest.images.attachments + listOfNotNull(attachment))) }
+            } catch (error: CancellationException) { throw error }
+            catch (error: NgaException) {
+                if (current() && token == generation) {
+                    saved["replyPendingUploads"] = ArrayList(saved.get<ArrayList<String>>("replyPendingUploads").orEmpty().filterNot { it == pendingKey(session.target) })
+                    _session.value = _session.value?.copy(images = session.images.copy(error = "无法准备图片上传：${userMessage(error)}"))
+                }
+            }
+            catch (_: Exception) {
+                if (current() && token == generation) _session.value = _session.value?.copy(images = session.images.copy(blocked = started,
+                    error = if (started) "图片上传结果不明，请勿重复上传。" else "无法读取图片，请选择 10MB 以内的 JPEG、PNG、GIF 或 WebP 图片。"))
+            }
+        }
+    }
+
     fun send() {
         val session = _session.value ?: return
         if (!current() || !session.canSend) return
@@ -94,7 +133,8 @@ class ReplySessionViewModel @Inject constructor(
                 val target = session.target
                 accounts.withCurrentRevision(owner.revision) {
                     client.publish(PublishRequest(target.action, target.forumId, session.content,
-                        topicId = target.topicId, postId = target.postId, collectionId = target.collectionId))
+                        topicId = target.topicId, postId = target.postId, collectionId = target.collectionId,
+                        attachments = session.images.attachments.filter { session.content.contains(it.bbcode) }))
                 }
             } catch (error: CancellationException) {
                 if (current() && token == generation) _session.value = session.copy(phase = ComposePhase.Unconfirmed, error = null)

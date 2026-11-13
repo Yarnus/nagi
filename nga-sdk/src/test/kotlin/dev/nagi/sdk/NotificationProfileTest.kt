@@ -26,6 +26,18 @@ class NotificationProfileTest {
         assertTrue(feed.items.none { it.unreadKnown || it.unread })
     }
 
+    @Test fun systemGroupIsRetainedAndMessageTargetsAreNotTopics() {
+        val feed = NgaParser.notifications("""{"data":{"0":{"unread":2,"2":[{"0":13,"1":7,"2":"Actor","5":"Report","6":123,"7":456,"9":42},{"0":10,"1":8,"2":"System","6":999,"9":43}]}}}""")
+        assertEquals(2, feed.items.size)
+        assertEquals("123", feed.items.first().topicId)
+        assertTrue(feed.items.last().privateMessage)
+        assertEquals("", feed.items.last().topicId)
+        assertTrue(feed.items.none { it.unreadKnown })
+        assertThrows(NgaException.Protocol::class.java) {
+            NgaParser.notifications("""{"data":{"0":{"unread":1,"2":"bad"}}}""")
+        }
+    }
+
     @Test fun explicitFlagsEmptyFeedsAndUnknownCounts() {
         val feed = NgaParser.notifications("""{"data":{"0":{"id":1,"read":0},"1":{"id":2,"read":1}}}""")
         assertEquals(1, feed.unreadCount)

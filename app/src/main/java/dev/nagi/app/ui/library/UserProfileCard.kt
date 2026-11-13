@@ -28,6 +28,7 @@ internal fun contentPreview(blocks: List<ContentBlock>): String = blocks.joinToS
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun UserProfileCard(state: UserProfileState, retry: () -> Unit, sendMessage: (String) -> Unit) {
     val colors = NagiThemeTokens.colors
@@ -43,8 +44,12 @@ internal fun UserProfileCard(state: UserProfileState, retry: () -> Unit, sendMes
         Column(Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.md)) {
             Row(horizontalArrangement = Arrangement.spacedBy(Space.lg)) {
                 AccountAvatar(AccountIdentity(user = user), Modifier.size(64.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
-                    Text(user.name, style = typography.sectionTitle, color = colors.textPrimary)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.xs), verticalArrangement = Arrangement.spacedBy(Space.xs),
+                        itemVerticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text(user.name, style = typography.sectionTitle, color = colors.textPrimary)
+                        UserTagBadge(user.id)
+                    }
                     Text("UID ${user.id}", style = typography.metadata, color = colors.textSecondary)
                 }
             }
@@ -60,13 +65,16 @@ internal fun UserProfileCard(state: UserProfileState, retry: () -> Unit, sendMes
                     onTextLayout = { if (!expanded) overflow = it.hasVisualOverflow })
                 if (expanded || overflow) CapsuleButton(if (expanded) "收起签名" else "展开签名", { expanded = !expanded }, style = CapsuleStyle.Neutral)
             }
-            if (viewer.userId != user.id) CapsuleButton(
-                text = "发送短消息",
-                onClick = { sendMessage(user.name) },
-                icon = NagiIcons.Message,
-                style = CapsuleStyle.FrostedGold,
-                visualHeight = 42.dp,
-            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+                UserTagEditor(user.id)
+                if (viewer.userId != user.id) CapsuleButton(
+                    text = "发送短消息",
+                    onClick = { sendMessage(user.name) },
+                    icon = NagiIcons.Message,
+                    style = CapsuleStyle.FrostedGold,
+                    visualHeight = 42.dp,
+                )
+            }
         }
     }
 }

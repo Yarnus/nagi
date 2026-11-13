@@ -20,9 +20,9 @@ data class ComposerState(
     val selection: Int = 0, val title: String = "", val privateMessage: Boolean = false,
     val recipients: String = "", val newMessage: Boolean = false,
     val selectionStart: Int = selection, val composition: androidx.compose.ui.text.TextRange? = null,
-    val preview: Boolean = false,
+    val preview: Boolean = false, val images: DraftImages = DraftImages(),
 ) {
-    val canSend get() = content.isNotBlank() &&
+    val canSend get() = !images.uploading && content.isNotBlank() &&
         (target?.action != PublishAction.NEW_TOPIC || title.isNotBlank()) &&
         (!newMessage || (title.isNotBlank() && recipients.isNotBlank())) &&
         phase in setOf(ComposePhase.Editing, ComposePhase.Rejected)
@@ -40,6 +40,7 @@ class ComposerViewModel @Inject constructor(
             collectionId = saved["composerCollection"], topicId = saved["composerTopic"], postId = saved["composerPost"])
     }
     private val _state = MutableStateFlow(ComposerState(
+        images = if (restoredTarget != null) saved.restoreImages() else DraftImages(),
         target = restoredTarget, context = if (restoredTarget != null) saved["composerContext"] ?: "" else "",
         content = if (restoredTarget != null) saved["composerText"] ?: "" else "",
         selection = saved["composerSelection"] ?: 0,
@@ -55,7 +56,7 @@ class ComposerViewModel @Inject constructor(
     private fun current() = accounts.state.value.let { it.ready && !it.busy && it.revision == owner.revision && it.userId == owner.userId }
 
     fun open(target: PublishTarget, context: String) {
-        if (!current() || _state.value.phase == ComposePhase.Submitting) return
+        if (!current() || _state.value.phase == ComposePhase.Submitting || _state.value.images.uploading) return
         if (_state.value.target == target && _state.value.phase != ComposePhase.Confirmed) {
             if (_state.value.phase == ComposePhase.Preparing && preparation?.isActive != true) prepare()
             return
@@ -72,6 +73,8 @@ class ComposerViewModel @Inject constructor(
         saved["composerText"] = ""
         saved["composerPending"] = false
         saved["composerPrepared"] = false
+        saved["composerUploadPending"] = false
+        saved.saveImages(DraftImages())
         _state.value = ComposerState(target, context, phase = ComposePhase.Preparing)
         if (target.action == PublishAction.NEW_TOPIC) {
             preparation?.cancel()
@@ -79,11 +82,12 @@ class ComposerViewModel @Inject constructor(
         } else prepare()
     }
     fun close() {
-        if (_state.value.phase in setOf(ComposePhase.Submitting, ComposePhase.Unconfirmed)) return
+        if (_state.value.phase in setOf(ComposePhase.Submitting, ComposePhase.Unconfirmed) || _state.value.images.uploading) return
         preparation?.cancel()
         if (_state.value.phase != ComposePhase.Confirmed) return
         listOf("composerOwner", "composerRevision", "composerAction", "composerForum", "composerCollection", "composerTopic",
-            "composerPost", "composerContext", "composerText", "composerTitle", "composerSelection", "composerPending", "composerPrepared")
+            "composerPost", "composerContext", "composerText", "composerTitle", "composerSelection", "composerPending", "composerPrepared",
+            "composerImageNames", "composerImageChecks", "composerImageUrls", "composerUploadPending")
             .forEach { saved.remove<Any>(it) }
         _state.value = ComposerState()
     }
@@ -125,6 +129,47 @@ class ComposerViewModel @Inject constructor(
         saved["composerTitle"] = title
         _state.value = _state.value.copy(title = title)
     }
+    fun uploadImage(read: suspend () -> ImageUpload) {
+        val draft = _state.value
+        val target = draft.target ?: return
+        if (!current() || draft.phase !in setOf(ComposePhase.Editing, ComposePhase.Rejected) ||
+            draft.images.uploading || draft.images.blocked || target.action != PublishAction.NEW_TOPIC) return
+        _state.value = draft.copy(images = draft.images.copy(uploading = true, error = null))
+        viewModelScope.launch {
+            var started = false
+            try {
+                val image = read()
+                if (!current()) return@launch
+                saved["composerUploadPending"] = true
+                started = true
+                val result = client.uploadImage(target, image)
+                if (!current() || _state.value.target != target) return@launch
+                val attachment = result.attachment
+                val blocked = result.outcome !is WriteResult.Rejected && attachment == null
+                saved["composerUploadPending"] = blocked
+                val images = _state.value.images.copy(uploading = false, blocked = blocked, error = result.feedback(),
+                    attachments = draft.images.attachments + listOfNotNull(attachment))
+                if (attachment != null) {
+                    val value = _state.value.let { androidx.compose.ui.text.input.TextFieldValue(it.content,
+                        androidx.compose.ui.text.TextRange(it.selectionStart, it.selection)) }
+                    editValue(insertImage(value, attachment))
+                }
+                saved.saveImages(images)
+                _state.value = _state.value.copy(images = images)
+            } catch (error: CancellationException) { throw error }
+            catch (error: NgaException) {
+                if (current()) {
+                    saved["composerUploadPending"] = false
+                    _state.value = _state.value.copy(images = draft.images.copy(error = "无法准备图片上传：${userMessage(error)}"))
+                }
+            }
+            catch (_: Exception) {
+                if (current()) _state.value = _state.value.copy(images = draft.images.copy(blocked = started,
+                    error = if (started) "图片上传结果不明，请勿重复上传。" else "无法读取图片，请选择 10MB 以内的 JPEG、PNG、GIF 或 WebP 图片。"))
+            }
+        }
+    }
+
     fun send() {
         val draft = _state.value
         if (!draft.canSend || !current()) return
@@ -136,7 +181,8 @@ class ComposerViewModel @Inject constructor(
                 if (!current()) return@launch
                 val result = accounts.withCurrentRevision(owner.revision) {
                     client.publish(PublishRequest(target.action, target.forumId, draft.content,
-                        title = draft.title, topicId = target.topicId, postId = target.postId, collectionId = target.collectionId))
+                        title = draft.title, topicId = target.topicId, postId = target.postId, collectionId = target.collectionId,
+                        attachments = draft.images.attachments.filter { draft.content.contains(it.bbcode) }))
                 }
                 if (!current()) return@launch
                 when (result) {
