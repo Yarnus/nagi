@@ -77,7 +77,7 @@ class ReaderUiTest {
                                 ContentBlock.Text("Body text with an intentional, readable line length."),
                                 ContentBlock.Quote(listOf(ContentBlock.Text("Quoted text"))),
                                 ContentBlock.Code("val reader = Nagi()"),
-                                ContentBlock.Table(listOf(listOf("Column A", "Column B"))),
+                                ContentBlock.Table(listOf(listOf(listOf(ContentBlock.Text("Column A")), listOf(ContentBlock.Text("Column B"))))),
                             ), ReadingPreferences(), {})
                         }
                     }

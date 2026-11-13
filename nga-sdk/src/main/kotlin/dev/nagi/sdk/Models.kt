@@ -52,7 +52,17 @@ data class TextSpan(
     val bold: Boolean = false, val italic: Boolean = false,
     val underline: Boolean = false, val strikethrough: Boolean = false,
     val url: String? = null,
+    val color: String? = null,
+    val scale: Float? = null,
 )
+
+data class ContentContext(
+    val authorId: String? = null, val topicId: String? = null,
+    val postId: String? = null, val postDate: String? = null,
+)
+
+enum class ContentAlignment { START, CENTER, END }
+enum class MediaKind { AUDIO, VIDEO, ATTACHMENT }
 
 data class InlineSmile(val start: Int, val end: Int, val smile: NgaSmile)
 
@@ -64,7 +74,13 @@ sealed interface ContentBlock {
     data class Image(val url: String) : ContentBlock
     data class Quote(val children: List<ContentBlock>, val author: String? = null, val date: String? = null) : ContentBlock
     data class Code(val value: String) : ContentBlock
-    data class Table(val rows: List<List<String>>) : ContentBlock
+    data class Table(val rows: List<List<List<ContentBlock>>>) : ContentBlock
+    data class Heading(val children: List<ContentBlock>) : ContentBlock
+    data class Divider(val children: List<ContentBlock> = emptyList()) : ContentBlock
+    data class Aligned(val alignment: ContentAlignment, val children: List<ContentBlock>) : ContentBlock
+    data class ListBlock(val items: List<List<ContentBlock>>, val ordered: Boolean = false) : ContentBlock
+    data class Media(val url: String, val kind: MediaKind) : ContentBlock
+    data class Dice(val expression: String, val rolls: List<Int> = emptyList(), val total: Long? = null) : ContentBlock
     data class Collapse(val title: String, val children: List<ContentBlock>) : ContentBlock
 }
 

@@ -69,7 +69,7 @@ class ReaderFixtureClient : NgaClient by FakeClient() {
                     0 -> listOf(ContentBlock.Text(bodyText ?: "正文应当是页面主角。完整标题、作者与楼层边界需要清晰，但不要给每层回复都套上厚重的独立卡片。"), ContentBlock.Image(image))
                     1 -> ContentParser.parse("[quote][b]Reply to [pid=101,202,1]Reply[/pid] Post by [uid=7]测试楼主[/uid] (2026-11-05 16:27)[/b]引用正文：保持中文阅读节奏。[quote]第二层引用。[quote]第三层引用仍然需要有足够的正文宽度。[/quote][/quote][/quote]当前回复：引用与回复必须分层，不能混成一段文字。")
                     2 -> listOf(ContentBlock.Text("楼主再次回复时，也应显示楼主标识，而不只是把零楼称为楼主。"))
-                    3 -> listOf(ContentBlock.Code("val layout = ReaderLayout(title = fullTitle)"), ContentBlock.Table(listOf(listOf("设备", "阅读体验"), listOf("手机", "单栏"))), ContentBlock.Collapse("补充说明", listOf(ContentBlock.Text("折叠内容保持原有状态恢复行为。"))))
+                    3 -> listOf(ContentBlock.Code("val layout = ReaderLayout(title = fullTitle)"), ContentBlock.Table(listOf(listOf("设备", "阅读体验"), listOf("手机", "单栏")).map { row -> row.map { listOf(ContentBlock.Text(it)) } }), ContentBlock.Collapse("补充说明", listOf(ContentBlock.Text("折叠内容保持原有状态恢复行为。"))))
                     else -> listOf(ContentBlock.Text("本页最后一层回复，不应被底部翻页控件遮挡。"))
                 })
         }

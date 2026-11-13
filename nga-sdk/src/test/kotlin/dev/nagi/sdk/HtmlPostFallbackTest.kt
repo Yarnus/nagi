@@ -53,6 +53,25 @@ class HtmlPostFallbackTest {
         </body></html>
     """.trimIndent()
 
+    @Test fun originalPostNumericEntitiesDecodeThroughHtmlFallback() {
+        val source = html().replace("Title &amp; more", "[其他] &amp;#128227; 20万奖池！腾讯光子AI游戏创作大赛来了")
+            .replace("Hello<br>[b]bold[/b][img]./mon_202611/a.png[/img]", "能对战的&amp;#160;3D&amp;#160;体素世界&amp;#127918;<br/>&amp;#128073;点击报名")
+        val page = NgaHtmlPostParser.posts(source, "123", 1, null)
+        assertEquals("[其他] 📣 20万奖池！腾讯光子AI游戏创作大赛来了", page.title)
+        assertEquals("能对战的\u00a03D\u00a0体素世界🎮\n👉点击报名", (page.items.single().content.single() as ContentBlock.Text).value)
+    }
+
+    @Test fun originalPostNumericEntitiesDecodeThroughXmlRead() = runBlocking {
+        val source = xml().replace("Title &amp; more", "[其他] &amp;amp;#128227; 20万奖池！")
+            .replace("Hello&lt;br/&gt;[b]bold[/b][img]./mon_202611/a.png[/img]", "能对战的&amp;amp;#160;3D&amp;amp;#160;体素世界&amp;amp;#127918;")
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody(source))
+            val page = HttpNgaClient(server.url("/"), MemorySessionStore()).getPosts("123", 1)
+            assertEquals("[其他] 📣 20万奖池！", page.title)
+            assertEquals("能对战的\u00a03D\u00a0体素世界🎮", (page.items.single().content.single() as ContentBlock.Text).value)
+        }
+    }
+
     @Test fun primaryReadUsesPostLiteXmlAndWindowsPhoneClientHeader() = runBlocking {
         MockWebServer().use { server ->
             val gbkBytes = xml(page = 1, floor = 0).toByteArray(charset("GB18030"))

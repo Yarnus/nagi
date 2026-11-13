@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,10 +29,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -41,7 +45,9 @@ import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
 import dev.nagi.app.ui.topic.formatTimeText
+import dev.nagi.sdk.ContentAlignment
 import dev.nagi.sdk.ContentBlock
+import dev.nagi.sdk.MediaKind
 
 @Composable
 fun ContentBlocks(
@@ -58,18 +64,75 @@ private fun ContentBlocks(
     preferences: ReadingPreferences,
     onImage: (String) -> Unit,
     quoteDepth: Int,
+    textAlign: TextAlign = TextAlign.Start,
+    isHeading: Boolean = false,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
     val blockShape = RoundedCornerShape(12.dp)
+    val uriHandler = LocalUriHandler.current
 
     Column(
         modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = when (textAlign) {
+            TextAlign.Center -> Alignment.CenterHorizontally
+            TextAlign.End -> Alignment.End
+            else -> Alignment.Start
+        },
         verticalArrangement = Arrangement.spacedBy(Space.sm),
     ) {
         blocks.forEach { block ->
             when (block) {
-                is ContentBlock.Text -> PostParagraph(block, preferences)
+                is ContentBlock.Text -> PostParagraph(block, preferences, textAlign, isHeading)
+
+                is ContentBlock.Heading -> Column(Modifier.fillMaxWidth().semantics { heading() }) {
+                    ContentBlocks(block.children, preferences, onImage, quoteDepth, textAlign, isHeading = true)
+                    HorizontalDivider(Modifier.padding(top = Space.xs), color = colors.cardBorder)
+                }
+
+                is ContentBlock.Divider -> Column(Modifier.fillMaxWidth()) {
+                    ContentBlocks(block.children, preferences, onImage, quoteDepth, textAlign, isHeading = true)
+                    HorizontalDivider(Modifier.padding(top = Space.xs), color = colors.cardBorder)
+                }
+
+                is ContentBlock.Aligned -> ContentBlocks(block.children, preferences, onImage, quoteDepth,
+                    when (block.alignment) {
+                        ContentAlignment.START -> TextAlign.Start
+                        ContentAlignment.CENTER -> TextAlign.Center
+                        ContentAlignment.END -> TextAlign.End
+                    }, isHeading)
+
+                is ContentBlock.ListBlock -> Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+                    block.items.forEachIndexed { index, item ->
+                        Row(Modifier.fillMaxWidth()) {
+                            Text(if (block.ordered) "${index + 1}. " else "• ", color = colors.textPrimary,
+                                style = typography.postBody.copy(fontSize = preferences.fontSize.sp))
+                            Box(Modifier.weight(1f)) {
+                                ContentBlocks(item, preferences, onImage, quoteDepth, textAlign, isHeading)
+                            }
+                        }
+                    }
+                }
+
+                is ContentBlock.Media -> OutlinedButton(
+                    onClick = { uriHandler.openUri(block.url) },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    val label = when (block.kind) {
+                        MediaKind.AUDIO -> "打开音频"
+                        MediaKind.VIDEO -> "打开视频"
+                        MediaKind.ATTACHMENT -> "打开附件"
+                    }
+                    Text("$label：${block.url.substringBefore('?').substringAfterLast('/').ifBlank { block.url }}")
+                }
+
+                is ContentBlock.Dice -> Text(
+                    text = if (block.total == null) "骰子：${block.expression}（结果不可用）"
+                        else "骰子：${block.expression} = ${block.total}" +
+                            if (block.rolls.isEmpty()) "" else "（投掷 ${block.rolls.joinToString(" + ")}）",
+                    color = colors.textPrimary,
+                    style = typography.postBody.copy(fontSize = preferences.fontSize.sp),
+                )
 
                 is ContentBlock.Image -> AsyncImage(
                     model = block.url,
@@ -113,15 +176,9 @@ private fun ContentBlocks(
                         block.rows.forEach { cells ->
                             Row {
                                 cells.forEach { cell ->
-                                    Text(
-                                        text = cell,
-                                        modifier = Modifier
-                                            .width(160.dp)
-                                            .border(0.5.dp, colors.cardBorder)
-                                            .padding(Space.sm),
-                                        style = typography.body.copy(fontSize = preferences.fontSize.sp),
-                                        color = colors.textPrimary,
-                                    )
+                                    Box(Modifier.width(160.dp).border(0.5.dp, colors.cardBorder).padding(Space.sm)) {
+                                        ContentBlocks(cell, preferences, onImage, quoteDepth, textAlign, isHeading)
+                                    }
                                 }
                             }
                         }
@@ -145,7 +202,7 @@ private fun ContentBlocks(
                                     color = colors.textSecondary,
                                 )
                             }
-                            ContentBlocks(block.children, preferences, onImage, quoteDepth + 1)
+                            ContentBlocks(block.children, preferences, onImage, quoteDepth + 1, textAlign, isHeading)
                         }
                     }
                     if (quoteDepth < 2) {
@@ -211,7 +268,7 @@ private fun ContentBlocks(
                             if (open) {
                                 HorizontalDivider(thickness = 1.dp, color = colors.cardBorder)
                                 Box(Modifier.padding(Space.md)) {
-                                    ContentBlocks(block.children, preferences, onImage, quoteDepth)
+                                    ContentBlocks(block.children, preferences, onImage, quoteDepth, textAlign, isHeading)
                                 }
                             }
                         }

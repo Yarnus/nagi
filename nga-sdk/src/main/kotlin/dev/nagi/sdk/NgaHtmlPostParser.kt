@@ -44,7 +44,7 @@ internal object NgaHtmlPostParser {
                 javascriptObject(scripts.substringAfter("commonui.userInfo.setAll(", ""))
             }
             val groups = parseJsonGroups(users.optJSONObject("__GROUPS"))
-            val title = document.getElementById("currentTopicName")?.text().orEmpty()
+            val title = decodeNumericEntities(document.getElementById("currentTopicName")?.text().orEmpty())
             need(title.isNotBlank(), ProtocolReason.HTML_TITLE_MISSING)
             val attachmentBase = Regex("""\b__ATTACH_BASE_VIEW\s*=\s*""").find(scripts)?.let {
                 JSONTokener(scripts.substring(it.range.last + 1)).nextValue() as? String
@@ -80,7 +80,7 @@ internal object NgaHtmlPostParser {
                     authorId = uid,
                     avatar = resourceUrl(user?.optString("avatar").orEmpty(), "https://img.nga.cn/"),
                     date = date,
-                    content = ContentParser.parseHtml(content.html(), attachmentBase),
+                    content = ContentParser.parseHtml(content.html(), attachmentBase, ContentContext(uid, topicId, pid, date)),
                     score = score,
                     authorLevel = level,
                     authorReputation = reputation,

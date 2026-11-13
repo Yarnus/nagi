@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.Text
@@ -15,6 +16,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -40,9 +43,30 @@ import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.LightSemanticColors
 import dev.nagi.sdk.ContentBlock
+import dev.nagi.sdk.ContentColors
+import dev.nagi.sdk.NgaUserLinks
+import dev.nagi.app.ui.components.LocalOpenUser
 import dev.nagi.sdk.NgaSmile
 
-internal fun paragraphText(block: ContentBlock.Text, linkColor: Color): AnnotatedString = buildAnnotatedString {
+internal fun contentTextColor(name: String, background: Color): Color? {
+    val rgb = ContentColors.rgb[name] ?: return null
+    val color = Color(rgb or 0xFF000000.toInt())
+    val target = if (background.luminance() > 0.5f) Color.Black else Color.White
+    for (step in 0..100) {
+        val candidate = lerp(color, target, step / 100f)
+        val lighter = maxOf(candidate.luminance(), background.luminance())
+        val darker = minOf(candidate.luminance(), background.luminance())
+        if ((lighter + 0.05f) / (darker + 0.05f) >= 4.5f) return candidate
+    }
+    return target
+}
+
+internal fun paragraphText(
+    block: ContentBlock.Text,
+    linkColor: Color,
+    background: Color = Color.White,
+    onOpenUser: ((String) -> Unit)? = null,
+): AnnotatedString = buildAnnotatedString {
     var offset = 0
     block.smiles.forEachIndexed { index, inline ->
         append(block.value.substring(offset, inline.start))
@@ -61,19 +85,32 @@ internal fun paragraphText(block: ContentBlock.Text, linkColor: Color): Annotate
             fontWeight = if (span.bold) FontWeight.Bold else null,
             fontStyle = if (span.italic) FontStyle.Italic else null,
             textDecoration = decoration,
+            color = span.color?.let { contentTextColor(it, background) } ?: Color.Unspecified,
+            fontSize = span.scale?.em ?: androidx.compose.ui.unit.TextUnit.Unspecified,
         ), span.start, span.end)
         span.url?.let { url ->
+            val uid = NgaUserLinks.userId(url)
             addLink(LinkAnnotation.Url(url, TextLinkStyles(SpanStyle(
                 color = linkColor, textDecoration = TextDecoration.Underline,
-            ))), span.start, span.end)
+            )), linkInteractionListener = if (uid != null && onOpenUser != null) {
+                { onOpenUser(uid) }
+            } else null), span.start, span.end)
         }
     }
 }
 
 @Composable
-internal fun PostParagraph(block: ContentBlock.Text, preferences: ReadingPreferences) {
+internal fun PostParagraph(
+    block: ContentBlock.Text,
+    preferences: ReadingPreferences,
+    textAlign: TextAlign = TextAlign.Start,
+    heading: Boolean = false,
+) {
     val colors = NagiThemeTokens.colors
-    val text = remember(block, colors.goldText) { paragraphText(block, colors.goldText) }
+    val openUser = LocalOpenUser.current
+    val text = remember(block, colors.goldText, colors.insetContainer, openUser) {
+        paragraphText(block, colors.goldText, colors.insetContainer, openUser)
+    }
     val inlineContent = remember(block.smiles) {
         block.smiles.mapIndexed { index, inline ->
             "smile-$index" to InlineTextContent(
@@ -81,13 +118,18 @@ internal fun PostParagraph(block: ContentBlock.Text, preferences: ReadingPrefere
             ) { SmileImage(inline.smile, Modifier.fillMaxSize()) }
         }.toMap()
     }
+    val fontSize = preferences.fontSize + if (heading) 2 else 0
+    val largestScale = (block.spans.maxOfOrNull { it.scale ?: 1f } ?: 1f).coerceAtLeast(1f)
     Text(
         text = text,
+        modifier = if (textAlign == TextAlign.Start) Modifier else Modifier.fillMaxWidth(),
         inlineContent = inlineContent,
         color = colors.textPrimary,
         style = NagiThemeTokens.typography.postBody.copy(
-            fontSize = preferences.fontSize.sp,
-            lineHeight = preferences.lineHeight.coerceAtLeast(preferences.fontSize + 6).sp,
+            fontSize = fontSize.sp,
+            lineHeight = (preferences.lineHeight.coerceAtLeast(fontSize + 6) * largestScale).sp,
+            fontWeight = if (heading) FontWeight.SemiBold else FontWeight.Normal,
+            textAlign = textAlign,
         ),
     )
 }

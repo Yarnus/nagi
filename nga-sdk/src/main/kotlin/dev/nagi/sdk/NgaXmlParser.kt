@@ -68,7 +68,7 @@ internal object NgaXmlParser {
             if (post.field("tid") != topic.id) throw NgaException.Protocol(ProtocolReason.XML_USER_POST_TOPIC)
             if (post.fieldOrNull("content") == null) throw NgaException.Protocol(ProtocolReason.XML_USER_POST_CONTENT)
             UserReply(topic, pid, post.field("authorid"), post.field("postdate").toLongOrNull() ?: 0,
-                ContentParser.parse(post.field("content")))
+                ContentParser.parse(post.field("content"), context = ContentContext(post.field("authorid"), topic.id, pid, post.field("postdate"))))
         }
         val hasMore = if (items.isEmpty()) false else if (root.fieldOrNull("__ROWS") != null &&
             (root.fieldOrNull("__T__ROWS_PAGE")?.toIntOrNull() ?: 0) > 0) topics.hasMore else null
@@ -118,7 +118,7 @@ internal object NgaXmlParser {
                 authorId = uid,
                 avatar = resourceUrl(user?.field("avatar").orEmpty(), "https://img.nga.cn/"),
                 date = item.field("postdate"),
-                content = ContentParser.parse(body, base),
+                content = ContentParser.parse(body, base, ContentContext(uid, topic.field("tid"), pid, item.field("postdate"))),
                 comments = item.directChild("comment")?.directChildren("item")?.mapIndexed { index, comment ->
                     parsePost(comment, index, depth + 1)
                 }.orEmpty(),

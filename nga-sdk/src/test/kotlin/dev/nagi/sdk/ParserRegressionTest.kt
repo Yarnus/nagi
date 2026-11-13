@@ -48,7 +48,7 @@ class ParserRegressionTest {
     @Test fun htmlBlocksKeepStructureAndSafeInlineStyles() {
         val blocks = ContentParser.parse("<blockquote>quote</blockquote><table><tr><td>A</td><td>B</td></tr></table><b>bold</b> <a href='javascript:bad'>unsafe</a>")
         assertTrue(blocks[0] is ContentBlock.Quote)
-        assertEquals(ContentBlock.Table(listOf(listOf("A", "B"))), blocks[1])
+        assertEquals(ContentBlock.Table(listOf(listOf(listOf(ContentBlock.Text("A")), listOf(ContentBlock.Text("B"))))), blocks[1])
         val text = blocks[2] as ContentBlock.Text
         assertTrue(text.spans.first().bold)
         assertTrue(text.spans.all { it.url == null })
@@ -79,7 +79,9 @@ class ParserRegressionTest {
         assertEquals("测试作者", quote.author)
         assertEquals(ContentBlock.Text("外层"), quote.children[0])
         val nested = quote.children[1] as ContentBlock.Quote
-        assertEquals(listOf(ContentBlock.Text("回复 另一作者：内层")), nested.children)
+        val nestedText = nested.children.single() as ContentBlock.Text
+        assertEquals("回复 另一作者：内层", nestedText.value)
+        assertTrue(nestedText.spans.any { it.url?.endsWith("uid=8") == true })
     }
     @Test fun malformedAttributionCannotConsumeNestedQuoteContent() {
         val quote = ContentParser.parse("[quote][b]Post by [uid=7]未闭合[quote][b]内部文本[/b][/quote]尾部[/quote]").single() as ContentBlock.Quote
@@ -93,7 +95,9 @@ class ParserRegressionTest {
         val blocks = ContentParser.parse("[code][uid=7]literal[/uid][/code]<pre>[pid=1,2,3]literal[/pid]</pre>[custom]保留[/custom] [uid=9]用户名[/uid]")
         assertEquals(ContentBlock.Code("[uid=7]literal[/uid]"), blocks[0])
         assertEquals(ContentBlock.Code("[pid=1,2,3]literal[/pid]"), blocks[1])
-        assertEquals(ContentBlock.Text("[custom]保留[/custom] 用户名"), blocks[2])
+        val text = blocks[2] as ContentBlock.Text
+        assertEquals("[custom]保留[/custom] 用户名", text.value)
+        assertTrue(text.spans.single().url?.endsWith("uid=9") == true)
     }
     @Test fun nestedQuotesAndCollapsesKeepTheirBoundaries() {
         val blocks = ContentParser.parse("[quote]outer[quote]inner[/quote]end[/quote]after")

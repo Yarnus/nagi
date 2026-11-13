@@ -174,7 +174,8 @@ internal object NgaParser {
                 authorId = uid,
                 avatar = resourceUrl(user?.optString("avatar").orEmpty(), "https://img.nga.cn/"),
                 date = item.optString("postdate"),
-                content = ContentParser.parse(item.optString("content", item.optString("subject")), base),
+                content = ContentParser.parse(item.optString("content", item.optString("subject")), base,
+                    ContentContext(uid, topic.optString("tid"), pid, item.optString("postdate"))),
                 comments = if (item.has("comment")) records(item.opt("comment")).mapIndexed { index, comment ->
                     parsePost(comment, index, depth + 1)
                 } else emptyList(),
@@ -270,7 +271,7 @@ internal object NgaParser {
             if (!pid.matches(Regex("[0-9]+"))) throw NgaException.Protocol(ProtocolReason.JSON_USER_POST_ID)
             if (post.optString("tid") != topic.id) throw NgaException.Protocol(ProtocolReason.JSON_USER_POST_TOPIC)
             if (!post.has("content")) throw NgaException.Protocol(ProtocolReason.JSON_USER_POST_CONTENT)
-            UserReply(topic, pid, post.optString("authorid"), post.optLong("postdate"), ContentParser.parse(post.optString("content")))
+            UserReply(topic, pid, post.optString("authorid"), post.optLong("postdate"), ContentParser.parse(post.optString("content"), context = ContentContext(post.optString("authorid"), topic.id, pid, post.optString("postdate"))))
         }
         val hasMore = if (items.isEmpty()) false else if (payload.has("__ROWS") && payload.optInt("__T__ROWS_PAGE") > 0)
             topics.hasMore else null
@@ -422,7 +423,7 @@ internal fun classifyNgaError(error: String): NgaException = when {
     else -> NgaException.Business()
 }
 
-internal fun plain(value: String): String = Jsoup.parse(value.replace(Regex("(?i)<br\\s*/?>"), "\n")).text()
+internal fun plain(value: String): String = decodeNumericEntities(Jsoup.parse(value.replace(Regex("(?i)<br\\s*/?>"), "\n")).text())
 
 internal fun parseJsonGroups(groupsObj: JSONObject?): Map<String, String> {
     if (groupsObj == null) return emptyMap()
@@ -474,7 +475,7 @@ internal fun normalizeClientPlatform(raw: String?): String? {
 }
 
 internal fun resourceUrl(raw: String, base: String): String {
-    var value = raw.trim().replace("&amp;", "&").substringBefore("|.a")
+    var value = decodeNumericEntities(raw).trim().replace("&amp;", "&").substringBefore("|.a")
     if (value.isBlank() || value == "null") return ""
     value = value.replace(Regex("https?://img\\d*\\.(nga\\.178\\.com|ngacn\\.cc|ngabbs\\.com)/attachments/"), "https://img.nga.cn/attachments/")
         .replace(Regex("https?://img(\\d*)\\.(nga\\.178\\.com|ngacn\\.cc|ngabbs\\.com)/"), "https://img$1.nga.cn/")
