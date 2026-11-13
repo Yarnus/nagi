@@ -1,0 +1,47 @@
+name: 功能建议
+description: 提出改进 Nagi 使用体验的建议。
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请先搜索已有 Issue，避免重复反馈。
+        请勿上传 Cookie、Token、账号凭据或私信内容，截图请先脱敏。
+        环境信息可能由 App 预填，提交前可以检查和修改。
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 使用场景
+      description: 你在什么场景下需要这个功能？
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: 遇到的不便
+      description: 目前的操作或行为有什么不足？
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 希望的行为
+      description: 请描述期望的体验或解决方式。
+    validations:
+      required: true
+  - type: input
+    id: app_version
+    attributes:
+      label: App 版本（可选）
+  - type: input
+    id: android_version
+    attributes:
+      label: Android 版本（可选）
+  - type: input
+    id: device
+    attributes:
+      label: 设备型号（可选）
+  - type: textarea
+    id: references
+    attributes:
+      label: 参考截图或补充说明（可选）
+      description: 可以粘贴脱敏后的参考截图。

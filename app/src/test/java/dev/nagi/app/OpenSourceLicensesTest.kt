@@ -37,6 +37,6 @@ class OpenSourceLicensesTest {
         compose.onNodeWithText("GNU GENERAL PUBLIC LICENSE", substring = true).assertExists()
         compose.onNodeWithText("THIRD-PARTY NOTICES", substring = true).assertExists()
         compose.onNodeWithText("关闭").performClick()
-        compose.onNodeWithText("分享反馈信息").assertExists()
+        compose.onNodeWithText("前往 GitHub 反馈").assertExists()
     }
 }

@@ -56,6 +56,44 @@ class NavigationFlowTest {
         compose.onNodeWithText(label).performClick()
     }
 
+    private fun openRepeatedlyAndReturn(label: String, source: String) {
+        val open = compose.onNodeWithText(label).fetchSemanticsNode()
+            .config[androidx.compose.ui.semantics.SemanticsActions.OnClick].action!!
+        compose.runOnIdle { repeat(2) { open() } }
+        compose.onNodeWithText("Post 0").assertIsDisplayed()
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNodeWithText(source).assertIsDisplayed()
+        compose.onNodeWithText("Post 0").assertDoesNotExist()
+    }
+
+    @Test fun repeatedTopicOpenNeedsOnlyOneBackAndAllowsReopening() {
+        compose.onNodeWithText("Forum").performClick()
+        openRepeatedlyAndReturn("Title 1", "Title 2")
+        compose.onNodeWithText("Title 1").performClick()
+        compose.onNodeWithText("Post 0").assertIsDisplayed()
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNodeWithText("Title 2").assertIsDisplayed()
+    }
+
+    @Test fun repeatedSearchResultOpenNeedsOnlyOneBack() {
+        compose.onNodeWithContentDescription("搜索").performClick()
+        compose.onNode(hasSetTextAction()).performTextInput("query")
+        compose.onNodeWithText("所有话题").performClick()
+        openRepeatedlyAndReturn("Title 1", "搜索范围：所有版块（切换）")
+        compose.onNode(hasSetTextAction()).assertTextEquals("query")
+    }
+
+    @Test fun repeatedFavoriteOpenNeedsOnlyOneBack() {
+        compose.onNodeWithText("Forum").performClick()
+        compose.onNodeWithText("Title 1").performClick()
+        compose.onNodeWithContentDescription("主题操作").performClick()
+        compose.onNodeWithText("本地收藏").performClick()
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNodeWithContentDescription("返回").performClick()
+        openAccountItem("收藏话题")
+        openRepeatedlyAndReturn("Topic", "本地收藏")
+    }
+
     @Test fun accountPageBackWorksDuringEnterTransition() {
         compose.onNodeWithContentDescription("头像菜单").performClick()
         compose.onNodeWithText("通知").assertIsDisplayed()
@@ -154,7 +192,7 @@ class NavigationFlowTest {
         compose.onNodeWithText("退出当前账号").assertDoesNotExist()
         compose.onNodeWithText("当前登录 UID：77").assertDoesNotExist()
         compose.onNodeWithText("关于与反馈").performClick()
-        compose.onNodeWithText("分享反馈信息").assertIsDisplayed()
+        compose.onNodeWithText("前往 GitHub 反馈").assertIsDisplayed()
     }
 
     @Test fun readerProfileTabsAndPrefilledMessageSurviveNavigation() {

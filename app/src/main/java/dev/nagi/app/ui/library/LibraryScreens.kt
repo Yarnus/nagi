@@ -1,5 +1,8 @@
 package dev.nagi.app.ui.library
 
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.os.Build
 import androidx.compose.foundation.clickable
@@ -309,14 +312,20 @@ fun AboutScreen(back: () -> Unit) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
     var licenses by rememberSaveable { mutableStateOf(false) }
+    var feedbackUnavailable by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val version = remember(context) {
         context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
+    }
+    val feedback = remember(version) {
+        feedbackUri(version, Build.VERSION.RELEASE, "${Build.MANUFACTURER} ${Build.MODEL}")
     }
     Column(Modifier.fillMaxSize()) {
         NagiHeader("关于与反馈", back = back)
         Column(
             modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
                 .fillMaxWidth()
                 .padding(vertical = Space.lg),
             verticalArrangement = Arrangement.spacedBy(Space.md),
@@ -333,7 +342,7 @@ fun AboutScreen(back: () -> Unit) {
                 ) {
                     Text("Nagi $version", style = typography.sectionTitle, color = colors.textPrimary)
                     Text(
-                        text = "反馈时请注明版本、复现步骤及设备信息，勿包含账号凭据或私信内容。",
+                        text = "在 GitHub 提交问题或功能建议，需要登录 GitHub。将附带 App 版本、Android 版本和设备型号，请勿包含账号凭据或私信内容。",
                         style = typography.body,
                         color = colors.textSecondary,
                     )
@@ -345,21 +354,19 @@ fun AboutScreen(back: () -> Unit) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                val share = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(
-                                        Intent.EXTRA_TEXT,
-                                        "Nagi $version\nAndroid ${Build.VERSION.RELEASE}\n\n复现步骤：\n预期结果：\n实际结果：",
-                                    )
+                                try {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, feedback))
+                                    feedbackUnavailable = false
+                                } catch (_: ActivityNotFoundException) {
+                                    feedbackUnavailable = true
                                 }
-                                context.startActivity(Intent.createChooser(share, "分享反馈信息"))
                             }
                             .heightIn(min = 52.dp)
                             .padding(horizontal = Space.lg, vertical = Space.md),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text("分享反馈信息", style = typography.topicTitle, color = colors.textPrimary)
+                        Text("前往 GitHub 反馈", style = typography.topicTitle, color = colors.textPrimary)
                         Icon(NagiIcons.ChevronRight, null, Modifier.size(18.dp), tint = colors.textSecondary)
                     }
                 }
@@ -376,6 +383,21 @@ fun AboutScreen(back: () -> Unit) {
                         Text("开源许可", style = typography.topicTitle, color = colors.textPrimary)
                         Icon(NagiIcons.ChevronRight, null, Modifier.size(18.dp), tint = colors.textSecondary)
                     }
+                }
+            }
+        }
+    }
+    if (feedbackUnavailable) {
+        Dialog(onDismissRequest = { feedbackUnavailable = false }) {
+            FlatCard(modifier = Modifier.fillMaxWidth(), shape = NagiThemeTokens.shapes.cardGroup) {
+                Column(Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.md)) {
+                    Text("无法打开 GitHub，请安装浏览器或复制链接后打开。", style = typography.body, color = colors.textPrimary)
+                    CapsuleButton("复制反馈链接", onClick = {
+                        context.getSystemService(ClipboardManager::class.java)
+                            .setPrimaryClip(ClipData.newPlainText("GitHub 反馈", feedback.toString()))
+                        feedbackUnavailable = false
+                    }, style = CapsuleStyle.Neutral)
+                    CapsuleButton("关闭", onClick = { feedbackUnavailable = false }, style = CapsuleStyle.Neutral)
                 }
             }
         }

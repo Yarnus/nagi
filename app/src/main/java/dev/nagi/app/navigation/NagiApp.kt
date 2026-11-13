@@ -111,7 +111,6 @@ fun NagiApp(
                 val favoriteForumKeys = remember(forumFavorites) { forumFavorites.map { it.key }.toSet() }
                 val nav = rememberNavController()
                 val expanded = width == WindowWidthSizeClass.Expanded
-                val topicLinks = rememberTopicLinkHandler { nav.navigate("read/${Uri.encode(it)}") }
                 val returnFromAccountPage: (androidx.navigation.NavBackStackEntry) -> Unit = { source ->
                     if (nav.currentBackStackEntry === source && nav.previousBackStackEntry != null) {
                         nav.popBackStack()
@@ -122,6 +121,14 @@ fun NagiApp(
                         launchSingleTop = true
                     }
                 }
+                val openTopic: (String) -> Unit = { topicId ->
+                    val current = nav.currentBackStackEntry
+                    nav.navigate("read/${Uri.encode(topicId)}") {
+                        launchSingleTop = current?.destination?.route == "read/{id}" &&
+                            current.arguments?.getString("id") == topicId
+                    }
+                }
+                val topicLinks = rememberTopicLinkHandler(openTopic)
                 val navigateToForum: (Forum) -> Unit = { forum ->
                     nav.navigate(
                         "topics/${Uri.encode(forum.id.ifBlank { "0" })}?collection=${Uri.encode(forum.collectionId.orEmpty())}&name=${Uri.encode(forum.name)}",
@@ -158,7 +165,7 @@ fun NagiApp(
                                         expanded = expanded,
                                         preferences = preferences,
                                         back = { nav.popBackStack() },
-                                        onRead = { nav.navigate("read/${Uri.encode(it)}") },
+                                        onRead = openTopic,
                                         onSearch = {
                                             val args = backStack.arguments!!
                                             nav.navigate(
@@ -189,7 +196,7 @@ fun NagiApp(
                                         library = library,
                                         onCancel = { nav.popBackStack() },
                                         onForum = navigateToForum,
-                                        onRead = { nav.navigate("read/${Uri.encode(it)}") },
+                                        onRead = openTopic,
                                         onUserContent = { uid, kind -> select("user/${Uri.encode(uid)}/$kind") },
                                     )
                                 }
@@ -199,11 +206,11 @@ fun NagiApp(
                                         back = { nav.popBackStack() },
                                         onSelect = select,
                                         onForum = navigateToForum,
-                                        onRead = { nav.navigate("read/${Uri.encode(it)}") },
+                                        onRead = openTopic,
                                     )
                                 }
                                 composable("history") {
-                                    HistoryScreen(library, back = { nav.popBackStack() }, read = { select("read/${Uri.encode(it)}") })
+                                    HistoryScreen(library, back = { nav.popBackStack() }, read = openTopic)
                                 }
                                 composable("settings") {
                                     SettingsScreen(library, preferences, back = { nav.popBackStack() }, onSelect = select)
@@ -225,7 +232,7 @@ fun NagiApp(
                                     }
                                 }
                                 composable("user/{uid}/{kind}") {
-                                    UserContentScreen(back = { nav.popBackStack() }, read = { select("read/${Uri.encode(it)}") },
+                                    UserContentScreen(back = { nav.popBackStack() }, read = openTopic,
                                         sendMessage = { name ->
                                             if (account.userId == null) select("login")
                                             else select("compose-message/${Uri.encode(name)}")
@@ -236,7 +243,7 @@ fun NagiApp(
                                     NotificationsScreen(notifications, { returnFromAccountPage(entry) }, notificationsVm::refresh,
                                         { select("login") }, { item ->
                                             notificationsVm.markRead(item)
-                                            if (item.topicId.matches(Regex("[1-9][0-9]*"))) select("read/${Uri.encode(item.topicId)}")
+                                            if (item.topicId.matches(Regex("[1-9][0-9]*"))) openTopic(item.topicId)
                                             else select("messages")
                                         }, markAllRead = notificationsVm::markAllRead)
                                 }
