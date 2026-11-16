@@ -68,6 +68,15 @@ class LibraryViewModel @Inject constructor(
     fun removeFavorite(id: String) = viewModelScope.launch {
         accounts.withCurrentRevision(owner.revision) { dao.removeFavorite(id) }
     }
+    fun removeHistory(topicId: String) = viewModelScope.launch {
+        accounts.withCurrentRevision(owner.revision) { dao.removeHistory(topicId) }
+    }
+    fun clearHistory(clearUnfavoritedPositions: Boolean = false) = viewModelScope.launch {
+        accounts.withCurrentRevision(owner.revision) {
+            dao.clearHistory()
+            if (clearUnfavoritedPositions) dao.clearUnfavoritedPositions()
+        }
+    }
     fun toggleForumFavorite(forum: Forum) = viewModelScope.launch {
         accounts.withCurrentRevision(owner.revision) {
             dao.toggleForumFavorite(
@@ -244,12 +253,14 @@ class TopicsViewModel @Inject constructor(
 
 data class ReaderState(
     val id: String = "", val data: PostPage? = null, val loading: Boolean = false,
-    val error: String? = null, val position: ReadingPosition? = null, val authorOnly: Boolean = false,
+    val error: String? = null, val position: ReadingPosition? = null,
+    val filterAuthorId: String? = null, val filterAuthorName: String? = null,
     val more: List<PostPage> = emptyList(), val loadingMore: Boolean = false, val moreError: String? = null,
     val loadingPrevious: Boolean = false, val previousError: String? = null,
     val epoch: Int = 0, val targetFloor: Int? = null,
     val loadedRevision: Long = 0, val loadedPostIds: List<String> = emptyList(),
 ) {
+    val authorOnly: Boolean get() = filterAuthorId != null
     val pages: List<PostPage> = listOfNotNull(data) + more
     val items: List<Post> = pages.flatMap { it.items }
     val startPage: Int get() = data?.page ?: 0
@@ -296,7 +307,8 @@ class ReaderViewModel @Inject constructor(
     private var requestedPage: Int? = null
     private var requestedFloor: Int? = null
     private var requestedReference: PostReference? = null
-    private var requestedAuthorOnly = false
+    private var requestedAuthorId: String? = null
+    private var requestedAuthorName: String? = null
     private var latestPosition: ReadingPosition? = null
     private val _references = MutableStateFlow<Map<String, PostReferenceState>>(emptyMap())
     val references = _references.asStateFlow()
@@ -364,12 +376,21 @@ class ReaderViewModel @Inject constructor(
             return
         }
         clearReferences()
-        requestedPage = null; requestedFloor = null; requestedReference = null; requestedAuthorOnly = false; latestPosition = null
+        requestedPage = null; requestedFloor = null; requestedReference = null; requestedAuthorId = null; requestedAuthorName = null; latestPosition = null
         moreRequest?.cancel()
         _state.value = ReaderState(id = id, loadedRevision = _state.value.loadedRevision)
         load(restore = true)
     }
-    fun load(page: Int? = null, authorOnly: Boolean? = null, restore: Boolean = false, floor: Int? = null, reference: PostReference? = null) {
+    fun load(
+        page: Int? = null,
+        authorOnly: Boolean? = null,
+        filterAuthorId: String? = null,
+        filterAuthorName: String? = null,
+        clearAuthorFilter: Boolean = false,
+        restore: Boolean = false,
+        floor: Int? = null,
+        reference: PostReference? = null,
+    ) {
         val old = _state.value
         val version = ++generation
         request?.cancel()
@@ -380,12 +401,27 @@ class ReaderViewModel @Inject constructor(
                 if (sessions.snapshot().revision != owner.revision) throw CancellationException("Account changed")
                 val position = if (restore) dao.position(old.id) else latestPosition ?: old.position
                 val target = page ?: (if (old.error != null) requestedPage else old.data?.page) ?: position?.page ?: 1
-                val filtered = authorOnly ?: if (old.error != null) requestedAuthorOnly else old.authorOnly
+                val hasExplicitAuthor = clearAuthorFilter || authorOnly != null || filterAuthorId != null
+                val resolvedAuthorId = when {
+                    clearAuthorFilter || authorOnly == false -> null
+                    filterAuthorId != null -> filterAuthorId.takeIf { it.isNotBlank() }
+                    authorOnly == true -> old.data?.authorId?.takeIf { it.isNotBlank() }
+                    old.error != null -> requestedAuthorId
+                    else -> old.filterAuthorId
+                }
+                val resolvedAuthorName = when {
+                    resolvedAuthorId == null -> null
+                    filterAuthorId != null -> filterAuthorName?.takeIf { it.isNotBlank() }
+                    authorOnly == true -> null
+                    old.error != null -> requestedAuthorName
+                    else -> old.filterAuthorName
+                }
+                val filtered = resolvedAuthorId != null
                 val targetFloor = if (page != null || old.error == null) floor else requestedFloor
-                val targetReference = reference ?: requestedReference?.takeIf { old.error != null && page == null && authorOnly == null }
-                requestedPage = target; requestedFloor = targetFloor; requestedReference = targetReference; requestedAuthorOnly = filtered
-                val author = old.data?.authorId?.takeIf { filtered }
-                val data = if (targetReference == null) client.getPosts(old.id, target, author) else client.getPostPage(targetReference)
+                val targetReference = reference ?: requestedReference?.takeIf { old.error != null && page == null && !hasExplicitAuthor }
+                requestedPage = target; requestedFloor = targetFloor; requestedReference = targetReference
+                requestedAuthorId = resolvedAuthorId; requestedAuthorName = resolvedAuthorName
+                val data = if (targetReference == null) client.getPosts(old.id, target, resolvedAuthorId) else client.getPostPage(targetReference)
                 val resolvedFloor = targetReference?.let { ref -> data.items.firstOrNull { it.id == ref.postId }?.floor }
                 ensureActive()
                 if (version != generation || sessions.snapshot().revision != owner.revision) return@launch
@@ -399,7 +435,8 @@ class ReaderViewModel @Inject constructor(
                 clearReferences()
                 _state.value = ReaderState(
                     old.id, data, position = position?.takeIf { it.page == data.page && !filtered && targetFloor == null && targetReference == null },
-                    authorOnly = filtered, epoch = old.epoch + 1, targetFloor = resolvedFloor ?: targetFloor,
+                    filterAuthorId = resolvedAuthorId, filterAuthorName = resolvedAuthorName,
+                    epoch = old.epoch + 1, targetFloor = resolvedFloor ?: targetFloor,
                     loadedRevision = old.loadedRevision + 1, loadedPostIds = data.items.map { it.id },
                 )
             } catch (error: CancellationException) { throw error }
@@ -430,7 +467,7 @@ class ReaderViewModel @Inject constructor(
         moreRequest = viewModelScope.launch {
             try {
                 if (sessions.snapshot().revision != owner.revision) throw CancellationException("Account changed")
-                val author = state.data?.authorId?.takeIf { state.authorOnly }
+                val author = state.filterAuthorId
                 val result = client.getPosts(state.id, page, author)
                 ensureActive()
                 if (version != generation || sessions.snapshot().revision != owner.revision) return@launch
@@ -481,7 +518,7 @@ class ReaderViewModel @Inject constructor(
         val state = _state.value
         if (state.id != topicId || state.data == null || page !in state.startPage..state.endPage || state.authorOnly || state.loading) return
         accounts.withCurrentRevision(owner.revision) {
-            val position = ReadingPosition(state.id, page, index, offset)
+            val position = ReadingPosition(state.id, page, index, offset, updatedAt = System.currentTimeMillis())
             dao.savePosition(position)
             latestPosition = position
         }

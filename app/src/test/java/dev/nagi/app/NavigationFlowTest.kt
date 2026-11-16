@@ -323,7 +323,7 @@ class NavigationFlowTest {
         compose.onNodeWithContentDescription("返回").performClick()
         compose.onNodeWithContentDescription("返回").performClick()
         openAccountItem("浏览历史")
-        compose.onNodeWithText("继续阅读").assertIsDisplayed()
+        compose.onNodeWithText("刚刚").assertIsDisplayed()
         compose.onNodeWithText("Topic").performClick()
         compose.onNodeWithText("Post 0").assertIsDisplayed()
     }
@@ -480,5 +480,31 @@ class NavigationFlowTest {
 
         org.junit.Assert.assertEquals("10 分钟之前", dev.nagi.app.ui.topic.formatTimeText("2026-11-08 14:20:00", now, zone))
         org.junit.Assert.assertEquals("2025-05-26 17:27", dev.nagi.app.ui.topic.formatTimeText("2025-05-26 17:27", now, zone))
+    }
+
+    @Test
+    fun readerMenusExposeTopicActionsAndHistoryCanFilterAndClear() {
+        compose.onNodeWithText("Forum").performClick()
+        compose.onNodeWithText("Title 1").performClick()
+        compose.onNodeWithText("Post 0").assertIsDisplayed()
+
+        compose.onNodeWithContentDescription("主题操作").performClick()
+        compose.onNodeWithText("分享主题链接").assertExists()
+        compose.onNodeWithText("在浏览器中打开").assertExists()
+        compose.onNodeWithText("复制主题链接").performClick()
+
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNodeWithContentDescription("返回").performClick()
+
+        openAccountItem("浏览历史")
+        compose.onNodeWithText("Topic").assertIsDisplayed()
+        compose.onNode(hasSetTextAction()).performTextInput("不存在")
+        compose.onNodeWithText("没有匹配的浏览历史").assertIsDisplayed()
+        compose.onNodeWithContentDescription("清除筛选").performClick()
+        compose.onNodeWithText("Topic").assertIsDisplayed()
+        compose.onNodeWithContentDescription("清空浏览历史").performClick()
+        compose.onNodeWithText("清空浏览历史？").assertIsDisplayed()
+        compose.onNodeWithText("清空").performClick()
+        compose.onNodeWithText("阅读主题后会在这里留下记录；访客与各账号的历史独立保存").assertIsDisplayed()
     }
 }

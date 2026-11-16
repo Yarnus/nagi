@@ -57,6 +57,67 @@ fun ContentBlocks(
     RenderContentBlocks(blocks, preferences, onImage)
 }
 
+internal fun collectContentImages(blocks: List<ContentBlock>): List<String> {
+    val result = LinkedHashSet<String>()
+    fun walk(items: List<ContentBlock>) {
+        items.forEach { block ->
+            when (block) {
+                is ContentBlock.Image -> result.add(block.url)
+                is ContentBlock.Heading -> walk(block.children)
+                is ContentBlock.Divider -> walk(block.children)
+                is ContentBlock.Aligned -> walk(block.children)
+                is ContentBlock.ListBlock -> block.items.forEach(::walk)
+                is ContentBlock.Table -> block.rows.forEach { row -> row.forEach(::walk) }
+                is ContentBlock.Collapse -> walk(block.children)
+                is ContentBlock.Quote,
+                is ContentBlock.Text,
+                is ContentBlock.Code,
+                is ContentBlock.Media,
+                is ContentBlock.Dice,
+                -> Unit
+            }
+        }
+    }
+    walk(blocks)
+    return result.toList()
+}
+
+internal fun contentPlainText(blocks: List<ContentBlock>): String {
+    fun render(items: List<ContentBlock>): String = items.mapNotNull { block ->
+        when (block) {
+            is ContentBlock.Text -> block.value.takeIf { it.isNotEmpty() }
+            is ContentBlock.Heading -> render(block.children).takeIf { it.isNotBlank() }
+            is ContentBlock.Divider -> {
+                val title = render(block.children)
+                if (title.isBlank()) "------" else "=== $title ==="
+            }
+            is ContentBlock.Aligned -> render(block.children).takeIf { it.isNotBlank() }
+            is ContentBlock.ListBlock -> block.items.mapIndexedNotNull { index, item ->
+                render(item).takeIf { it.isNotBlank() }?.let { body ->
+                    if (block.ordered) "${index + 1}. $body" else "• $body"
+                }
+            }.joinToString("\n").takeIf { it.isNotBlank() }
+            is ContentBlock.Code -> block.value.takeIf { it.isNotBlank() }
+            is ContentBlock.Quote -> {
+                val body = render(block.children)
+                val header = block.author?.let { "引用 $it：" } ?: "引用："
+                if (body.isBlank()) null else "$header\n$body"
+            }
+            is ContentBlock.Table -> block.rows.joinToString("\n") { row ->
+                row.joinToString(" | ") { cell -> render(cell).replace('\n', ' ') }
+            }.takeIf { it.isNotBlank() }
+            is ContentBlock.Collapse -> {
+                val body = render(block.children)
+                if (body.isBlank()) "[${block.title}]" else "[${block.title}]\n$body"
+            }
+            is ContentBlock.Image -> "[图片] ${block.url}"
+            is ContentBlock.Media -> block.url
+            is ContentBlock.Dice -> if (block.total == null) "[骰子 ${block.expression}]" else "[骰子 ${block.expression} = ${block.total}]"
+        }
+    }.joinToString("\n").trim()
+    return render(blocks)
+}
+
 @Composable
 private fun RenderContentBlocks(
     blocks: List<ContentBlock>,

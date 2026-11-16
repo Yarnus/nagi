@@ -1,5 +1,10 @@
 package dev.nagi.app.ui.post
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -60,7 +65,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.Role
@@ -124,6 +128,8 @@ fun ReaderScreen(
     ratings: PostRatingViewModel = hiltViewModel(),
     initialReference: PostReference? = null,
     referenceConsumed: () -> Unit = {},
+    initialPage: Int? = null,
+    initialPageConsumed: () -> Unit = {},
     onOpenReference: ((PostReference) -> Unit)? = null,
 ) {
     val colors = NagiThemeTokens.colors
@@ -161,9 +167,13 @@ fun ReaderScreen(
     LaunchedEffect(initialReference) {
         initialReference?.let { vm.locateReference(it); referenceConsumed() }
     }
+    LaunchedEffect(initialPage) {
+        initialPage?.let { vm.jumpToPage(it); initialPageConsumed() }
+    }
     val referenceStates by vm.references.collectAsStateWithLifecycle()
     val uriHandler = LocalUriHandler.current
-    var image by rememberSaveable(id) { mutableStateOf<String?>(null) }
+    var viewerImages by rememberSaveable(id) { mutableStateOf<List<String>>(emptyList()) }
+    var viewerIndex by rememberSaveable(id) { mutableStateOf(0) }
     val data = state.data?.takeIf { state.id == id }
     val favorite = favorites.any { it.topicId == id }
     CompositionLocalProvider(LocalPostReferences provides PostReferences(referenceStates, vm::resolveReference) { target ->
@@ -173,7 +183,7 @@ fun ReaderScreen(
     }) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         if (data != null) {
-            key(id, state.epoch, state.authorOnly) {
+            key(id, state.epoch, state.filterAuthorId) {
                 val items = state.items
                 val position = state.position
                 val floorIndex = state.targetFloor?.let { floor ->
@@ -230,20 +240,51 @@ fun ReaderScreen(
                     onReply = { replies.open(PublishTarget(PublishAction.REPLY, topicId = id), "回复帖子") },
                     topBar = {
                         Column {
+                            val topicUrl = "https://bbs.nga.cn/read.php?tid=$id"
+                            val topicTitle = data.title.ifBlank { "主题" }
+                            val filterLabel = state.filterAuthorName?.let { "只看 $it" }
                             ReaderTopBar(
-                                title = data.title.ifBlank { "主题" },
+                                title = topicTitle,
                                 showTitle = collapsed || items.isEmpty(),
                                 favorite = favorite,
                                 authorOnly = state.authorOnly,
+                                filterLabel = filterLabel,
                                 enabled = !state.loading,
-                                canFilter = data.authorId.isNotBlank(),
+                                canFilter = data.authorId.isNotBlank() || state.authorOnly,
                                 back = back,
                                 page = currentPage,
                                 totalPages = state.totalPages,
                                 onPage = { jumping = true },
                                 onFavorite = vm::toggleFavorite,
-                                onFilter = { vm.load(page = 1, authorOnly = !state.authorOnly) },
+                                onFilter = {
+                                    if (state.authorOnly) vm.load(page = 1, clearAuthorFilter = true)
+                                    else vm.load(page = 1, authorOnly = true)
+                                },
                                 onRefresh = { vm.load(page = currentPage) },
+                                onShare = {
+                                    runCatching {
+                                        val send = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(Intent.EXTRA_TEXT, "$topicTitle $topicUrl")
+                                        }
+                                        context.startActivity(Intent.createChooser(send, topicTitle))
+                                    }.onFailure {
+                                        Toast.makeText(context, "无法打开分享菜单", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                onCopyLink = {
+                                    dev.nagi.app.navigation.ClipboardLinkTracker.markHandled(topicUrl)
+                                    context.getSystemService(ClipboardManager::class.java)
+                                        ?.setPrimaryClip(ClipData.newPlainText("NGA 主题链接", topicUrl))
+                                    Toast.makeText(context, "已复制主题链接", Toast.LENGTH_SHORT).show()
+                                },
+                                onOpenBrowser = {
+                                    runCatching {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(topicUrl)))
+                                    }.onFailure {
+                                        Toast.makeText(context, "无法打开浏览器", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
                             )
                             if (state.loading) LoadingLine()
                             state.error?.let { error ->
@@ -283,12 +324,26 @@ fun ReaderScreen(
                             Column(Modifier.fillMaxWidth()) {
                                 if (hasMain && index == 1) Spacer(Modifier.height(16.dp))
                                 SectionCardItem(group) {
+                                    val postImages = remember(post.id, post.content) { collectContentImages(post.content) }
+                                    val plainText = remember(post.id, post.content) { contentPlainText(post.content) }
+                                    val canFilterAuthor = dev.nagi.app.ui.components.isPublicUserId(post.authorId)
+                                    val filteringThisAuthor = state.filterAuthorId == post.authorId
+                                    val validPostLink = post.id.toLongOrNull()?.let { it > 0L } == true
                                     ReaderPost(
                                         post = post,
                                         preferences = preferences,
                                         isAuthor = post.authorId.isNotBlank() && post.authorId == data.authorId,
                                         title = data.title.takeIf { index == 0 },
-                                        onImage = { image = it },
+                                        onImage = { clickedUrl ->
+                                            val matched = postImages.indexOf(clickedUrl)
+                                            if (matched >= 0) {
+                                                viewerImages = postImages
+                                                viewerIndex = matched
+                                            } else {
+                                                viewerImages = listOf(clickedUrl)
+                                                viewerIndex = 0
+                                            }
+                                        },
                                         highlighted = highlighted == post.floor,
                                         onReply = { openComposer(post, PublishAction.REPLY) },
                                         onComment = { openComposer(post, PublishAction.COMMENT) },
@@ -296,6 +351,29 @@ fun ReaderScreen(
                                         onRating = { ratings.rate(id, post.id, it) },
                                         viewerId = viewerId,
                                         onEdit = { editingPostId = post.id },
+                                        filteringThisAuthor = filteringThisAuthor,
+                                        onFilterAuthor = if (canFilterAuthor) {
+                                            {
+                                                if (filteringThisAuthor) vm.load(page = 1, clearAuthorFilter = true)
+                                                else vm.load(page = 1, filterAuthorId = post.authorId, filterAuthorName = post.author)
+                                            }
+                                        } else null,
+                                        onCopyText = if (plainText.isNotEmpty()) {
+                                            {
+                                                context.getSystemService(ClipboardManager::class.java)
+                                                    ?.setPrimaryClip(ClipData.newPlainText("帖子内容", plainText))
+                                                Toast.makeText(context, "已复制楼层内容", Toast.LENGTH_SHORT).show()
+                                            }
+                                        } else null,
+                                        onCopyLink = if (validPostLink) {
+                                            {
+                                                val postUrl = "https://bbs.nga.cn/read.php?tid=$id&pid=${post.id}"
+                                                dev.nagi.app.navigation.ClipboardLinkTracker.markHandled(postUrl)
+                                                context.getSystemService(ClipboardManager::class.java)
+                                                    ?.setPrimaryClip(ClipData.newPlainText("NGA 楼层链接", postUrl))
+                                                Toast.makeText(context, "已复制楼层链接", Toast.LENGTH_SHORT).show()
+                                            }
+                                        } else null,
                                     )
                                 }
                             }
@@ -410,8 +488,12 @@ fun ReaderScreen(
             uploadImage = replies::uploadImage,
         )
     }
-    image?.let { url ->
-        ImageViewer(url = url, close = { image = null })
+    if (viewerImages.isNotEmpty()) {
+        ImageViewer(
+            urls = viewerImages,
+            initialIndex = viewerIndex,
+            close = { viewerImages = emptyList() },
+        )
     }
 }
 
@@ -421,6 +503,7 @@ private fun ReaderTopBar(
     showTitle: Boolean,
     favorite: Boolean,
     authorOnly: Boolean,
+    filterLabel: String? = null,
     enabled: Boolean,
     canFilter: Boolean,
     back: () -> Unit,
@@ -430,10 +513,14 @@ private fun ReaderTopBar(
     onFavorite: () -> Unit,
     onFilter: () -> Unit,
     onRefresh: () -> Unit,
+    onShare: () -> Unit = {},
+    onCopyLink: () -> Unit = {},
+    onOpenBrowser: () -> Unit = {},
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
     var menu by remember { mutableStateOf(false) }
+    val activeFilterLabel = filterLabel ?: "只看楼主"
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -456,7 +543,7 @@ private fun ReaderTopBar(
             val description = buildString {
                 append("第 $page 页")
                 if (totalPages > 0) append("，共 $totalPages 页")
-                if (authorOnly) append("，只看楼主")
+                if (authorOnly) append("，$activeFilterLabel")
             }
             Box(
                 modifier = Modifier
@@ -466,7 +553,7 @@ private fun ReaderTopBar(
                     .clickable(enabled = enabled, role = Role.Button, onClickLabel = "跳转到指定页或楼层", onClick = onPage)
                     .semantics {
                         contentDescription = description
-                        stateDescription = if (authorOnly) "只看楼主" else "全部回复"
+                        stateDescription = if (authorOnly) activeFilterLabel else "全部回复"
                     },
                 contentAlignment = Alignment.Center,
             ) {
@@ -601,6 +688,29 @@ private fun ReaderTopBar(
                         onRefresh()
                     },
                 )
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.xs),
+                    thickness = 1.dp,
+                    color = colors.cardBorder,
+                )
+                DropdownMenuItem(
+                    text = { Text("分享主题链接", style = typography.body, color = colors.textPrimary) },
+                    leadingIcon = { Icon(NagiIcons.Share, contentDescription = null, modifier = Modifier.size(18.dp), tint = colors.textSecondary) },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    onClick = { menu = false; onShare() },
+                )
+                DropdownMenuItem(
+                    text = { Text("复制主题链接", style = typography.body, color = colors.textPrimary) },
+                    leadingIcon = { Icon(NagiIcons.TopicDocument, contentDescription = null, modifier = Modifier.size(18.dp), tint = colors.textSecondary) },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    onClick = { menu = false; onCopyLink() },
+                )
+                DropdownMenuItem(
+                    text = { Text("在浏览器中打开", style = typography.body, color = colors.textPrimary) },
+                    leadingIcon = { Icon(NagiIcons.Globe, contentDescription = null, modifier = Modifier.size(18.dp), tint = colors.textSecondary) },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    onClick = { menu = false; onOpenBrowser() },
+                )
             }
         }
     }
@@ -621,6 +731,10 @@ internal fun ReaderPost(
     onRating: ((PostRating) -> Unit)? = null,
     viewerId: String? = null,
     onEdit: (() -> Unit)? = null,
+    filteringThisAuthor: Boolean = false,
+    onFilterAuthor: (() -> Unit)? = null,
+    onCopyText: (() -> Unit)? = null,
+    onCopyLink: (() -> Unit)? = null,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
@@ -987,6 +1101,66 @@ internal fun ReaderPost(
                                     onClick = {
                                         actions = false
                                         onComment()
+                                    },
+                                )
+                            }
+                            if (onFilterAuthor != null) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = if (filteringThisAuthor) "查看全部" else "只看该层主",
+                                            style = typography.body,
+                                            color = if (filteringThisAuthor) colors.goldText else colors.textPrimary,
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = if (filteringThisAuthor) NagiIcons.Check else NagiIcons.Person,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                            tint = if (filteringThisAuthor) colors.goldText else colors.textSecondary,
+                                        )
+                                    },
+                                    modifier = Modifier.heightIn(min = 48.dp).semantics { selected = filteringThisAuthor },
+                                    onClick = {
+                                        actions = false
+                                        onFilterAuthor()
+                                    },
+                                )
+                            }
+                            if (onCopyText != null) {
+                                DropdownMenuItem(
+                                    text = { Text("复制内容", style = typography.body, color = colors.textPrimary) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = NagiIcons.TopicDocument,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                            tint = colors.textSecondary,
+                                        )
+                                    },
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    onClick = {
+                                        actions = false
+                                        onCopyText()
+                                    },
+                                )
+                            }
+                            if (onCopyLink != null) {
+                                DropdownMenuItem(
+                                    text = { Text("复制楼层链接", style = typography.body, color = colors.textPrimary) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = NagiIcons.Share,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                            tint = colors.textSecondary,
+                                        )
+                                    },
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    onClick = {
+                                        actions = false
+                                        onCopyLink()
                                     },
                                 )
                             }

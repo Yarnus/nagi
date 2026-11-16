@@ -1,6 +1,7 @@
 package dev.nagi.app
 
 import dev.nagi.app.data.AccountManager
+import dev.nagi.app.data.LocalFavorite
 import dev.nagi.app.data.PreferenceStore
 import dev.nagi.app.viewmodel.LibraryViewModel
 import dev.nagi.app.viewmodel.userMessage
@@ -52,5 +53,29 @@ class LibraryViewModelTest {
             assertNull(vm.forums.value.error)
             assertEquals(loaded, vm.forums.value.items)
         }
+    }
+
+    @Test fun historyRemovalAndClearRespectFavoritedPositions() = runTest(dispatcher) {
+        val sessions = MemorySessionStore()
+        val accounts = AccountManager(sessions, FakeBrowserCookies()).also { it.initialize() }
+        val preferences = PreferenceStore(RuntimeEnvironment.getApplication())
+        val daos = FakeDaoProvider()
+        val dao = daos.forUser(null)
+        dao.saveFavorite(LocalFavorite("fav", "Fav"))
+        dao.savePosition(dev.nagi.app.data.ReadingPosition("fav", 2, 1, 0, updatedAt = 10L))
+        dao.savePosition(dev.nagi.app.data.ReadingPosition("other", 3, 2, 0, updatedAt = 20L))
+        dao.saveHistory(dev.nagi.app.data.ReadingHistory("fav", "Fav", 1000L))
+        dao.saveHistory(dev.nagi.app.data.ReadingHistory("other", "Other", 2000L))
+
+        val vm = LibraryViewModel(FakeClient(), daos, sessions, preferences, accounts)
+        runCurrent()
+        vm.removeHistory("other"); runCurrent()
+        assertEquals(listOf("fav"), dao.history.value.map { it.topicId })
+        assertNotNull(dao.position("other"))
+
+        vm.clearHistory(clearUnfavoritedPositions = true); runCurrent()
+        assertTrue(dao.history.value.isEmpty())
+        assertNotNull(dao.position("fav"))
+        assertNull(dao.position("other"))
     }
 }

@@ -29,8 +29,28 @@ data class LocalForumFavorite(
     val key: String get() = forumKey
 }
 
+const val MAX_HISTORY_ENTRIES = 100
+const val MAX_UNFAVORITED_POSITIONS = 500
+
 @Entity(tableName = "positions")
-data class ReadingPosition(@PrimaryKey val topicId: String, val page: Int, val index: Int, val offset: Int)
+data class ReadingPosition(
+    @PrimaryKey val topicId: String,
+    val page: Int,
+    val index: Int,
+    val offset: Int,
+    val updatedAt: Long = 0L,
+) {
+    override fun equals(other: Any?): Boolean = other is ReadingPosition &&
+        topicId == other.topicId && page == other.page && index == other.index && offset == other.offset
+
+    override fun hashCode(): Int {
+        var result = topicId.hashCode()
+        result = 31 * result + page
+        result = 31 * result + index
+        result = 31 * result + offset
+        return result
+    }
+}
 
 @Entity(tableName = "history")
 data class ReadingHistory(@PrimaryKey val topicId: String, val title: String, val viewedAt: Long)
@@ -49,9 +69,18 @@ interface ReadingDao {
     suspend fun receiveNotifications(items: List<LocalNotification>)
     @Query("UPDATE notifications SET `read` = 1 WHERE id IN (:ids)")
     suspend fun readNotifications(ids: List<String>)
-    @Query("SELECT * FROM history ORDER BY viewedAt DESC, topicId ASC LIMIT 100")
+    @Query("SELECT * FROM history ORDER BY viewedAt DESC, topicId ASC LIMIT $MAX_HISTORY_ENTRIES")
     fun history(): kotlinx.coroutines.flow.Flow<List<ReadingHistory>>
-    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveHistory(item: ReadingHistory)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertHistory(item: ReadingHistory)
+    @Query("DELETE FROM history WHERE topicId NOT IN (SELECT topicId FROM history ORDER BY viewedAt DESC, topicId ASC LIMIT :limit)")
+    suspend fun pruneHistory(limit: Int = MAX_HISTORY_ENTRIES)
+    @Transaction
+    suspend fun saveHistory(item: ReadingHistory) {
+        upsertHistory(item)
+        pruneHistory()
+    }
+    @Query("DELETE FROM history WHERE topicId = :topicId") suspend fun removeHistory(topicId: String)
+    @Query("DELETE FROM history") suspend fun clearHistory()
     @Query("SELECT * FROM favorites ORDER BY savedAt DESC") fun favorites(): kotlinx.coroutines.flow.Flow<List<LocalFavorite>>
     @Query("SELECT * FROM favorites WHERE topicId = :id") suspend fun favorite(id: String): LocalFavorite?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveFavorite(item: LocalFavorite)
@@ -73,17 +102,46 @@ interface ReadingDao {
     @Query("DELETE FROM forum_favorites WHERE forumKey = :key")
     suspend fun removeForumFavorite(key: String)
     @Query("SELECT * FROM positions WHERE topicId = :id") suspend fun position(id: String): ReadingPosition?
-    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun savePosition(item: ReadingPosition)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertPosition(item: ReadingPosition)
+    @Query(
+        "DELETE FROM positions WHERE topicId NOT IN (SELECT topicId FROM favorites) " +
+            "AND topicId NOT IN (SELECT topicId FROM positions WHERE topicId NOT IN (SELECT topicId FROM favorites) ORDER BY updatedAt DESC, topicId ASC LIMIT :limit)",
+    )
+    suspend fun prunePositions(limit: Int = MAX_UNFAVORITED_POSITIONS)
+    @Transaction
+    suspend fun savePosition(item: ReadingPosition) {
+        upsertPosition(item)
+        prunePositions()
+    }
+    @Query("DELETE FROM positions WHERE topicId NOT IN (SELECT topicId FROM favorites)")
+    suspend fun clearUnfavoritedPositions()
 }
 
 @Database(
     entities = [LocalFavorite::class, LocalForumFavorite::class, ReadingPosition::class, ReadingHistory::class, LocalNotification::class, LocalUserTag::class],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class ReadingDatabase : RoomDatabase() {
     abstract fun readingDao(): ReadingDao
     companion object {
+        val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                var hasUpdatedAt = false
+                db.query("PRAGMA table_info(`positions`)").use { cursor ->
+                    val nameIdx = cursor.getColumnIndex("name")
+                    while (cursor.moveToNext()) {
+                        if (nameIdx >= 0 && cursor.getString(nameIdx) == "updatedAt") {
+                            hasUpdatedAt = true
+                            break
+                        }
+                    }
+                }
+                if (!hasUpdatedAt) {
+                    db.execSQL("ALTER TABLE `positions` ADD COLUMN `updatedAt` INTEGER NOT NULL DEFAULT 0")
+                }
+            }
+        }
         val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `user_tags` (`userId` TEXT NOT NULL, `text` TEXT NOT NULL, PRIMARY KEY(`userId`))")

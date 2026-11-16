@@ -14,8 +14,10 @@ import coil.decode.DataSource
 import coil.intercept.Interceptor
 import coil.request.ErrorResult
 import coil.request.SuccessResult
+import dev.nagi.app.ui.post.DecodedImageFormat
 import dev.nagi.app.ui.post.ImageTransform
 import dev.nagi.app.ui.post.ImageViewer
+import dev.nagi.app.ui.post.detectImageFormat
 import dev.nagi.app.ui.theme.NagiTheme
 import org.junit.Assert.*
 import org.junit.Rule
@@ -93,6 +95,26 @@ class ImageViewerTest {
         compose.onNodeWithText("还原").assertExists()
         compose.onNodeWithText("关闭").performClick()
         compose.onNodeWithTag("image-viewport").assertDoesNotExist()
+    }
+
+    @Test fun gallerySwipesBetweenImagesAndShowsSaveAndShare() = withLoader {
+        val urls = listOf("https://img4.nga.cn/one.png", "https://img4.nga.cn/two.png", "https://img4.nga.cn/three.png")
+        compose.setContent { NagiTheme { ImageViewer(urls = urls, initialIndex = 1) {} } }
+        compose.onNodeWithText("2 / 3").assertExists()
+        compose.onNodeWithText("保存").assertExists()
+        compose.onNodeWithText("分享").assertExists()
+        compose.onNodeWithTag("image-viewport").performTouchInput { swipeLeft() }
+        compose.onNodeWithText("3 / 3").assertExists()
+        compose.onNodeWithTag("image-viewport").performTouchInput { doubleClick(center) }
+        compose.onNodeWithTag("image-viewport").performTouchInput { swipeRight() }
+        compose.onNodeWithText("3 / 3").assertExists()
+    }
+
+    @Test fun detectsImageFormatsFromMagicBytes() {
+        assertEquals(DecodedImageFormat("image/png", "png"), detectImageFormat(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)))
+        assertEquals(DecodedImageFormat("image/gif", "gif"), detectImageFormat("GIF89a".encodeToByteArray()))
+        assertEquals(DecodedImageFormat("image/webp", "webp"), detectImageFormat("RIFF1234WEBP".encodeToByteArray()))
+        assertEquals(DecodedImageFormat("image/jpeg", "jpg"), detectImageFormat(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())))
     }
 
     private fun withLoader(failFirst: Boolean = false, test: () -> Unit) {

@@ -90,4 +90,65 @@ class ReadingDatabaseTest {
             assertEquals(3, dao.position("topic")!!.page)
         } finally { database.close() }
     }
+
+    @Test fun positionPruningProtectsFavoritesAndHistoryManagementWorks() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val database = Room.inMemoryDatabaseBuilder(context, ReadingDatabase::class.java).build()
+        try {
+            val dao = database.readingDao()
+            dao.saveFavorite(LocalFavorite("fav", "Favorite Topic"))
+            dao.upsertPosition(ReadingPosition("fav", 4, 1, 0, updatedAt = 10L))
+            dao.upsertPosition(ReadingPosition("old-1", 1, 0, 0, updatedAt = 20L))
+            dao.upsertPosition(ReadingPosition("old-2", 2, 0, 0, updatedAt = 30L))
+            dao.upsertPosition(ReadingPosition("new-1", 3, 0, 0, updatedAt = 40L))
+            dao.prunePositions(limit = 2)
+
+            assertNotNull(dao.position("fav"))
+            assertNull(dao.position("old-1"))
+            assertNotNull(dao.position("old-2"))
+            assertNotNull(dao.position("new-1"))
+
+            dao.upsertHistory(ReadingHistory("t1", "Topic 1", 100L))
+            dao.upsertHistory(ReadingHistory("t2", "Topic 2", 200L))
+            dao.upsertHistory(ReadingHistory("t3", "Topic 3", 300L))
+            dao.pruneHistory(limit = 2)
+            assertEquals(listOf("t3", "t2"), dao.history().first().map { it.topicId })
+
+            dao.removeHistory("t3")
+            assertEquals(listOf("t2"), dao.history().first().map { it.topicId })
+
+            dao.clearHistory()
+            assertTrue(dao.history().first().isEmpty())
+
+            dao.clearUnfavoritedPositions()
+            assertNotNull(dao.position("fav"))
+            assertNull(dao.position("old-2"))
+            assertNull(dao.position("new-1"))
+        } finally { database.close() }
+    }
+
+    @Test fun migration5To6PreservesPositions() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val name = "position-migration-v5"
+        context.deleteDatabase("${name}_7.db")
+        var databases = AccountDatabases(context, name)
+        try {
+            databases.forUser("7").upsertPosition(ReadingPosition("42", 5, 2, 16, updatedAt = 999L))
+            databases.close()
+            android.database.sqlite.SQLiteDatabase.openDatabase(context.getDatabasePath("${name}_7.db").path, null, 0).use { db ->
+                db.execSQL("CREATE TABLE positions_v5 (topicId TEXT NOT NULL PRIMARY KEY, page INTEGER NOT NULL, `index` INTEGER NOT NULL, `offset` INTEGER NOT NULL)")
+                db.execSQL("INSERT INTO positions_v5 SELECT topicId, page, `index`, `offset` FROM positions")
+                db.execSQL("DROP TABLE positions")
+                db.execSQL("ALTER TABLE positions_v5 RENAME TO positions")
+                db.version = 5
+            }
+            databases = AccountDatabases(context, name)
+            val migrated = databases.forUser("7").position("42")
+            assertEquals(ReadingPosition("42", 5, 2, 16), migrated)
+            assertEquals(0L, migrated!!.updatedAt)
+        } finally {
+            databases.close()
+            context.deleteDatabase("${name}_7.db")
+        }
+    }
 }

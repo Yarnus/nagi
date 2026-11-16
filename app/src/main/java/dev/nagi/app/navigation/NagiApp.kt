@@ -25,6 +25,7 @@ import dev.nagi.app.viewmodel.UserTagsViewModel
 import dev.nagi.app.ui.library.NotificationsScreen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -61,12 +62,19 @@ import dev.nagi.app.viewmodel.AccountIdentity
 import dev.nagi.app.viewmodel.AccountIdentityViewModel
 import dev.nagi.app.viewmodel.AccountViewModel
 import dev.nagi.app.viewmodel.LibraryViewModel
+import dev.nagi.sdk.ExtractedExternalLink
 import dev.nagi.sdk.Forum
+import dev.nagi.sdk.NgaExternalLinks
+import dev.nagi.sdk.NgaExternalTarget
 
 @Composable
 fun NagiApp(
     width: WindowWidthSizeClass,
     accountVm: AccountViewModel = hiltViewModel(),
+    deepLinkUri: String? = null,
+    onDeepLinkConsumed: () -> Unit = {},
+    clipboardLink: ExtractedExternalLink? = null,
+    onClipboardLinkHandled: (ExtractedExternalLink) -> Unit = {},
 ) {
     val preferences by accountVm.preferences.collectAsStateWithLifecycle()
     val account by accountVm.account.collectAsStateWithLifecycle()
@@ -271,6 +279,7 @@ fun NagiApp(
                                 composable("read/{id}") { backStack ->
                                     val topicId = backStack.arguments!!.getString("id")!!
                                     val pendingPost by backStack.savedStateHandle.getStateFlow<String?>("postReference", null).collectAsStateWithLifecycle()
+                                    val pendingPage by backStack.savedStateHandle.getStateFlow<Int?>("initialPage", null).collectAsStateWithLifecycle()
                                     val reference = pendingPost?.split(',')?.let {
                                         dev.nagi.sdk.PostReference(topicId, it[0], it[1].toInt())
                                     }
@@ -278,6 +287,8 @@ fun NagiApp(
                                         topicId, preferences, back = { popBackFrom(backStack) },
                                         initialReference = reference,
                                         referenceConsumed = { backStack.savedStateHandle["postReference"] = null },
+                                        initialPage = pendingPage,
+                                        initialPageConsumed = { backStack.savedStateHandle["initialPage"] = null },
                                         onOpenReference = { target ->
                                             openTopic(target.topicId)
                                             nav.currentBackStackEntry?.savedStateHandle?.set("postReference", "${target.postId},${target.page}")
@@ -286,6 +297,53 @@ fun NagiApp(
                                 }
                             }
                         }
+                    }
+                    val navigateToExternalTarget: (NgaExternalTarget) -> Unit = { target ->
+                        when (target) {
+                            is NgaExternalTarget.Topic -> {
+                                openTopic(target.topicId)
+                                if (target.postId != null) {
+                                    nav.currentBackStackEntry?.savedStateHandle?.set("postReference", "${target.postId},${target.page}")
+                                } else if (target.page > 1) {
+                                    nav.currentBackStackEntry?.savedStateHandle?.set("initialPage", target.page)
+                                }
+                            }
+                            is NgaExternalTarget.Forum -> {
+                                val matched = directory.items.firstOrNull {
+                                    it.id == target.forumId && it.collectionId.orEmpty() == target.collectionId.orEmpty()
+                                }
+                                val fallbackName = if (target.collectionId != null) "合集 ${target.collectionId}" else "版块 ${target.forumId}"
+                                navigateToForum(
+                                    matched ?: Forum(
+                                        id = target.forumId,
+                                        name = fallbackName,
+                                        category = "",
+                                        group = "",
+                                        collectionId = target.collectionId,
+                                    ),
+                                )
+                            }
+                            is NgaExternalTarget.User -> select("user/${Uri.encode(target.userId)}/topics")
+                        }
+                    }
+                    LaunchedEffect(deepLinkUri, account.busy) {
+                        val raw = deepLinkUri ?: return@LaunchedEffect
+                        if (account.busy) return@LaunchedEffect
+                        NgaExternalLinks.parse(raw)?.let { target ->
+                            ClipboardLinkTracker.markHandled(raw)
+                            navigateToExternalTarget(target)
+                        }
+                        onDeepLinkConsumed()
+                    }
+                    if (clipboardLink != null && !account.busy && deepLinkUri == null) {
+                        ClipboardLinkPromptDialog(
+                            link = clipboardLink,
+                            onOpen = {
+                                onClipboardLinkHandled(clipboardLink)
+                                navigateToExternalTarget(clipboardLink.target)
+                            },
+                            onIgnore = { onClipboardLinkHandled(clipboardLink) },
+                        )
                     }
                     if (account.busy) {
                         Surface(

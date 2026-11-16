@@ -243,6 +243,13 @@ fun TopicsScreen(
                 ?: Forum(id = activeForumId!!, name = activeTitle, category = "", group = "", collectionId = activeCollection)
         }
     }
+    LaunchedEffect(currentForum?.name, activeForumId, activeCollection) {
+        val resolved = currentForum?.name?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        val placeholder = if (!activeCollection.isNullOrBlank()) "合集 $activeCollection" else "版块 $activeForumId"
+        if (activeTitle == placeholder && resolved != placeholder) {
+            activeTitle = resolved
+        }
+    }
     val isCurrentForumFavorite = currentForumKey != null && currentForumKey in favoriteForumKeys
 
     val openComposer = {

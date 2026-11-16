@@ -514,6 +514,30 @@ class ReadingViewModelTest {
         assertFalse(manager.captureAndSave(attempt, LOGIN_URL))
         assertEquals("99", sessions.snapshot().session!!.userId)
     }
+
+    @Test fun filterByArbitraryFloorAuthorAndClear() = runTest(dispatcher) {
+        val sessions = MemorySessionStore()
+        val daos = FakeDaoProvider()
+        val accounts = AccountManager(sessions, FakeBrowserCookies()).also { it.initialize() }
+        val client = FakeClient()
+        val vm = ReaderViewModel(client, daos, sessions, accounts)
+        vm.open("1"); runCurrent()
+        assertFalse(vm.state.value.authorOnly)
+
+        vm.load(page = 1, filterAuthorId = "88", filterAuthorName = "Responder"); runCurrent()
+        assertTrue(vm.state.value.authorOnly)
+        assertEquals("88", vm.state.value.filterAuthorId)
+        assertEquals("Responder", vm.state.value.filterAuthorName)
+        assertEquals(1 to "88", client.postRequests.last())
+
+        vm.loadNext(); runCurrent()
+        assertEquals(2 to "88", client.postRequests.last())
+
+        vm.load(page = 1, clearAuthorFilter = true); runCurrent()
+        assertFalse(vm.state.value.authorOnly)
+        assertNull(vm.state.value.filterAuthorId)
+        assertEquals(1 to null, client.postRequests.last())
+    }
 }
 
 class FakeClient : NgaClient {
@@ -571,8 +595,21 @@ class FakeDao : ReadingDao {
     }
     val history = MutableStateFlow<List<ReadingHistory>>(emptyList())
     override fun history(): Flow<List<ReadingHistory>> = history
+    override suspend fun upsertHistory(item: ReadingHistory) {
+        history.update { old -> (old.filterNot { it.topicId == item.topicId } + item).sortedWith(compareByDescending<ReadingHistory> { it.viewedAt }.thenBy { it.topicId }) }
+    }
+    override suspend fun pruneHistory(limit: Int) {
+        history.update { old -> old.sortedWith(compareByDescending<ReadingHistory> { it.viewedAt }.thenBy { it.topicId }).take(limit) }
+    }
     override suspend fun saveHistory(item: ReadingHistory) {
-        history.update { old -> (old.filterNot { it.topicId == item.topicId } + item).sortedWith(compareByDescending<ReadingHistory> { it.viewedAt }.thenBy { it.topicId }).take(100) }
+        upsertHistory(item)
+        pruneHistory()
+    }
+    override suspend fun removeHistory(topicId: String) {
+        history.update { old -> old.filterNot { it.topicId == topicId } }
+    }
+    override suspend fun clearHistory() {
+        history.value = emptyList()
     }
     val favorites = MutableStateFlow<List<LocalFavorite>>(emptyList())
     val forumFavorites = MutableStateFlow<List<LocalForumFavorite>>(emptyList())
@@ -586,7 +623,21 @@ class FakeDao : ReadingDao {
     override suspend fun saveForumFavorite(item: LocalForumFavorite) { forumFavorites.update { old -> old.filterNot { it.forumKey == item.forumKey } + item } }
     override suspend fun removeForumFavorite(key: String) { forumFavorites.update { it.filterNot { item -> item.forumKey == key } } }
     override suspend fun position(id: String): ReadingPosition? = positions[id]
-    override suspend fun savePosition(item: ReadingPosition) { positions[item.topicId] = item }
+    override suspend fun upsertPosition(item: ReadingPosition) { positions[item.topicId] = item }
+    override suspend fun prunePositions(limit: Int) {
+        val favIds = favorites.value.mapTo(HashSet()) { it.topicId }
+        val unfavorited = positions.values.filter { it.topicId !in favIds }
+            .sortedWith(compareByDescending<ReadingPosition> { it.updatedAt }.thenBy { it.topicId })
+        unfavorited.drop(limit).forEach { positions.remove(it.topicId) }
+    }
+    override suspend fun savePosition(item: ReadingPosition) {
+        upsertPosition(item)
+        prunePositions()
+    }
+    override suspend fun clearUnfavoritedPositions() {
+        val favIds = favorites.value.mapTo(HashSet()) { it.topicId }
+        positions.keys.removeAll { it !in favIds }
+    }
 }
 
 class FakeDaoProvider : ReadingDaoProvider {

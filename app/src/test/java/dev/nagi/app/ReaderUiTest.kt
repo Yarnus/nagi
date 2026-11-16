@@ -97,4 +97,103 @@ class ReaderUiTest {
             }
         }
     }
+
+    @Test fun contentHelpersCollectNestedImagesAndExtractPlainText() {
+        val blocks = listOf(
+            ContentBlock.Heading(listOf(ContentBlock.Text("标题"))),
+            ContentBlock.Text("正文"),
+            ContentBlock.Image("https://img4.nga.cn/a.png"),
+            ContentBlock.Collapse("折叠", listOf(ContentBlock.Image("https://img4.nga.cn/b.png"), ContentBlock.Text("内部"))),
+            ContentBlock.Quote(listOf(ContentBlock.Image("https://img4.nga.cn/ignored-quote.png"), ContentBlock.Text("引用")), author = "A"),
+            ContentBlock.ListBlock(listOf(listOf(ContentBlock.Text("一")), listOf(ContentBlock.Text("二"))), ordered = true),
+        )
+        org.junit.Assert.assertEquals(
+            listOf("https://img4.nga.cn/a.png", "https://img4.nga.cn/b.png"),
+            collectContentImages(blocks),
+        )
+        val plain = contentPlainText(blocks)
+        org.junit.Assert.assertTrue(plain.contains("标题"))
+        org.junit.Assert.assertTrue(plain.contains("1. 一"))
+        org.junit.Assert.assertTrue(plain.contains("[折叠]\n[图片] https://img4.nga.cn/b.png\n内部"))
+    }
+
+    @Test fun floorMenuExposesFilterAuthorAndCopyActionsAndMainActivityExtractsDeepLink() {
+        var filtered = false
+        var copiedText = false
+        var copiedLink = false
+        val post = dev.nagi.sdk.Post(
+            id = "100",
+            floor = 1,
+            author = "层主",
+            authorId = "88",
+            avatar = "",
+            date = "2026-11-16",
+            content = listOf(ContentBlock.Text("层主正文")),
+        )
+        compose.setContent {
+            NagiTheme {
+                ReaderPost(
+                    post = post,
+                    preferences = ReadingPreferences(),
+                    isAuthor = false,
+                    title = null,
+                    onImage = {},
+                    onReply = {},
+                    onFilterAuthor = { filtered = true },
+                    onCopyText = { copiedText = true },
+                    onCopyLink = { copiedLink = true },
+                )
+            }
+        }
+        compose.onNodeWithContentDescription("第 1 楼更多操作").performClick()
+        compose.onNodeWithText("只看该层主").performClick()
+        compose.onNodeWithContentDescription("第 1 楼更多操作").performClick()
+        compose.onNodeWithText("复制内容").performClick()
+        compose.onNodeWithContentDescription("第 1 楼更多操作").performClick()
+        compose.onNodeWithText("复制楼层链接").performClick()
+        compose.runOnIdle {
+            org.junit.Assert.assertTrue(filtered)
+            org.junit.Assert.assertTrue(copiedText)
+            org.junit.Assert.assertTrue(copiedLink)
+        }
+
+        val viewIntent = android.content.Intent(
+            android.content.Intent.ACTION_VIEW,
+            android.net.Uri.parse("https://bbs.nga.cn/read.php?tid=45905669"),
+        )
+        val mainIntent = android.content.Intent(android.content.Intent.ACTION_MAIN)
+        org.junit.Assert.assertEquals("https://bbs.nga.cn/read.php?tid=45905669", MainActivity.extractDeepLink(viewIntent))
+        org.junit.Assert.assertNull(MainActivity.extractDeepLink(mainIntent))
+    }
+
+    @Test fun clipboardLinkDetectorTracksHandledLinksAndRendersPromptDialog() {
+        val state = dev.nagi.app.navigation.ClipboardLinkState()
+        val first = state.inspectText("分享帖子 https://bbs.nga.cn/read.php?tid=998877&page=2", timestamp = 100L)
+        org.junit.Assert.assertNotNull(first)
+        org.junit.Assert.assertTrue(state.shouldSkipByTimestamp(100L))
+        org.junit.Assert.assertFalse(state.shouldSkipByTimestamp(200L))
+
+        state.markHandled(first!!.url)
+        org.junit.Assert.assertNull(state.inspectText("https://bbs.nga.cn/read.php?tid=998877&page=2", timestamp = 200L))
+
+        var opened = false
+        var ignored = false
+        compose.setContent {
+            NagiTheme {
+                dev.nagi.app.navigation.ClipboardLinkPromptDialog(
+                    link = first,
+                    onOpen = { opened = true },
+                    onIgnore = { ignored = true },
+                )
+            }
+        }
+        compose.onNodeWithText("检测到剪贴板中的 NGA 链接").assertIsDisplayed()
+        compose.onNodeWithText("帖子 #998877 · 第 2 页").assertIsDisplayed()
+        compose.onNodeWithText("打开").performClick()
+        compose.onNodeWithText("忽略").performClick()
+        compose.runOnIdle {
+            org.junit.Assert.assertTrue(opened)
+            org.junit.Assert.assertTrue(ignored)
+        }
+    }
 }
