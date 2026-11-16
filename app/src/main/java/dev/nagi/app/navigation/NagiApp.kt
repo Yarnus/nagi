@@ -257,7 +257,20 @@ fun NagiApp(
                                     MessagesScreen(entry.arguments!!.getString("id"), preferences, { returnFromAccountPage(entry) }, {})
                                 }
                                 composable("read/{id}") { backStack ->
-                                    ReaderScreen(backStack.arguments!!.getString("id")!!, preferences, back = { nav.popBackStack() })
+                                    val topicId = backStack.arguments!!.getString("id")!!
+                                    val pendingPost by backStack.savedStateHandle.getStateFlow<String?>("postReference", null).collectAsStateWithLifecycle()
+                                    val reference = pendingPost?.split(',')?.let {
+                                        dev.nagi.sdk.PostReference(topicId, it[0], it[1].toInt())
+                                    }
+                                    ReaderScreen(
+                                        topicId, preferences, back = { nav.popBackStack() },
+                                        initialReference = reference,
+                                        referenceConsumed = { backStack.savedStateHandle["postReference"] = null },
+                                        onOpenReference = { target ->
+                                            openTopic(target.topicId)
+                                            nav.currentBackStackEntry?.savedStateHandle?.set("postReference", "${target.postId},${target.page}")
+                                        },
+                                    )
                                 }
                             }
                         }

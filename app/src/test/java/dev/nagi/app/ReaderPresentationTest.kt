@@ -169,7 +169,8 @@ class ReaderPresentationTest {
         compose.onNodeWithText("关闭").performClick()
         compose.onNode(hasScrollToIndexAction()).performScrollToIndex(1)
         compose.onNodeWithText("回复 测试楼主").assertIsDisplayed()
-        compose.onNodeWithText("第三层引用仍然需要有足够的正文宽度。").assertIsDisplayed()
+        compose.onNodeWithText("引用正文：保持中文阅读节奏。").assertIsDisplayed()
+        compose.onNodeWithText("第三层引用仍然需要有足够的正文宽度。").assertDoesNotExist()
         compose.onAllNodes(hasText("[pid=", substring = true) or hasText("[uid=", substring = true)).assertCountEquals(0)
     }
 
@@ -237,7 +238,7 @@ class ReaderPresentationTest {
         compose.onNode(hasScrollToIndexAction()).performScrollToIndex(5)
         compose.onNodeWithText("加载失败，请检查网络后重试，点击重试").assertExists()
         compose.onNodeWithTag("reader-error").assertExists()
-        compose.onNodeWithText(READER_TITLE).assertExists()
+        assertTrue(compose.onAllNodesWithText(READER_TITLE).fetchSemanticsNodes().isNotEmpty())
         fixture.failPage = null
         compose.onNodeWithText("加载失败，请检查网络后重试，点击重试").performClick()
         compose.waitForIdle()

@@ -43,6 +43,9 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalUriHandler
+import dev.nagi.sdk.PostReference
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -119,6 +122,9 @@ fun ReaderScreen(
     vm: ReaderViewModel = hiltViewModel(),
     replies: ReplySessionViewModel = hiltViewModel(),
     ratings: PostRatingViewModel = hiltViewModel(),
+    initialReference: PostReference? = null,
+    referenceConsumed: () -> Unit = {},
+    onOpenReference: ((PostReference) -> Unit)? = null,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
@@ -152,9 +158,19 @@ fun ReaderScreen(
     }
     val favorites by vm.favorites.collectAsStateWithLifecycle()
     LaunchedEffect(id) { vm.open(id) }
+    LaunchedEffect(initialReference) {
+        initialReference?.let { vm.locateReference(it); referenceConsumed() }
+    }
+    val referenceStates by vm.references.collectAsStateWithLifecycle()
+    val uriHandler = LocalUriHandler.current
     var image by rememberSaveable(id) { mutableStateOf<String?>(null) }
     val data = state.data?.takeIf { state.id == id }
     val favorite = favorites.any { it.topicId == id }
+    CompositionLocalProvider(LocalPostReferences provides PostReferences(referenceStates, vm::resolveReference) { target ->
+        if (target.topicId == id) vm.locateReference(target)
+        else if (onOpenReference != null) onOpenReference(target)
+        else uriHandler.openUri("https://bbs.nga.cn/read.php?tid=${target.topicId}&pid=${target.postId}&page=${target.page}")
+    }) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         if (data != null) {
             key(id, state.epoch, state.authorOnly) {
@@ -360,6 +376,7 @@ fun ReaderScreen(
                 }
             }
         }
+    }
     }
     editingPostId?.let { postId ->
         val editor: ComposerViewModel = hiltViewModel(key = "reader-edit:$id:$postId")

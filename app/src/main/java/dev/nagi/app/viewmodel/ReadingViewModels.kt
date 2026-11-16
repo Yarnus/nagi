@@ -295,19 +295,81 @@ class ReaderViewModel @Inject constructor(
     private var generation = 0L
     private var requestedPage: Int? = null
     private var requestedFloor: Int? = null
+    private var requestedReference: PostReference? = null
     private var requestedAuthorOnly = false
     private var latestPosition: ReadingPosition? = null
+    private val _references = MutableStateFlow<Map<String, PostReferenceState>>(emptyMap())
+    val references = _references.asStateFlow()
+    private val referenceJobs = mutableMapOf<String, Job>()
+    private var referenceGeneration = 0L
+    private fun currentReferenceOwner() = accounts.state.value.let {
+        it.ready && !it.busy && it.revision == owner.revision && it.userId == owner.userId
+    }
+    init {
+        viewModelScope.launch {
+            accounts.state.collect { if (!currentReferenceOwner()) clearReferences() }
+        }
+    }
+    private fun clearReferences() {
+        referenceGeneration++
+        referenceJobs.values.forEach { it.cancel() }
+        referenceJobs.clear()
+        _references.value = emptyMap()
+    }
+    fun resolveReference(reference: PostReference, retry: Boolean = false) {
+        if (!currentReferenceOwner()) return
+        val key = reference.key
+        if (referenceJobs[key]?.isActive == true) return
+        val known = _references.value[key]
+        if (known != null && (!retry || known.error == null)) return
+        val loaded = _state.value.items.firstOrNull { _state.value.id == reference.topicId && it.id == reference.postId }
+        if (loaded != null) {
+            _references.update { it + (key to PostReferenceState(post = loaded)) }
+            return
+        }
+        _references.update { it + (key to PostReferenceState(loading = true)) }
+        val version = referenceGeneration
+        referenceJobs[key] = viewModelScope.launch {
+            try {
+                val page = client.getPostPage(reference)
+                ensureActive()
+                if (version != referenceGeneration || !currentReferenceOwner()) return@launch
+                val post = page.items.firstOrNull { it.id == reference.postId } ?: throw NgaException.NotFound()
+                _references.update { it + (key to PostReferenceState(post = post)) }
+            } catch (error: CancellationException) { throw error }
+            catch (error: Exception) {
+                if (version == referenceGeneration && currentReferenceOwner()) {
+                    _references.update { it + (key to PostReferenceState(error = userMessage(error))) }
+                }
+            }
+        }
+    }
+    fun locateReference(reference: PostReference) {
+        if (!currentReferenceOwner() || reference.topicId != _state.value.id) return
+        val loaded = _state.value.items.firstOrNull { it.id == reference.postId }
+        if (loaded != null && !_state.value.authorOnly) {
+            locateLoadedFloor(loaded.floor)
+        } else load(reference = reference, authorOnly = false)
+    }
+    private fun locateLoadedFloor(floor: Int) {
+        moreRequest?.cancel()
+        _state.update {
+            it.copy(targetFloor = floor, position = null, epoch = it.epoch + 1,
+                loadingMore = false, loadingPrevious = false)
+        }
+    }
     fun open(id: String) {
         if (_state.value.id == id) {
             if (!_state.value.authorOnly) _state.update { it.copy(position = latestPosition ?: it.position, targetFloor = null) }
             return
         }
-        requestedPage = null; requestedFloor = null; requestedAuthorOnly = false; latestPosition = null
+        clearReferences()
+        requestedPage = null; requestedFloor = null; requestedReference = null; requestedAuthorOnly = false; latestPosition = null
         moreRequest?.cancel()
         _state.value = ReaderState(id = id, loadedRevision = _state.value.loadedRevision)
         load(restore = true)
     }
-    fun load(page: Int? = null, authorOnly: Boolean? = null, restore: Boolean = false, floor: Int? = null) {
+    fun load(page: Int? = null, authorOnly: Boolean? = null, restore: Boolean = false, floor: Int? = null, reference: PostReference? = null) {
         val old = _state.value
         val version = ++generation
         request?.cancel()
@@ -320,9 +382,11 @@ class ReaderViewModel @Inject constructor(
                 val target = page ?: (if (old.error != null) requestedPage else old.data?.page) ?: position?.page ?: 1
                 val filtered = authorOnly ?: if (old.error != null) requestedAuthorOnly else old.authorOnly
                 val targetFloor = if (page != null || old.error == null) floor else requestedFloor
-                requestedPage = target; requestedFloor = targetFloor; requestedAuthorOnly = filtered
+                val targetReference = reference ?: requestedReference?.takeIf { old.error != null && page == null && authorOnly == null }
+                requestedPage = target; requestedFloor = targetFloor; requestedReference = targetReference; requestedAuthorOnly = filtered
                 val author = old.data?.authorId?.takeIf { filtered }
-                val data = client.getPosts(old.id, target, author)
+                val data = if (targetReference == null) client.getPosts(old.id, target, author) else client.getPostPage(targetReference)
+                val resolvedFloor = targetReference?.let { ref -> data.items.firstOrNull { it.id == ref.postId }?.floor }
                 ensureActive()
                 if (version != generation || sessions.snapshot().revision != owner.revision) return@launch
                 try {
@@ -332,9 +396,10 @@ class ReaderViewModel @Inject constructor(
                 } catch (error: CancellationException) { throw error }
                 catch (_: Exception) {  }
                 if (version != generation) return@launch
+                clearReferences()
                 _state.value = ReaderState(
-                    old.id, data, position = position?.takeIf { it.page == target && !filtered && targetFloor == null },
-                    authorOnly = filtered, epoch = old.epoch + 1, targetFloor = targetFloor,
+                    old.id, data, position = position?.takeIf { it.page == data.page && !filtered && targetFloor == null && targetReference == null },
+                    authorOnly = filtered, epoch = old.epoch + 1, targetFloor = resolvedFloor ?: targetFloor,
                     loadedRevision = old.loadedRevision + 1, loadedPostIds = data.items.map { it.id },
                 )
             } catch (error: CancellationException) { throw error }
@@ -382,7 +447,8 @@ class ReaderViewModel @Inject constructor(
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) {
                 if (version == generation) _state.update {
-                    if (prepend) it.copy(loadingPrevious = false, previousError = userMessage(error))
+                    if (it.epoch != state.epoch || it.id != state.id) it
+                    else if (prepend) it.copy(loadingPrevious = false, previousError = userMessage(error))
                     else it.copy(loadingMore = false, moreError = userMessage(error))
                 }
             }
@@ -399,7 +465,7 @@ class ReaderViewModel @Inject constructor(
         if (!state.canJumpFloor) return
         val target = floor.coerceIn(0, (data.total - 1).coerceAtLeast(0))
         if (state.items.any { it.floor == target }) {
-            _state.update { it.copy(targetFloor = target, position = null, epoch = it.epoch + 1) }
+            locateLoadedFloor(target)
             return
         }
         val page = data.pageOfFloor(target) ?: return

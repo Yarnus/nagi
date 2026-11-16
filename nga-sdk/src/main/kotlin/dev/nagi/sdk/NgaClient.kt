@@ -43,6 +43,7 @@ interface NgaClient {
     suspend fun getForums(): List<Forum>
     suspend fun getTopics(forumId: String, page: Int = 1, collectionId: String? = null, sort: TopicSort = TopicSort.LAST_ACTIVE): TopicPage
     suspend fun getPosts(topicId: String, page: Int = 1, authorId: String? = null): PostPage
+    suspend fun getPostPage(reference: PostReference): PostPage
     suspend fun searchTopics(keyword: String, forumId: String? = null, page: Int = 1, collectionId: String? = null): TopicPage
     suspend fun findUser(username: String): NgaUser?
     suspend fun getUser(userId: String): NgaUser
@@ -305,9 +306,24 @@ internal class HttpNgaClient(
         )
     }
 
-    override suspend fun getPosts(topicId: String, page: Int, authorId: String?): PostPage {
+    override suspend fun getPosts(topicId: String, page: Int, authorId: String?): PostPage =
+        readPosts(topicId, page, authorId)
+
+    override suspend fun getPostPage(reference: PostReference): PostPage {
+        require(reference.topicId.matches(Regex("[1-9][0-9]*")))
+        require(reference.postId == "0" || reference.postId.matches(Regex("[1-9][0-9]*")))
+        val result = readPosts(reference.topicId, reference.page, null, reference.postId)
+        val post = result.items.firstOrNull { it.id == reference.postId } ?: throw NgaException.NotFound()
+        val page = result.pageOfFloor(post.floor) ?: reference.page
+        val totalPages = if (result.totalPages > 0 && result.pageSize > 0) {
+            ((result.total + result.pageSize - 1L) / result.pageSize).toInt().coerceAtLeast(page)
+        } else result.totalPages
+        return result.copy(page = page, totalPages = totalPages, hasMore = totalPages > page || (totalPages == 0 && result.hasMore))
+    }
+
+    private suspend fun readPosts(topicId: String, page: Int, authorId: String?, postId: String? = null): PostPage {
         require(topicId.isNotBlank() && page > 0)
-        val parameters = postQuery(topicId, page, authorId)
+        val parameters = postQuery(topicId, page, authorId) + if (postId == null) emptyMap() else mapOf("pid" to postId)
         val snapshot = sessions.snapshot()
         val key = "posts:$topicId:${authorId.orEmpty()}"
         val formats = xmlFormats.toMutableList()

@@ -44,7 +44,6 @@ import dev.nagi.app.ui.components.FlatCard
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
-import dev.nagi.app.ui.topic.formatTimeText
 import dev.nagi.sdk.ContentAlignment
 import dev.nagi.sdk.ContentBlock
 import dev.nagi.sdk.MediaKind
@@ -55,15 +54,14 @@ fun ContentBlocks(
     preferences: ReadingPreferences,
     onImage: (String) -> Unit,
 ) {
-    ContentBlocks(blocks, preferences, onImage, quoteDepth = 0)
+    RenderContentBlocks(blocks, preferences, onImage)
 }
 
 @Composable
-private fun ContentBlocks(
+private fun RenderContentBlocks(
     blocks: List<ContentBlock>,
     preferences: ReadingPreferences,
     onImage: (String) -> Unit,
-    quoteDepth: Int,
     textAlign: TextAlign = TextAlign.Start,
     isHeading: Boolean = false,
 ) {
@@ -86,16 +84,16 @@ private fun ContentBlocks(
                 is ContentBlock.Text -> PostParagraph(block, preferences, textAlign, isHeading)
 
                 is ContentBlock.Heading -> Column(Modifier.fillMaxWidth().semantics { heading() }) {
-                    ContentBlocks(block.children, preferences, onImage, quoteDepth, textAlign, isHeading = true)
+                    RenderContentBlocks(block.children, preferences, onImage, textAlign, isHeading = true)
                     HorizontalDivider(Modifier.padding(top = Space.xs), color = colors.cardBorder)
                 }
 
                 is ContentBlock.Divider -> Column(Modifier.fillMaxWidth()) {
-                    ContentBlocks(block.children, preferences, onImage, quoteDepth, textAlign, isHeading = true)
+                    RenderContentBlocks(block.children, preferences, onImage, textAlign, isHeading = true)
                     HorizontalDivider(Modifier.padding(top = Space.xs), color = colors.cardBorder)
                 }
 
-                is ContentBlock.Aligned -> ContentBlocks(block.children, preferences, onImage, quoteDepth,
+                is ContentBlock.Aligned -> RenderContentBlocks(block.children, preferences, onImage,
                     when (block.alignment) {
                         ContentAlignment.START -> TextAlign.Start
                         ContentAlignment.CENTER -> TextAlign.Center
@@ -108,7 +106,7 @@ private fun ContentBlocks(
                             Text(if (block.ordered) "${index + 1}. " else "• ", color = colors.textPrimary,
                                 style = typography.postBody.copy(fontSize = preferences.fontSize.sp))
                             Box(Modifier.weight(1f)) {
-                                ContentBlocks(item, preferences, onImage, quoteDepth, textAlign, isHeading)
+                                RenderContentBlocks(item, preferences, onImage, textAlign, isHeading)
                             }
                         }
                     }
@@ -177,7 +175,7 @@ private fun ContentBlocks(
                             Row {
                                 cells.forEach { cell ->
                                     Box(Modifier.width(160.dp).border(0.5.dp, colors.cardBorder).padding(Space.sm)) {
-                                        ContentBlocks(cell, preferences, onImage, quoteDepth, textAlign, isHeading)
+                                        RenderContentBlocks(cell, preferences, onImage, textAlign, isHeading)
                                     }
                                 }
                             }
@@ -185,51 +183,7 @@ private fun ContentBlocks(
                     }
                 }
 
-                is ContentBlock.Quote -> {
-                    val content: @Composable () -> Unit = {
-                        Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
-                            block.author?.let { author ->
-                                Text(
-                                    text = "回复 $author",
-                                    style = typography.capsuleLabel,
-                                    color = colors.goldText,
-                                )
-                            }
-                            block.date?.let { date ->
-                                Text(
-                                    text = formatTimeText(date),
-                                    style = typography.metadata,
-                                    color = colors.textSecondary,
-                                )
-                            }
-                            ContentBlocks(block.children, preferences, onImage, quoteDepth + 1, textAlign, isHeading)
-                        }
-                    }
-                    if (quoteDepth < 2) {
-                        FlatCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = blockShape,
-                            containerColor = colors.insetContainer,
-                            borderColor = colors.cardBorder,
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(Space.md),
-                            ) {
-                                content()
-                            }
-                        }
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = Space.sm),
-                        ) {
-                            content()
-                        }
-                    }
-                }
+                is ContentBlock.Quote -> ReplyReferenceCard(block, preferences, onImage)
 
                 is ContentBlock.Collapse -> {
                     var open by rememberSaveable { mutableStateOf(false) }
@@ -268,7 +222,7 @@ private fun ContentBlocks(
                             if (open) {
                                 HorizontalDivider(thickness = 1.dp, color = colors.cardBorder)
                                 Box(Modifier.padding(Space.md)) {
-                                    ContentBlocks(block.children, preferences, onImage, quoteDepth, textAlign, isHeading)
+                                    RenderContentBlocks(block.children, preferences, onImage, textAlign, isHeading)
                                 }
                             }
                         }

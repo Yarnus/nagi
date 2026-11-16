@@ -16,6 +16,11 @@ object ContentParser {
         """^\s*(?:\[b\]\s*)?(?:(?:Reply\s+to\s+)?\[pid=(?:\d+,\d+,\d+|\d+,tid=\d+(?:,reply=\d+)?)\](?:Reply)?\[/pid\]\s*)?(?:\[b\]\s*)?Post\s+by\s+\[uid=-?\d+\]([^\[\]\r\n]+)(?:\[/uid\]|\[/b\])\s*(?:\(([^)\r\n]+)\))?\s*(?:\[/b\])?\s*""",
         RegexOption.IGNORE_CASE,
     )
+    private val replyHeader = Regex(
+        """^\s*\[b\]\s*Reply\s+to\s+\[pid=([^\]]+)\](?:Reply)?\[/pid\][\s\S]*?\[/b\]""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val postReference = Regex("""\[pid=([^\]]+)\]""", RegexOption.IGNORE_CASE)
     private val htmlCode = Regex("""<pre\b[^>]*>.*?</pre\s*>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
     private val smileTag = Regex("""\[s:([^\]]+)\]""", RegexOption.IGNORE_CASE)
     private val openingTag = Regex("""\[(img|noimg|album|quote|code|collapse|table|h|align|list|flash|attach|dice)(?:=([^\]]*))?\]""", RegexOption.IGNORE_CASE)
@@ -31,9 +36,17 @@ object ContentParser {
     private class Parser(val base: String, val context: ContentContext, val htmlEncodedCode: Boolean) {
         private var diceSeed: Long? = null
 
-        fun parse(raw: String, depth: Int = 0): List<ContentBlock> {
-            if (depth > 12) return listOf(ContentBlock.Text(raw))
+        fun parse(input: String, depth: Int = 0): List<ContentBlock> {
+            if (depth > 12) return listOf(ContentBlock.Text(input))
             val blocks = mutableListOf<ContentBlock>()
+            var raw = input
+            while (true) {
+                val reply = replyHeader.find(raw) ?: break
+                val header = quote(reply.value, depth + 1)
+                if (header.reference == null) break
+                blocks += header.copy(children = emptyList())
+                raw = raw.substring(reply.range.last + 1)
+            }
             val codeRanges = htmlCode.findAll(raw).map { it.range }.toList()
             var offset = 0
             while (offset < raw.length) {
@@ -96,11 +109,23 @@ object ContentParser {
 
         private fun quote(body: String, depth: Int): ContentBlock.Quote {
             val header = quoteHeader.find(body)
+            val reply = if (header == null) replyHeader.find(body) else null
+            val headerEnd = header?.range?.last ?: reply?.range?.last
             return ContentBlock.Quote(
-                children = parse(if (header == null) body else body.substring(header.range.last + 1), depth),
+                children = parse(if (headerEnd == null) body else body.substring(headerEnd + 1), depth),
                 author = header?.groupValues?.get(1)?.let(::plain)?.takeIf(String::isNotBlank),
                 date = header?.groupValues?.get(2)?.let(::plain)?.takeIf(String::isNotBlank),
+                reference = reference(header?.value ?: replyHeader.find(body)?.value.orEmpty()),
             )
+        }
+
+        private fun reference(header: String): PostReference? {
+            val parts = postReference.find(header)?.groupValues?.get(1)?.split(',') ?: return null
+            val pid = parts.firstOrNull()?.takeIf { it == "0" || it.matches(positiveId) } ?: return null
+            val tid = (if (parts.size > 1) parts[1].removePrefix("tid=") else context.topicId)
+                ?.takeIf { it.matches(positiveId) } ?: return null
+            val page = parts.getOrNull(2)?.takeUnless { it.startsWith("reply=") }?.toIntOrNull()?.takeIf { it > 0 } ?: 1
+            return PostReference(tid, pid, page)
         }
 
         private fun table(body: String, depth: Int): ContentBlock.Table = ContentBlock.Table(

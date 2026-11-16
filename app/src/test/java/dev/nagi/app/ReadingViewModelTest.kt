@@ -540,6 +540,7 @@ class FakeClient : NgaClient {
         searchScopes += forumId to collectionId
         return getTopics(forumId ?: "0", page, collectionId, TopicSort.LAST_ACTIVE)
     }
+    override suspend fun getPostPage(reference: PostReference): PostPage = error("Unused reference")
     override suspend fun findUser(username: String) = NgaUser("7", username, "", 1)
     override suspend fun getUser(userId: String) = NgaUser(userId, "User", "", 1)
     override suspend fun getUserTopics(userId: String, page: Int) = TopicPage(emptyList(), page, 0, false)

@@ -164,6 +164,8 @@ class FixtureNgaClient(
         return TopicPage(pageItems, page = page, total = 35, hasMore = page < 2)
     }
 
+    override suspend fun getPostPage(reference: dev.nagi.sdk.PostReference): PostPage = error("Unused reference")
+
     override suspend fun getPosts(topicId: String, page: Int, authorId: String?): PostPage {
         val selected = topics.firstOrNull { it.id == topicId } ?: topics[1]
         return PostPage(

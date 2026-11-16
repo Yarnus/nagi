@@ -56,6 +56,8 @@ data class TextSpan(
     val scale: Float? = null,
 )
 
+data class PostReference(val topicId: String, val postId: String, val page: Int = 1)
+
 data class ContentContext(
     val authorId: String? = null, val topicId: String? = null,
     val postId: String? = null, val postDate: String? = null,
@@ -72,7 +74,10 @@ sealed interface ContentBlock {
         val smiles: List<InlineSmile> = emptyList(),
     ) : ContentBlock
     data class Image(val url: String) : ContentBlock
-    data class Quote(val children: List<ContentBlock>, val author: String? = null, val date: String? = null) : ContentBlock
+    data class Quote(
+        val children: List<ContentBlock>, val author: String? = null, val date: String? = null,
+        val reference: PostReference? = null,
+    ) : ContentBlock
     data class Code(val value: String) : ContentBlock
     data class Table(val rows: List<List<List<ContentBlock>>>) : ContentBlock
     data class Heading(val children: List<ContentBlock>) : ContentBlock
