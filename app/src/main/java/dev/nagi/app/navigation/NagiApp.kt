@@ -13,6 +13,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.nagi.app.viewmodel.NotificationsViewModel
 import dev.nagi.app.viewmodel.NotificationsState
+import dev.nagi.app.ui.components.LocalOpenLogin
 import dev.nagi.app.ui.components.LocalOpenUser
 import dev.nagi.app.ui.components.LocalNotifications
 import dev.nagi.app.ui.components.LocalUserTags
@@ -143,9 +144,13 @@ fun NagiApp(
                         shadowElevation = 0.dp,
                         tonalElevation = 0.dp,
                     ) {
-                        CompositionLocalProvider(LocalUriHandler provides topicLinks, LocalOpenUser provides { uid ->
-                            if (uid.matches(Regex("[1-9][0-9]*"))) select("user/${Uri.encode(uid)}/topics")
-                        }) {
+                        CompositionLocalProvider(
+                            LocalUriHandler provides topicLinks,
+                            LocalOpenUser provides { uid ->
+                                if (uid.matches(Regex("[1-9][0-9]*"))) select("user/${Uri.encode(uid)}/topics")
+                            },
+                            LocalOpenLogin provides { select("login") },
+                        ) {
                             NavHost(nav, startDestination = "forums", modifier = Modifier.safeDrawingPadding().fillMaxSize()) {
                                 composable("forums") {
                                     ForumScreen(library, select, navigateToForum)
@@ -238,7 +243,7 @@ fun NagiApp(
                                             else select("compose-message/${Uri.encode(name)}")
                                         })
                                 }
-                                composable("login") { LoginScreen(back = { nav.popBackStack() }) }
+                                composable("login") { entry -> LoginScreen(back = { returnFromAccountPage(entry) }) }
                                 composable("notifications") { entry ->
                                     NotificationsScreen(notifications, { returnFromAccountPage(entry) }, notificationsVm::refresh,
                                         { select("login") }, { item ->

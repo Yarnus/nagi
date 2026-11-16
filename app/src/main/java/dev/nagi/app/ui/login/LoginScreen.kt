@@ -2,13 +2,11 @@ package dev.nagi.app.ui.login
 
 import android.annotation.SuppressLint
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,7 +24,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,19 +54,13 @@ fun LoginScreen(back: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
     val state by vm.state.collectAsStateWithLifecycle()
-    val window = LocalActivity.current?.window
-    DisposableEffect(window) {
-        val wasSecure = (window?.attributes?.flags ?: 0) and WindowManager.LayoutParams.FLAG_SECURE != 0
-        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        onDispose { if (!wasSecure) window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
-    }
     var currentUrl by remember { mutableStateOf(LOGIN_URL) }
     var loading by remember { mutableStateOf(true) }
     var webError by remember { mutableStateOf(false) }
     var webView by remember { mutableStateOf<WebView?>(null) }
 
     Column(Modifier.fillMaxSize().imePadding()) {
-        NagiHeader("登录 NGA", "仅官方 HTTPS 域允许捕获凭证", back = back) {
+        NagiHeader("登录 NGA", "请先在nga内嵌网页完成登陆", back = back) {
             CapsuleButton(
                 text = "刷新",
                 onClick = {
@@ -137,8 +128,10 @@ fun LoginScreen(back: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
                     onRelease = { view ->
                         webView = null
                         view.stopLoading()
-                        view.clearCache(true)
+                        view.onPause()
                         view.clearHistory()
+                        view.removeAllViews()
+                        (view.parent as? ViewGroup)?.removeView(view)
                         view.destroy()
                     },
                 )
@@ -183,7 +176,7 @@ fun LoginScreen(back: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
                     ),
                 ) {
                     Text(
-                        text = if (state.checking) "正在保存安全凭证…" else "完成登录",
+                        text = if (state.checking) "正在保存安全凭证…" else "我已完成网页登录，保存登录状态",
                         style = typography.capsuleLabel,
                     )
                 }

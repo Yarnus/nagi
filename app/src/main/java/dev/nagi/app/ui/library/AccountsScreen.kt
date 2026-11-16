@@ -110,7 +110,7 @@ fun AccountsScreen(
                         text = if (account.userId == null) "登录 NGA" else "添加登录",
                         onClick = login,
                         enabled = !account.busy,
-                        style = CapsuleStyle.SolidGold,
+                        style = CapsuleStyle.Neutral,
                     )
                     if (account.userId != null) {
                         CapsuleButton(

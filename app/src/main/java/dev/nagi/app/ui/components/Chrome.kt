@@ -233,6 +233,10 @@ fun InlineStatusBanner(
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
+    val identity = LocalAccountIdentity.current
+    val openLogin = LocalOpenLogin.current
+    val needsLogin = identity.userId == null && openLogin != null && message.startsWith("请先登录 NGA")
+    val displayMessage = if (needsLogin) "请先登录 NGA" else message
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -251,18 +255,24 @@ fun InlineStatusBanner(
             horizontalArrangement = Arrangement.spacedBy(Space.sm),
         ) {
             Text(
-                text = message,
+                text = displayMessage,
                 modifier = Modifier
                     .weight(1f)
                     .padding(vertical = Space.xs),
                 style = typography.body,
                 color = colors.destructive,
             )
-            if (retry != null) {
+            if (needsLogin) {
+                CapsuleButton(
+                    text = "登录",
+                    onClick = openLogin!!,
+                    style = CapsuleStyle.Neutral,
+                )
+            } else if (retry != null) {
                 CapsuleButton(
                     text = "重试",
                     onClick = retry,
-                    style = CapsuleStyle.Destructive,
+                    style = CapsuleStyle.Neutral,
                 )
             }
         }
