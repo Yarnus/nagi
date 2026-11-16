@@ -112,7 +112,7 @@ fun NagiApp(
                 val favoriteForumKeys = remember(forumFavorites) { forumFavorites.map { it.key }.toSet() }
                 val nav = rememberNavController()
                 val expanded = width == WindowWidthSizeClass.Expanded
-                val returnFromAccountPage: (androidx.navigation.NavBackStackEntry) -> Unit = { source ->
+                val popBackFrom: (androidx.navigation.NavBackStackEntry) -> Unit = { source ->
                     if (nav.currentBackStackEntry === source && nav.previousBackStackEntry != null) {
                         nav.popBackStack()
                     }
@@ -169,7 +169,7 @@ fun NagiApp(
                                         title = backStack.arguments!!.getString("name").orEmpty(),
                                         expanded = expanded,
                                         preferences = preferences,
-                                        back = { nav.popBackStack() },
+                                        back = { popBackFrom(backStack) },
                                         onRead = openTopic,
                                         onSearch = {
                                             val args = backStack.arguments!!
@@ -196,56 +196,56 @@ fun NagiApp(
                                         navArgument("collectionId") { type = NavType.StringType; nullable = true; defaultValue = null },
                                         navArgument("forumName") { type = NavType.StringType; nullable = true; defaultValue = null },
                                     ),
-                                ) {
+                                ) { entry ->
                                     SearchScreen(
                                         library = library,
-                                        onCancel = { nav.popBackStack() },
+                                        onCancel = { popBackFrom(entry) },
                                         onForum = navigateToForum,
                                         onRead = openTopic,
                                         onUserContent = { uid, kind -> select("user/${Uri.encode(uid)}/$kind") },
                                     )
                                 }
-                                composable("favorites") {
+                                composable("favorites") { entry ->
                                     FavoritesScreen(
                                         vm = library,
-                                        back = { nav.popBackStack() },
+                                        back = { popBackFrom(entry) },
                                         onSelect = select,
                                         onForum = navigateToForum,
                                         onRead = openTopic,
                                     )
                                 }
-                                composable("history") {
-                                    HistoryScreen(library, back = { nav.popBackStack() }, read = openTopic)
+                                composable("history") { entry ->
+                                    HistoryScreen(library, back = { popBackFrom(entry) }, read = openTopic)
                                 }
-                                composable("settings") {
-                                    SettingsScreen(library, preferences, back = { nav.popBackStack() }, onSelect = select)
+                                composable("settings") { entry ->
+                                    SettingsScreen(library, preferences, back = { popBackFrom(entry) }, onSelect = select)
                                 }
-                                composable("accounts") {
-                                    AccountsScreen(account, accountVm, back = { nav.popBackStack() }, login = { select("login") })
+                                composable("accounts") { entry ->
+                                    AccountsScreen(account, accountVm, back = { popBackFrom(entry) }, login = { select("login") })
                                 }
-                                composable("about") { AboutScreen(back = { nav.popBackStack() }) }
-                                composable("profile") {
+                                composable("about") { entry -> AboutScreen(back = { popBackFrom(entry) }) }
+                                composable("profile") { entry ->
                                     if (account.userId == null) {
                                         Notice("请先登录 NGA") { select("login") }
                                     } else {
                                         OwnProfileScreen(
                                             identity = identity,
-                                            back = { nav.popBackStack() },
+                                            back = { popBackFrom(entry) },
                                             retry = identityVm::retry,
                                             content = { kind -> select("user/${Uri.encode(account.userId)}/$kind") },
                                         )
                                     }
                                 }
-                                composable("user/{uid}/{kind}") {
-                                    UserContentScreen(back = { nav.popBackStack() }, read = openTopic,
+                                composable("user/{uid}/{kind}") { entry ->
+                                    UserContentScreen(back = { popBackFrom(entry) }, read = openTopic,
                                         sendMessage = { name ->
                                             if (account.userId == null) select("login")
                                             else select("compose-message/${Uri.encode(name)}")
                                         })
                                 }
-                                composable("login") { entry -> LoginScreen(back = { returnFromAccountPage(entry) }) }
+                                composable("login") { entry -> LoginScreen(back = { popBackFrom(entry) }) }
                                 composable("notifications") { entry ->
-                                    NotificationsScreen(notifications, { returnFromAccountPage(entry) }, notificationsVm::refresh,
+                                    NotificationsScreen(notifications, { popBackFrom(entry) }, notificationsVm::refresh,
                                         { select("login") }, { item ->
                                             notificationsVm.markRead(item)
                                             if (item.topicId.matches(Regex("[1-9][0-9]*"))) openTopic(item.topicId)
@@ -253,13 +253,13 @@ fun NagiApp(
                                         }, markAllRead = notificationsVm::markAllRead)
                                 }
                                 composable("messages") { entry ->
-                                    MessagesScreen(null, preferences, { returnFromAccountPage(entry) }, { nav.navigate("message/${Uri.encode(it)}") })
+                                    MessagesScreen(null, preferences, { popBackFrom(entry) }, { nav.navigate("message/${Uri.encode(it)}") })
                                 }
                                 composable("compose-message/{recipient}") { entry ->
-                                    NewMessageScreen(checkNotNull(entry.arguments!!.getString("recipient")), preferences, { nav.popBackStack() })
+                                    NewMessageScreen(checkNotNull(entry.arguments!!.getString("recipient")), preferences, { popBackFrom(entry) })
                                 }
                                 composable("message/{id}") { entry ->
-                                    MessagesScreen(entry.arguments!!.getString("id"), preferences, { returnFromAccountPage(entry) }, {})
+                                    MessagesScreen(entry.arguments!!.getString("id"), preferences, { popBackFrom(entry) }, {})
                                 }
                                 composable("read/{id}") { backStack ->
                                     val topicId = backStack.arguments!!.getString("id")!!
@@ -268,7 +268,7 @@ fun NagiApp(
                                         dev.nagi.sdk.PostReference(topicId, it[0], it[1].toInt())
                                     }
                                     ReaderScreen(
-                                        topicId, preferences, back = { nav.popBackStack() },
+                                        topicId, preferences, back = { popBackFrom(backStack) },
                                         initialReference = reference,
                                         referenceConsumed = { backStack.savedStateHandle["postReference"] = null },
                                         onOpenReference = { target ->
