@@ -4,11 +4,13 @@ import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -43,6 +45,7 @@ import dev.nagi.app.ui.components.CardGroupPosition
 import dev.nagi.app.ui.components.ChromeIconButton
 import dev.nagi.app.ui.components.FlatCard
 import dev.nagi.app.ui.components.GoldTagBadge
+import dev.nagi.app.ui.components.LocalAppUpdate
 import dev.nagi.app.ui.components.NagiHeader
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.Notice
@@ -196,6 +199,7 @@ fun SettingsScreen(
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
+    val appUpdate = LocalAppUpdate.current
     val themeOptions = listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色")
     val selectedThemeIndex = themeOptions.indexOfFirst { it.first == preferences.theme }.coerceAtLeast(0)
 
@@ -298,7 +302,19 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text("关于与反馈", style = typography.topicTitle, color = colors.textPrimary)
+                        FlowRow(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = Space.sm),
+                            horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                            verticalArrangement = Arrangement.spacedBy(Space.xs),
+                            itemVerticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("关于与反馈", style = typography.topicTitle, color = colors.textPrimary)
+                            if (appUpdate.hasUpdate) {
+                                GoldTagBadge("新版本")
+                            }
+                        }
                         Icon(NagiIcons.ChevronRight, null, Modifier.size(18.dp), tint = colors.textSecondary)
                     }
                 }
@@ -307,18 +323,36 @@ fun SettingsScreen(
     }
 }
 
+private enum class ExternalLinkTarget(val copyButtonText: String, val clipLabel: String) {
+    Feedback("复制反馈链接", "GitHub 反馈"),
+    Release("复制发布页链接", "GitHub Releases"),
+}
+
 @Composable
 fun AboutScreen(back: () -> Unit) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
+    val appUpdate = LocalAppUpdate.current
     var licenses by rememberSaveable { mutableStateOf(false) }
-    var feedbackUnavailable by rememberSaveable { mutableStateOf(false) }
+    var unavailableUri by rememberSaveable { mutableStateOf<String?>(null) }
+    var unavailableTarget by rememberSaveable { mutableStateOf<ExternalLinkTarget?>(null) }
     val context = LocalContext.current
     val version = remember(context) {
         context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
     }
     val feedback = remember(version) {
         feedbackUri(version, Build.VERSION.RELEASE, "${Build.MANUFACTURER} ${Build.MODEL}")
+    }
+    val latestRelease = remember { latestReleaseUri() }
+    fun openExternal(uri: Uri, target: ExternalLinkTarget) {
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+            unavailableUri = null
+            unavailableTarget = null
+        } catch (_: ActivityNotFoundException) {
+            unavailableUri = uri.toString()
+            unavailableTarget = target
+        }
     }
     Column(Modifier.fillMaxSize()) {
         NagiHeader("关于与反馈", back = back)
@@ -340,7 +374,16 @@ fun AboutScreen(back: () -> Unit) {
                     modifier = Modifier.padding(Space.lg),
                     verticalArrangement = Arrangement.spacedBy(Space.xs),
                 ) {
-                    Text("Nagi $version", style = typography.sectionTitle, color = colors.textPrimary)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                        verticalArrangement = Arrangement.spacedBy(Space.xs),
+                        itemVerticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Nagi $version", style = typography.sectionTitle, color = colors.textPrimary)
+                        if (appUpdate.hasUpdate) {
+                            GoldTagBadge("新版本")
+                        }
+                    }
                     Text(
                         text = "在 GitHub 提交问题或功能建议，需要登录 GitHub。将附带 App 版本、Android 版本和设备型号，请勿包含账号凭据或私信内容。",
                         style = typography.body,
@@ -353,20 +396,39 @@ fun AboutScreen(back: () -> Unit) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                try {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, feedback))
-                                    feedbackUnavailable = false
-                                } catch (_: ActivityNotFoundException) {
-                                    feedbackUnavailable = true
-                                }
-                            }
+                            .clickable { openExternal(feedback, ExternalLinkTarget.Feedback) }
                             .heightIn(min = 52.dp)
                             .padding(horizontal = Space.lg, vertical = Space.md),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Text("前往 GitHub 反馈", style = typography.topicTitle, color = colors.textPrimary)
+                        Icon(NagiIcons.ChevronRight, null, Modifier.size(18.dp), tint = colors.textSecondary)
+                    }
+                }
+                SectionCardItem(CardGroupPosition.Middle) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { openExternal(latestRelease, ExternalLinkTarget.Release) }
+                            .heightIn(min = 52.dp)
+                            .padding(horizontal = Space.lg, vertical = Space.md),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        FlowRow(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = Space.sm),
+                            horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                            verticalArrangement = Arrangement.spacedBy(Space.xs),
+                            itemVerticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("查看最新版本", style = typography.topicTitle, color = colors.textPrimary)
+                            if (appUpdate.hasUpdate) {
+                                GoldTagBadge(appUpdate.latestTag ?: "新版本")
+                            }
+                        }
                         Icon(NagiIcons.ChevronRight, null, Modifier.size(18.dp), tint = colors.textSecondary)
                     }
                 }
@@ -387,17 +449,26 @@ fun AboutScreen(back: () -> Unit) {
             }
         }
     }
-    if (feedbackUnavailable) {
-        Dialog(onDismissRequest = { feedbackUnavailable = false }) {
+    val blockedUri = unavailableUri
+    val blockedTarget = unavailableTarget
+    if (blockedUri != null && blockedTarget != null) {
+        Dialog(onDismissRequest = {
+            unavailableUri = null
+            unavailableTarget = null
+        }) {
             FlatCard(modifier = Modifier.fillMaxWidth(), shape = NagiThemeTokens.shapes.cardGroup) {
                 Column(Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.md)) {
                     Text("无法打开 GitHub，请安装浏览器或复制链接后打开。", style = typography.body, color = colors.textPrimary)
-                    CapsuleButton("复制反馈链接", onClick = {
+                    CapsuleButton(blockedTarget.copyButtonText, onClick = {
                         context.getSystemService(ClipboardManager::class.java)
-                            .setPrimaryClip(ClipData.newPlainText("GitHub 反馈", feedback.toString()))
-                        feedbackUnavailable = false
+                            .setPrimaryClip(ClipData.newPlainText(blockedTarget.clipLabel, blockedUri))
+                        unavailableUri = null
+                        unavailableTarget = null
                     }, style = CapsuleStyle.Neutral)
-                    CapsuleButton("关闭", onClick = { feedbackUnavailable = false }, style = CapsuleStyle.Neutral)
+                    CapsuleButton("关闭", onClick = {
+                        unavailableUri = null
+                        unavailableTarget = null
+                    }, style = CapsuleStyle.Neutral)
                 }
             }
         }

@@ -1,0 +1,219 @@
+package dev.nagi.app.data
+
+import android.content.Context
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.nagi.app.BuildConfig
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URI
+import java.net.URL
+import javax.inject.Inject
+import javax.inject.Singleton
+
+internal const val LATEST_RELEASE_URL = "https://github.com/Yarnus/nagi/releases/latest"
+internal const val UPDATE_CHECK_INTERVAL_MILLIS = 24L * 60L * 60L * 1000L
+
+private val SEMVER_REGEX = Regex("""^\s*[vV]?(\d+)\.(\d+)\.(\d+)\s*$""")
+private const val RELEASE_TAG_PREFIX = "/Yarnus/nagi/releases/tag/"
+
+internal data class SemVer(val major: Int, val minor: Int, val patch: Int) : Comparable<SemVer> {
+    override fun compareTo(other: SemVer): Int =
+        compareValuesBy(this, other, SemVer::major, SemVer::minor, SemVer::patch)
+}
+
+internal fun parseSemVer(raw: String): SemVer? {
+    val match = SEMVER_REGEX.matchEntire(raw) ?: return null
+    val major = match.groupValues[1].toIntOrNull() ?: return null
+    val minor = match.groupValues[2].toIntOrNull() ?: return null
+    val patch = match.groupValues[3].toIntOrNull() ?: return null
+    return SemVer(major, minor, patch)
+}
+
+internal fun isNewerRelease(currentVersion: String, latestTag: String?): Boolean {
+    val current = parseSemVer(currentVersion) ?: return false
+    val remote = latestTag?.let(::parseSemVer) ?: return false
+    return remote > current
+}
+
+internal fun parseReleaseTagFromLocation(location: String?): String? {
+    val raw = location?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val uri = runCatching { URI(raw) }.getOrNull() ?: return null
+    if (uri.userInfo != null) return null
+    if (uri.scheme != null) {
+        if (!uri.scheme.equals("https", ignoreCase = true)) return null
+        if (!uri.host.equals("github.com", ignoreCase = true)) return null
+        if (uri.port != -1 && uri.port != 443) return null
+    } else if (uri.authority != null) {
+        return null
+    }
+    val path = uri.path ?: return null
+    if (!path.startsWith(RELEASE_TAG_PREFIX, ignoreCase = true)) return null
+    val tagSegment = path.substring(RELEASE_TAG_PREFIX.length).trimEnd('/')
+    if (tagSegment.isEmpty() || '/' in tagSegment) return null
+    val version = parseSemVer(tagSegment) ?: return null
+    return "v${version.major}.${version.minor}.${version.patch}"
+}
+
+data class AppUpdateState(
+    val latestTag: String? = null,
+    val hasUpdate: Boolean = false,
+)
+
+fun interface ReleaseChecker {
+    /** Fetches the latest stable release tag (e.g. "v0.2.1"), or null on failure. */
+    suspend fun fetchLatestReleaseTag(): String?
+}
+
+data class UpdateCheckCache(
+    val lastCheckedAtMillis: Long = 0L,
+    val latestTag: String? = null,
+)
+
+interface UpdateCacheStore {
+    suspend fun read(): UpdateCheckCache
+    suspend fun write(cache: UpdateCheckCache)
+}
+
+class InMemoryUpdateCacheStore(
+    initial: UpdateCheckCache = UpdateCheckCache(),
+) : UpdateCacheStore {
+    private var current = initial
+    override suspend fun read(): UpdateCheckCache = current
+    override suspend fun write(cache: UpdateCheckCache) {
+        current = cache
+    }
+}
+
+private val Context.updateCheckDataStore by preferencesDataStore("app_update")
+
+@Singleton
+class DataStoreUpdateCacheStore @Inject constructor(
+    @param:ApplicationContext private val context: Context,
+) : UpdateCacheStore {
+    private val lastCheckedKey = longPreferencesKey("last_checked_at")
+    private val latestTagKey = stringPreferencesKey("latest_tag")
+
+    override suspend fun read(): UpdateCheckCache {
+        val prefs = context.updateCheckDataStore.data.first()
+        return UpdateCheckCache(
+            lastCheckedAtMillis = prefs[lastCheckedKey] ?: 0L,
+            latestTag = prefs[latestTagKey],
+        )
+    }
+
+    override suspend fun write(cache: UpdateCheckCache) {
+        context.updateCheckDataStore.edit { prefs ->
+            prefs[lastCheckedKey] = cache.lastCheckedAtMillis
+            if (cache.latestTag != null) prefs[latestTagKey] = cache.latestTag
+            else prefs.remove(latestTagKey)
+        }
+    }
+}
+
+/**
+ * Checks the latest GitHub release silently via an unauthenticated HTTPS HEAD redirect
+ * without sending any NGA session or device metadata.
+ */
+class GitHubReleaseChecker(
+    private val url: String = LATEST_RELEASE_URL,
+    private val userAgent: String = "Nagi/${BuildConfig.VERSION_NAME}",
+    private val timeoutMillis: Int = 5_000,
+) : ReleaseChecker {
+    override suspend fun fetchLatestReleaseTag(): String? = withContext(Dispatchers.IO) {
+        var connection: HttpURLConnection? = null
+        try {
+            val target = URL(url)
+            require(target.protocol.equals("https", ignoreCase = true)) { "HTTPS required" }
+            connection = (target.openConnection() as HttpURLConnection).apply {
+                requestMethod = "HEAD"
+                instanceFollowRedirects = false
+                connectTimeout = timeoutMillis
+                readTimeout = timeoutMillis
+                useCaches = false
+                setRequestProperty("User-Agent", userAgent)
+            }
+            if (connection.responseCode in 300..399) {
+                parseReleaseTagFromLocation(connection.getHeaderField("Location"))
+            } else {
+                null
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            null
+        } finally {
+            connection?.disconnect()
+        }
+    }
+}
+
+@Singleton
+class ReleaseUpdateRepository(
+    private val checker: ReleaseChecker,
+    private val cacheStore: UpdateCacheStore,
+    private val currentVersion: () -> String = { BuildConfig.VERSION_NAME },
+    private val nowMillis: () -> Long = System::currentTimeMillis,
+) {
+    private val _state = MutableStateFlow(AppUpdateState())
+    val state: StateFlow<AppUpdateState> = _state.asStateFlow()
+    private val mutex = Mutex()
+    private var lastAttemptMillis: Long? = null
+
+    suspend fun checkIfNeeded() {
+        mutex.withLock {
+            val current = currentVersion()
+            val cache = try {
+                cacheStore.read()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                UpdateCheckCache()
+            }
+            val cachedHasUpdate = isNewerRelease(current, cache.latestTag)
+            _state.value = AppUpdateState(
+                latestTag = cache.latestTag.takeIf { cachedHasUpdate },
+                hasUpdate = cachedHasUpdate,
+            )
+
+            val now = nowMillis()
+            val checkedRecently = cache.lastCheckedAtMillis > 0L &&
+                now >= cache.lastCheckedAtMillis &&
+                now - cache.lastCheckedAtMillis < UPDATE_CHECK_INTERVAL_MILLIS
+            val attemptedRecently = lastAttemptMillis?.let {
+                now >= it && now - it < UPDATE_CHECK_INTERVAL_MILLIS
+            } == true
+            if (checkedRecently || attemptedRecently) return
+
+            lastAttemptMillis = now
+            val remoteTag = checker.fetchLatestReleaseTag() ?: return
+            val hasUpdate = isNewerRelease(current, remoteTag)
+            _state.value = AppUpdateState(
+                latestTag = remoteTag.takeIf { hasUpdate },
+                hasUpdate = hasUpdate,
+            )
+            try {
+                cacheStore.write(
+                    UpdateCheckCache(
+                        lastCheckedAtMillis = now,
+                        latestTag = remoteTag,
+                    ),
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+            }
+        }
+    }
+}

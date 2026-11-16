@@ -80,4 +80,27 @@ class AccountMenuTest {
         compose.onNodeWithText("设置").performScrollTo().performClick()
         compose.runOnIdle { assertEquals("settings", route) }
     }
+
+    @Config(qualifiers = "w320dp-h850dp")
+    @Test fun updateBadgeShownBesideAboutInNarrowLargeFontMenu() {
+        org.robolectric.RuntimeEnvironment.setFontScale(1.5f)
+        var route = ""
+        compose.setContent {
+            NagiTheme("light") {
+                CompositionLocalProvider(
+                    LocalAccountIdentity provides AccountIdentity(1, null),
+                    LocalAppUpdate provides dev.nagi.app.data.AppUpdateState(latestTag = "v0.2.1", hasUpdate = true),
+                ) {
+                    Surface(Modifier.fillMaxSize()) {
+                        Box { AccountMenuButton { route = it } }
+                    }
+                }
+            }
+        }
+        compose.onNodeWithContentDescription("头像菜单").performClick()
+        compose.onNodeWithText("关于与反馈").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("新版本").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("关于与反馈").performClick()
+        compose.runOnIdle { assertEquals("about", route) }
+    }
 }

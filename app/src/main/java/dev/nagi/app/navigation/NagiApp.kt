@@ -11,8 +11,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import dev.nagi.app.viewmodel.AppUpdateViewModel
 import dev.nagi.app.viewmodel.NotificationsViewModel
 import dev.nagi.app.viewmodel.NotificationsState
+import dev.nagi.app.ui.components.LocalAppUpdate
 import dev.nagi.app.ui.components.LocalOpenLogin
 import dev.nagi.app.ui.components.LocalOpenUser
 import dev.nagi.app.ui.components.LocalNotifications
@@ -81,10 +83,15 @@ fun NagiApp(
     val tags = loadedTags.takeIf { !account.busy && it.revision == account.revision && it.userId == account.userId }
         ?: UserTagsState(account.revision, account.userId)
     val tagAccess = UserTagAccess(tags) { userId, text, done -> tagsVm.save(tags, userId, text, done) }
+    val updateVm: AppUpdateViewModel = hiltViewModel()
+    val appUpdate by updateVm.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    DisposableEffect(lifecycle, notificationsVm) {
+    DisposableEffect(lifecycle, notificationsVm, updateVm) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_START) notificationsVm.setForeground(true)
+            if (event == Lifecycle.Event.ON_START) {
+                notificationsVm.setForeground(true)
+                updateVm.checkIfNeeded()
+            }
             if (event == Lifecycle.Event.ON_STOP) notificationsVm.setForeground(false)
         }
         lifecycle.addObserver(observer)
@@ -92,7 +99,7 @@ fun NagiApp(
         onDispose { lifecycle.removeObserver(observer); notificationsVm.setForeground(false) }
     }
     CompositionLocalProvider(LocalAccountIdentity provides identity, LocalNotifications provides notifications,
-        LocalUserTags provides tagAccess) {
+        LocalUserTags provides tagAccess, LocalAppUpdate provides appUpdate) {
         NagiTheme(preferences.theme) {
             val colors = NagiThemeTokens.colors
             if (!account.ready) {

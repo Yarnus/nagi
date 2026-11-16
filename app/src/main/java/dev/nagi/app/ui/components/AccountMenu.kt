@@ -2,8 +2,10 @@ package dev.nagi.app.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -35,6 +37,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import dev.nagi.app.data.AppUpdateState
 import dev.nagi.app.viewmodel.NotificationsState
 import coil.compose.SubcomposeAsyncImage
 import dev.nagi.app.ui.theme.NagiThemeTokens
@@ -43,6 +46,7 @@ import dev.nagi.app.viewmodel.AccountIdentity
 
 val LocalAccountIdentity = staticCompositionLocalOf { AccountIdentity() }
 val LocalNotifications = staticCompositionLocalOf { NotificationsState() }
+val LocalAppUpdate = staticCompositionLocalOf { AppUpdateState() }
 
 @Composable
 fun UnreadBadge(count: Int, modifier: Modifier = Modifier) {
@@ -114,6 +118,7 @@ fun AccountMenuButton(onSelect: (String) -> Unit) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
     val notifications = LocalNotifications.current
+    val appUpdate = LocalAppUpdate.current
     val unread = notifications.takeIf { it.revision == identity.revision && it.userId == identity.userId }?.unreadCount ?: 0
     var expanded by rememberSaveable(identity.revision) { mutableStateOf(false) }
     Box {
@@ -151,15 +156,30 @@ fun AccountMenuButton(onSelect: (String) -> Unit) {
             border = BorderStroke(1.dp, colors.cardBorder),
         ) {
             @Composable
-            fun entry(label: String, icon: ImageVector, route: String, supporting: String? = null) {
+            fun entry(
+                label: String,
+                icon: ImageVector,
+                route: String,
+                supporting: String? = null,
+                badge: String? = null,
+            ) {
                 DropdownMenuItem(
                     text = {
                         Column {
-                            Text(
-                                text = label,
-                                style = typography.body,
-                                color = colors.textPrimary,
-                            )
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                                verticalArrangement = Arrangement.spacedBy(Space.xs),
+                                itemVerticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = typography.body,
+                                    color = colors.textPrimary,
+                                )
+                                if (badge != null) {
+                                    GoldTagBadge(badge)
+                                }
+                            }
                             if (supporting != null) {
                                 Text(
                                     text = supporting,
@@ -220,7 +240,7 @@ fun AccountMenuButton(onSelect: (String) -> Unit) {
             entry("浏览历史", NagiIcons.History, "history")
             divider()
             entry("设置", NagiIcons.Tuning, "settings")
-            entry("关于与反馈", NagiIcons.Info, "about")
+            entry("关于与反馈", NagiIcons.Info, "about", badge = if (appUpdate.hasUpdate) "新版本" else null)
         }
     }
 }

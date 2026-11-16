@@ -21,4 +21,11 @@ object AppModule {
     @Provides @Singleton fun browser(): BrowserCookies = AndroidBrowserCookies()
     @Provides @Singleton fun client(sessions: SessionStore): NgaClient = createNgaClient(sessions = sessions)
     @Provides @Singleton fun databases(@ApplicationContext context: Context): ReadingDaoProvider = AccountDatabases(context)
+    @Provides @Singleton fun releaseChecker(): ReleaseChecker = GitHubReleaseChecker()
+    @Provides @Singleton fun updateCacheStore(@ApplicationContext context: Context): UpdateCacheStore =
+        DataStoreUpdateCacheStore(context)
+    @Provides @Singleton fun releaseUpdates(
+        checker: ReleaseChecker,
+        cacheStore: UpdateCacheStore,
+    ): ReleaseUpdateRepository = ReleaseUpdateRepository(checker, cacheStore)
 }

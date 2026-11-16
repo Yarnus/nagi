@@ -13,8 +13,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import dev.nagi.app.data.AppUpdateState
+import dev.nagi.app.ui.components.LocalAppUpdate
 import dev.nagi.app.ui.library.AboutScreen
 import dev.nagi.app.ui.library.feedbackUri
+import dev.nagi.app.ui.library.latestReleaseUri
 import dev.nagi.app.ui.theme.NagiTheme
 import org.junit.Assert.*
 import org.junit.Rule
@@ -31,7 +34,12 @@ import org.robolectric.annotation.GraphicsMode
 class FeedbackTest {
     @get:Rule val compose = createComposeRule()
 
-    private fun showAbout(theme: String = "light", fontScale: Float = 1f, start: (Intent) -> Unit) {
+    private fun showAbout(
+        theme: String = "light",
+        fontScale: Float = 1f,
+        appUpdate: AppUpdateState = AppUpdateState(),
+        start: (Intent) -> Unit,
+    ) {
         compose.setContent {
             val base = LocalContext.current
             val context = remember(base) {
@@ -42,6 +50,7 @@ class FeedbackTest {
             CompositionLocalProvider(
                 LocalContext provides context,
                 LocalDensity provides Density(LocalDensity.current.density, fontScale),
+                LocalAppUpdate provides appUpdate,
             ) {
                 NagiTheme(theme) { AboutScreen {} }
             }
@@ -121,5 +130,45 @@ class FeedbackTest {
         compose.onNodeWithText("前往 GitHub 反馈").performClick()
         compose.onNodeWithText("无法打开 GitHub", substring = true).assertDoesNotExist()
         compose.runOnIdle { assertEquals(2, attempts) }
+    }
+
+    @Test fun aboutOpensLatestReleasePageInExternalBrowser() {
+        var opened: Intent? = null
+        showAbout { opened = it }
+        compose.onNodeWithText("查看最新版本").performClick()
+        compose.runOnIdle {
+            val intent = requireNotNull(opened)
+            assertEquals(Intent.ACTION_VIEW, intent.action)
+            assertNull(intent.extras)
+            assertEquals(latestReleaseUri(), intent.data)
+        }
+    }
+
+    @Test fun missingBrowserForReleaseOffersCopyWithoutCrashing() {
+        showAbout { throw ActivityNotFoundException() }
+        compose.onNodeWithText("查看最新版本").performClick()
+        compose.onNodeWithText("无法打开 GitHub", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("复制发布页链接").performClick()
+        compose.onNodeWithText("无法打开 GitHub", substring = true).assertDoesNotExist()
+        compose.runOnIdle {
+            val clipboard = RuntimeEnvironment.getApplication().getSystemService(ClipboardManager::class.java)
+            val copied = clipboard.primaryClip!!.getItemAt(0).text.toString()
+            assertEquals(latestReleaseUri().toString(), copied)
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w320dp-h640dp")
+    fun narrowDarkLargeTextDisplaysUpdateBadgesAndReleaseEntry() {
+        var opened = false
+        showAbout(
+            theme = "dark",
+            fontScale = 2f,
+            appUpdate = AppUpdateState(latestTag = "v0.2.1", hasUpdate = true),
+        ) { opened = true }
+        compose.onNodeWithText("新版本").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("v0.2.1").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("查看最新版本").performScrollTo().assertIsDisplayed().performClick()
+        compose.runOnIdle { assertTrue(opened) }
     }
 }
