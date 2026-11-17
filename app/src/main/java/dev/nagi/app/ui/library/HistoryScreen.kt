@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
@@ -65,63 +64,44 @@ fun HistoryScreen(vm: LibraryViewModel, back: () -> Unit, read: (String) -> Unit
     }
 
     if (confirmingClear) {
-        AlertDialog(
+        dev.nagi.app.ui.components.NagiConfirmDialog(
             onDismissRequest = { confirmingClear = false },
-            shape = NagiThemeTokens.shapes.topicCard,
-            containerColor = colors.cardSurface,
-            tonalElevation = 0.dp,
-            title = { Text("清空浏览历史？", style = typography.sectionTitle, color = colors.textPrimary) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
-                    Text(
-                        text = "清空后将移除当前身份的全部浏览历史记录。",
-                        style = typography.body,
-                        color = colors.textSecondary,
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .clickable(role = Role.Checkbox) { clearPositions = !clearPositions },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(Space.xs),
-                    ) {
-                        Checkbox(
-                            checked = clearPositions,
-                            onCheckedChange = null,
-                            colors = CheckboxDefaults.colors(
-                                checkedColor = colors.goldSolidFill,
-                                checkmarkColor = colors.goldSolidText,
-                                uncheckedColor = colors.textSecondary,
-                            ),
-                        )
-                        Text(
-                            text = "同时清除未收藏帖子的阅读进度",
-                            style = typography.body,
-                            color = colors.textPrimary,
-                        )
-                    }
-                }
+            title = "清空浏览历史？",
+            message = "清空后将移除当前身份的全部浏览历史记录。",
+            confirmLabel = "清空",
+            onConfirm = {
+                confirmingClear = false
+                query = ""
+                vm.clearHistory(clearUnfavoritedPositions = clearPositions)
             },
-            confirmButton = {
-                CapsuleButton(
-                    text = "清空",
-                    onClick = {
-                        confirmingClear = false
-                        query = ""
-                        vm.clearHistory(clearUnfavoritedPositions = clearPositions)
-                    },
-                    style = CapsuleStyle.Destructive,
+            confirmStyle = CapsuleStyle.Destructive,
+            dismissLabel = "取消",
+            onDismiss = { confirmingClear = false },
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clickable(role = Role.Checkbox) { clearPositions = !clearPositions },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Space.xs),
+            ) {
+                Checkbox(
+                    checked = clearPositions,
+                    onCheckedChange = null,
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = colors.goldSolidFill,
+                        checkmarkColor = colors.goldSolidText,
+                        uncheckedColor = colors.textSecondary,
+                    ),
                 )
-            },
-            dismissButton = {
-                CapsuleButton(
-                    text = "取消",
-                    onClick = { confirmingClear = false },
-                    style = CapsuleStyle.Neutral,
+                Text(
+                    text = "同时清除未收藏帖子的阅读进度",
+                    style = typography.body,
+                    color = colors.textPrimary,
                 )
-            },
-        )
+            }
+        }
     }
 
     Column(Modifier.fillMaxSize()) {

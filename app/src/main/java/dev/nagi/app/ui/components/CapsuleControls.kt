@@ -149,6 +149,7 @@ fun CapsuleButton(
     enabled: Boolean = true,
     minTouchHeight: Dp = 48.dp,
     visualHeight: Dp = 36.dp,
+    fillWidth: Boolean = false,
     contentPadding: PaddingValues = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
     contentDescription: String? = null,
     stateDescription: String? = null,
@@ -185,6 +186,7 @@ fun CapsuleButton(
     ) {
         Row(
             modifier = Modifier
+                .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier)
                 .heightIn(min = visualHeight)
                 .clip(CircleShape)
                 .then(

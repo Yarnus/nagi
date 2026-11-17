@@ -12,7 +12,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -267,30 +266,18 @@ internal fun ReplyPopup(
     }
 
     if (discard) {
-        AlertDialog(
+        dev.nagi.app.ui.components.NagiConfirmDialog(
             onDismissRequest = { discard = false },
-            shape = NagiThemeTokens.shapes.topicCard,
-            containerColor = colors.cardSurface,
-            tonalElevation = 0.dp,
-            title = { Text("放弃这次回复？", style = typography.sectionTitle, color = colors.textPrimary) },
-            text = { Text("关闭后将清除本次输入。", style = typography.body, color = colors.textSecondary) },
-            confirmButton = {
-                CapsuleButton(
-                    text = "放弃回复",
-                    onClick = {
-                        discard = false
-                        close()
-                    },
-                    style = CapsuleStyle.Destructive,
-                )
+            title = "放弃这次回复？",
+            message = "关闭后将清除本次输入。",
+            confirmLabel = "放弃回复",
+            onConfirm = {
+                discard = false
+                close()
             },
-            dismissButton = {
-                CapsuleButton(
-                    text = "继续编辑",
-                    onClick = { discard = false },
-                    style = CapsuleStyle.Neutral,
-                )
-            },
+            confirmStyle = CapsuleStyle.Destructive,
+            dismissLabel = "继续编辑",
+            onDismiss = { discard = false },
         )
     }
 }

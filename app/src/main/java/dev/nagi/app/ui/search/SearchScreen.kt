@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -426,26 +425,13 @@ fun SearchScreen(
     }
 
     topicDetails?.let { topic ->
-        AlertDialog(
+        dev.nagi.app.ui.components.NagiConfirmDialog(
             onDismissRequest = { topicDetails = null },
-            shape = NagiThemeTokens.shapes.topicCard,
-            containerColor = colors.cardSurface,
-            tonalElevation = 0.dp,
-            title = { Text(topic.title, style = typography.sectionTitle, color = colors.textPrimary) },
-            text = {
-                Text(
-                    text = "${topic.author}\n${topic.replies} 条回复",
-                    style = typography.body,
-                    color = colors.textSecondary,
-                )
-            },
-            confirmButton = {
-                CapsuleButton(
-                    text = "关闭",
-                    onClick = { topicDetails = null },
-                    style = CapsuleStyle.Neutral,
-                )
-            },
+            title = topic.title,
+            message = "${topic.author}\n${topic.replies} 条回复",
+            confirmLabel = "关闭",
+            onConfirm = { topicDetails = null },
+            confirmStyle = CapsuleStyle.Neutral,
         )
     }
 }

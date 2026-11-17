@@ -166,8 +166,13 @@ class ReaderUiTest {
         org.junit.Assert.assertNull(MainActivity.extractDeepLink(mainIntent))
     }
 
-    @Test fun clipboardLinkDetectorTracksHandledLinksAndRendersPromptDialog() {
+    @Test fun clipboardLinkDetectorTracksHandledLinksAndRendersPromptBanner() {
         val state = dev.nagi.app.navigation.ClipboardLinkState()
+        org.junit.Assert.assertNull(state.inspectText(null, timestamp = 50L))
+        org.junit.Assert.assertFalse(state.shouldSkipByTimestamp(50L))
+        org.junit.Assert.assertNull(state.inspectText("   ", timestamp = 60L))
+        org.junit.Assert.assertFalse(state.shouldSkipByTimestamp(60L))
+
         val first = state.inspectText("分享帖子 https://bbs.nga.cn/read.php?tid=998877&page=2", timestamp = 100L)
         org.junit.Assert.assertNotNull(first)
         org.junit.Assert.assertTrue(state.shouldSkipByTimestamp(100L))
@@ -175,6 +180,11 @@ class ReaderUiTest {
 
         state.markHandled(first!!.url)
         org.junit.Assert.assertNull(state.inspectText("https://bbs.nga.cn/read.php?tid=998877&page=2", timestamp = 200L))
+
+        // Timestamp-scoped handling (local copy or banner dismiss) allows re-prompting on a newer external copy.
+        state.markHandled("https://bbs.nga.cn/read.php?tid=112233", timestamp = 300L)
+        org.junit.Assert.assertNull(state.inspectText("https://bbs.nga.cn/read.php?tid=112233", timestamp = 300L))
+        org.junit.Assert.assertNotNull(state.inspectText("https://bbs.nga.cn/read.php?tid=112233", timestamp = 400L))
 
         var opened = false
         var ignored = false
@@ -187,7 +197,7 @@ class ReaderUiTest {
                 )
             }
         }
-        compose.onNodeWithText("检测到剪贴板中的 NGA 链接").assertIsDisplayed()
+        compose.onNodeWithText("剪贴板链接").assertIsDisplayed()
         compose.onNodeWithText("帖子 #998877 · 第 2 页").assertIsDisplayed()
         compose.onNodeWithText("打开").performClick()
         compose.onNodeWithText("忽略").performClick()
@@ -195,5 +205,51 @@ class ReaderUiTest {
             org.junit.Assert.assertTrue(opened)
             org.junit.Assert.assertTrue(ignored)
         }
+    }
+
+    @Test fun clipboardDetectorReadsUriListClipsAndForbidsRawMaterialAlertDialog() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+        val uriClip = android.content.ClipData(
+            android.content.ClipDescription("NGA", arrayOf(android.content.ClipDescription.MIMETYPE_TEXT_URILIST)),
+            android.content.ClipData.Item(android.net.Uri.parse("https://bbs.nga.cn/read.php?tid=47931570")),
+        )
+        clipboard.setPrimaryClip(uriClip)
+        val state = dev.nagi.app.navigation.ClipboardLinkState()
+        val result = state.inspectClipboardResult(context)
+        org.junit.Assert.assertTrue(result.readAttempted)
+        org.junit.Assert.assertEquals("https://bbs.nga.cn/read.php?tid=47931570", result.link?.url)
+
+        val sourceRoot = listOf(File("src/main/java"), File("app/src/main/java")).first { it.isDirectory }
+        val rawAlertDialogFiles = sourceRoot.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .filter { file -> file.readText().contains("AlertDialog") }
+            .map { it.relativeTo(sourceRoot).path }
+            .toList()
+        org.junit.Assert.assertEquals(emptyList<String>(), rawAlertDialogFiles)
+    }
+
+    @Test
+    @Config(qualifiers = "w320dp-h640dp")
+    fun nagiConfirmDialogAndClipboardBannerRenderInDarkLargeText() {
+        var confirmed = false
+        compose.setContent {
+            NagiTheme(theme = "dark") {
+                CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 2f)) {
+                    dev.nagi.app.ui.components.NagiConfirmDialog(
+                        onDismissRequest = {},
+                        title = "确认操作",
+                        message = "窄屏大字号下按钮应自动换行且不裁切。",
+                        confirmLabel = "确认继续",
+                        onConfirm = { confirmed = true },
+                        dismissLabel = "暂不",
+                    )
+                }
+            }
+        }
+        compose.onNodeWithText("确认操作").assertIsDisplayed()
+        compose.onNodeWithText("确认继续").assertIsDisplayed().performClick()
+        compose.onNodeWithText("暂不").assertIsDisplayed()
+        compose.runOnIdle { org.junit.Assert.assertTrue(confirmed) }
     }
 }

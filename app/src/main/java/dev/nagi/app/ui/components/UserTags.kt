@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.window.Dialog
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -55,27 +54,42 @@ internal fun UserTagEditor(userId: String) {
     }, enabled = !state.saving, style = CapsuleStyle.Neutral)
     if (editing) {
         val valid = validUserTag(draft.trim())
-        Dialog(onDismissRequest = { if (!state.saving) editing = false }) {
-            FlatCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.sm)) {
-                    Text(if (tag.isEmpty()) "添加标记" else "编辑标记", style = NagiThemeTokens.typography.sectionTitle,
-                        color = NagiThemeTokens.colors.textPrimary)
-                    OutlinedTextField(draft, { draft = it }, label = { Text("用户标记") }, singleLine = true,
-                        enabled = !state.saving, isError = !valid, modifier = Modifier.fillMaxWidth())
-                    if (!valid) Text("最多 24 个字符，不能包含换行或控制字符", color = NagiThemeTokens.colors.destructive)
-                    if (attempted) state.error?.let { Text(it, color = NagiThemeTokens.colors.destructive) }
-                    if (tag.isNotEmpty()) CapsuleButton("删除标记", {
+        NagiDialog(onDismissRequest = { if (!state.saving) editing = false }) {
+            Text(
+                if (tag.isEmpty()) "添加标记" else "编辑标记",
+                style = NagiThemeTokens.typography.sectionTitle,
+                color = NagiThemeTokens.colors.textPrimary,
+            )
+            OutlinedTextField(
+                draft, { draft = it }, label = { Text("用户标记") }, singleLine = true,
+                enabled = !state.saving, isError = !valid, modifier = Modifier.fillMaxWidth(),
+            )
+            if (!valid) Text("最多 24 个字符，不能包含换行或控制字符", color = NagiThemeTokens.colors.destructive)
+            if (attempted) state.error?.let { Text(it, color = NagiThemeTokens.colors.destructive) }
+            if (tag.isNotEmpty()) CapsuleButton(
+                "删除标记",
+                {
+                    attempted = true
+                    access.save(userId, "") { editing = false }
+                },
+                enabled = !state.saving,
+                style = CapsuleStyle.Destructive,
+            )
+            FlowRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Space.sm, Alignment.End),
+                verticalArrangement = Arrangement.spacedBy(Space.xs),
+            ) {
+                CapsuleButton("取消", { editing = false }, enabled = !state.saving, style = CapsuleStyle.Neutral)
+                CapsuleButton(
+                    if (state.saving) "保存中…" else "保存",
+                    {
                         attempted = true
-                        access.save(userId, "") { editing = false }
-                    }, enabled = !state.saving, style = CapsuleStyle.Neutral)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space.sm, Alignment.End)) {
-                        CapsuleButton("取消", { editing = false }, enabled = !state.saving, style = CapsuleStyle.Neutral)
-                        CapsuleButton(if (state.saving) "保存中…" else "保存", {
-                            attempted = true
-                            access.save(userId, draft) { editing = false }
-                        }, enabled = valid && draft.trim() != tag && !state.saving, style = CapsuleStyle.Neutral)
-                    }
-                }
+                        access.save(userId, draft) { editing = false }
+                    },
+                    enabled = valid && draft.trim() != tag && !state.saving,
+                    style = CapsuleStyle.SelectedGold,
+                )
             }
         }
     }

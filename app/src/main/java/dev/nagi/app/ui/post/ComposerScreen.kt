@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -383,42 +382,18 @@ internal fun ComposerScreen(
     }
 
     if (confirmClose) {
-        AlertDialog(
+        dev.nagi.app.ui.components.NagiConfirmDialog(
             onDismissRequest = { confirmClose = false },
-            shape = NagiThemeTokens.shapes.topicCard,
-            containerColor = colors.cardSurface,
-            tonalElevation = 0.dp,
-            title = {
-                Text(
-                    text = if (state.privateMessage) "放弃未发送的私信？" else "暂时离开编辑器？",
-                    style = typography.sectionTitle,
-                    color = colors.textPrimary,
-                )
+            title = if (state.privateMessage) "放弃未发送的私信？" else "暂时离开编辑器？",
+            message = if (state.privateMessage) "已输入的内容不会保存。" else "内容会在当前页面保留。",
+            confirmLabel = if (state.privateMessage) "放弃并返回" else "保留并返回",
+            onConfirm = {
+                confirmClose = false
+                close()
             },
-            text = {
-                Text(
-                    text = if (state.privateMessage) "已输入的内容不会保存。" else "内容会在当前页面保留。",
-                    style = typography.body,
-                    color = colors.textSecondary,
-                )
-            },
-            confirmButton = {
-                CapsuleButton(
-                    text = if (state.privateMessage) "放弃并返回" else "保留并返回",
-                    onClick = {
-                        confirmClose = false
-                        close()
-                    },
-                    style = if (state.privateMessage) CapsuleStyle.Destructive else CapsuleStyle.SelectedGold,
-                )
-            },
-            dismissButton = {
-                CapsuleButton(
-                    text = "继续编辑",
-                    onClick = { confirmClose = false },
-                    style = CapsuleStyle.Neutral,
-                )
-            },
+            confirmStyle = if (state.privateMessage) CapsuleStyle.Destructive else CapsuleStyle.SelectedGold,
+            dismissLabel = "继续编辑",
+            onDismiss = { confirmClose = false },
         )
     }
 }

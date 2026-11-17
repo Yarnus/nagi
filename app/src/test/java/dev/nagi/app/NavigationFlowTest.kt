@@ -507,4 +507,27 @@ class NavigationFlowTest {
         compose.onNodeWithText("清空").performClick()
         compose.onNodeWithText("阅读主题后会在这里留下记录；访客与各账号的历史独立保存").assertIsDisplayed()
     }
+
+    @Test
+    fun returningFromBackgroundChecksClipboardAndShowsNonBlockingBanner() {
+        val clipboard = RuntimeEnvironment.getApplication().getSystemService(android.content.ClipboardManager::class.java)
+        try {
+            // Simulate leaving to background, copying a link externally, and returning with focus delayed.
+            compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+            clipboard.setPrimaryClip(
+                android.content.ClipData.newPlainText("NGA", "https://bbs.nga.cn/read.php?tid=47931570"),
+            )
+            compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+            compose.runOnUiThread {
+                org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+                    .idleFor(java.time.Duration.ofMillis(400))
+            }
+            compose.onNodeWithText("剪贴板链接").assertIsDisplayed()
+            compose.onNodeWithText("帖子 #47931570").assertIsDisplayed()
+            compose.onNodeWithText("忽略").performClick()
+            compose.onNodeWithText("剪贴板链接").assertDoesNotExist()
+        } finally {
+            clipboard.clearPrimaryClip()
+        }
+    }
 }

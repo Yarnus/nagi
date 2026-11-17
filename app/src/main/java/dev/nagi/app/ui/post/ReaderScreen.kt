@@ -273,9 +273,10 @@ fun ReaderScreen(
                                     }
                                 },
                                 onCopyLink = {
-                                    dev.nagi.app.navigation.ClipboardLinkTracker.markHandled(topicUrl)
-                                    context.getSystemService(ClipboardManager::class.java)
-                                        ?.setPrimaryClip(ClipData.newPlainText("NGA 主题链接", topicUrl))
+                                    val clipboard = context.getSystemService(ClipboardManager::class.java)
+                                    clipboard?.setPrimaryClip(ClipData.newPlainText("NGA 主题链接", topicUrl))
+                                    val timestamp = clipboard?.primaryClipDescription?.timestamp ?: 0L
+                                    dev.nagi.app.navigation.ClipboardLinkTracker.markHandled(topicUrl, timestamp)
                                     Toast.makeText(context, "已复制主题链接", Toast.LENGTH_SHORT).show()
                                 },
                                 onOpenBrowser = {
@@ -368,9 +369,10 @@ fun ReaderScreen(
                                         onCopyLink = if (validPostLink) {
                                             {
                                                 val postUrl = "https://bbs.nga.cn/read.php?tid=$id&pid=${post.id}"
-                                                dev.nagi.app.navigation.ClipboardLinkTracker.markHandled(postUrl)
-                                                context.getSystemService(ClipboardManager::class.java)
-                                                    ?.setPrimaryClip(ClipData.newPlainText("NGA 楼层链接", postUrl))
+                                                val clipboard = context.getSystemService(ClipboardManager::class.java)
+                                                clipboard?.setPrimaryClip(ClipData.newPlainText("NGA 楼层链接", postUrl))
+                                                val timestamp = clipboard?.primaryClipDescription?.timestamp ?: 0L
+                                                dev.nagi.app.navigation.ClipboardLinkTracker.markHandled(postUrl, timestamp)
                                                 Toast.makeText(context, "已复制楼层链接", Toast.LENGTH_SHORT).show()
                                             }
                                         } else null,

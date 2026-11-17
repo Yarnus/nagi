@@ -2,9 +2,20 @@ package dev.nagi.app.navigation
 
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.material3.Surface
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.DisposableEffect
@@ -27,7 +38,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -39,9 +52,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import dev.nagi.app.ui.components.BackdropBlurScope
 import dev.nagi.app.ui.components.LoadingLine
 import dev.nagi.app.ui.components.LocalAccountIdentity
+import dev.nagi.app.ui.components.LocalBackdropBlur
 import dev.nagi.app.ui.components.Notice
+import dev.nagi.app.ui.components.hardwareBlurAllowed
 import dev.nagi.app.ui.forum.ForumScreen
 import dev.nagi.app.ui.library.AboutScreen
 import dev.nagi.app.ui.library.AccountsScreen
@@ -57,6 +73,7 @@ import dev.nagi.app.ui.post.ReaderScreen
 import dev.nagi.app.ui.search.SearchScreen
 import dev.nagi.app.ui.theme.NagiTheme
 import dev.nagi.app.ui.theme.NagiThemeTokens
+import dev.nagi.app.ui.theme.Space
 import dev.nagi.app.ui.topic.TopicsScreen
 import dev.nagi.app.viewmodel.AccountIdentity
 import dev.nagi.app.viewmodel.AccountIdentityViewModel
@@ -150,11 +167,34 @@ fun NagiApp(
                         "topics/${Uri.encode(forum.id.ifBlank { "0" })}?collection=${Uri.encode(forum.collectionId.orEmpty())}&name=${Uri.encode(forum.name)}",
                     )
                 }
-                Box(Modifier.fillMaxSize()) {
+                val showClipboardPrompt = clipboardLink != null && !account.busy && deepLinkUri == null
+                val useBackdropBlur = hardwareBlurAllowed() && showClipboardPrompt
+                val backdropLayer = rememberGraphicsLayer()
+                var rootCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+                val backdropScope = remember(backdropLayer, useBackdropBlur) {
+                    BackdropBlurScope(
+                        source = backdropLayer,
+                        hardware = useBackdropBlur,
+                        rootCoordinates = { rootCoords },
+                    )
+                }
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .onGloballyPositioned { rootCoords = it },
+                ) {
                     Surface(
                         modifier = Modifier
                             .fillMaxSize()
-                            .then(if (account.busy) Modifier.clearAndSetSemantics { } else Modifier),
+                            .drawWithContent {
+                                if (useBackdropBlur) {
+                                    backdropLayer.record { this@drawWithContent.drawContent() }
+                                    drawLayer(backdropLayer)
+                                } else {
+                                    drawContent()
+                                }
+                            }
+                            .then(if (account.busy || showClipboardPrompt) Modifier.clearAndSetSemantics { } else Modifier),
                         color = colors.groupedCanvas,
                         shadowElevation = 0.dp,
                         tonalElevation = 0.dp,
@@ -335,15 +375,33 @@ fun NagiApp(
                         }
                         onDeepLinkConsumed()
                     }
-                    if (clipboardLink != null && !account.busy && deepLinkUri == null) {
-                        ClipboardLinkPromptDialog(
-                            link = clipboardLink,
-                            onOpen = {
-                                onClipboardLinkHandled(clipboardLink)
-                                navigateToExternalTarget(clipboardLink.target)
-                            },
-                            onIgnore = { onClipboardLinkHandled(clipboardLink) },
-                        )
+                    if (showClipboardPrompt) {
+                        val activeClipboardLink = clipboardLink!!
+                        BackHandler { onClipboardLinkHandled(activeClipboardLink) }
+                        CompositionLocalProvider(LocalBackdropBlur provides backdropScope) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = if (colors.isDark) 0.50f else 0.30f))
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = { onClipboardLinkHandled(activeClipboardLink) },
+                                    )
+                                    .safeDrawingPadding()
+                                    .padding(horizontal = Space.xl),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                ClipboardLinkPromptDialog(
+                                    link = activeClipboardLink,
+                                    onOpen = {
+                                        onClipboardLinkHandled(activeClipboardLink)
+                                        navigateToExternalTarget(activeClipboardLink.target)
+                                    },
+                                    onIgnore = { onClipboardLinkHandled(activeClipboardLink) },
+                                )
+                            }
+                        }
                     }
                     if (account.busy) {
                         Surface(

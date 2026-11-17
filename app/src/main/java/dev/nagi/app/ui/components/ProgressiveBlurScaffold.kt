@@ -50,7 +50,7 @@ internal class BackdropBlurScope(
 internal val LocalBackdropBlur = compositionLocalOf<BackdropBlurScope?> { null }
 
 @Composable
-private fun hardwareBlurAllowed(): Boolean {
+internal fun hardwareBlurAllowed(): Boolean {
     val context = LocalContext.current
     val power = remember(context) { context.getSystemService(PowerManager::class.java) }
     var powerSave by remember { mutableStateOf(power.isPowerSaveMode) }

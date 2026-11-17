@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -111,30 +110,18 @@ fun MessagesScreen(
         }
     }
     if (sent) {
-        AlertDialog(
+        dev.nagi.app.ui.components.NagiConfirmDialog(
             onDismissRequest = { sent = false },
-            shape = NagiThemeTokens.shapes.topicCard,
-            containerColor = colors.cardSurface,
-            tonalElevation = 0.dp,
-            title = { Text("私信已发送", style = typography.sectionTitle, color = colors.textPrimary) },
-            text = { Text("可刷新会话查看。", style = typography.body, color = colors.textSecondary) },
-            confirmButton = {
-                CapsuleButton(
-                    text = "刷新",
-                    onClick = {
-                        sent = false
-                        vm.load(refresh = true)
-                    },
-                    style = CapsuleStyle.SelectedGold,
-                )
+            title = "私信已发送",
+            message = "可刷新会话查看。",
+            confirmLabel = "刷新",
+            onConfirm = {
+                sent = false
+                vm.load(refresh = true)
             },
-            dismissButton = {
-                CapsuleButton(
-                    text = "继续阅读",
-                    onClick = { sent = false },
-                    style = CapsuleStyle.Neutral,
-                )
-            },
+            confirmStyle = CapsuleStyle.SelectedGold,
+            dismissLabel = "继续阅读",
+            onDismiss = { sent = false },
         )
     }
     LaunchedEffect(id) { vm.open(id) }

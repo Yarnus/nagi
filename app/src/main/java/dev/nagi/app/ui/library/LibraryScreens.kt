@@ -35,7 +35,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.ui.components.AccountMenuButton
@@ -452,26 +451,23 @@ fun AboutScreen(back: () -> Unit) {
     val blockedUri = unavailableUri
     val blockedTarget = unavailableTarget
     if (blockedUri != null && blockedTarget != null) {
-        Dialog(onDismissRequest = {
+        val clearUnavailable = {
             unavailableUri = null
             unavailableTarget = null
-        }) {
-            FlatCard(modifier = Modifier.fillMaxWidth(), shape = NagiThemeTokens.shapes.cardGroup) {
-                Column(Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.md)) {
-                    Text("无法打开 GitHub，请安装浏览器或复制链接后打开。", style = typography.body, color = colors.textPrimary)
-                    CapsuleButton(blockedTarget.copyButtonText, onClick = {
-                        context.getSystemService(ClipboardManager::class.java)
-                            .setPrimaryClip(ClipData.newPlainText(blockedTarget.clipLabel, blockedUri))
-                        unavailableUri = null
-                        unavailableTarget = null
-                    }, style = CapsuleStyle.Neutral)
-                    CapsuleButton("关闭", onClick = {
-                        unavailableUri = null
-                        unavailableTarget = null
-                    }, style = CapsuleStyle.Neutral)
-                }
-            }
         }
+        dev.nagi.app.ui.components.NagiConfirmDialog(
+            onDismissRequest = clearUnavailable,
+            message = "无法打开 GitHub，请安装浏览器或复制链接后打开。",
+            confirmLabel = blockedTarget.copyButtonText,
+            onConfirm = {
+                context.getSystemService(ClipboardManager::class.java)
+                    ?.setPrimaryClip(ClipData.newPlainText(blockedTarget.clipLabel, blockedUri))
+                clearUnavailable()
+            },
+            confirmStyle = CapsuleStyle.SelectedGold,
+            dismissLabel = "关闭",
+            onDismiss = clearUnavailable,
+        )
     }
     if (licenses) {
         val text = remember(context) {
@@ -479,34 +475,25 @@ fun AboutScreen(back: () -> Unit) {
                 context.assets.open(asset).bufferedReader().use { it.readText() }
             }
         }
-        Dialog(onDismissRequest = { licenses = false }) {
-            FlatCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = NagiThemeTokens.shapes.cardGroup,
-            ) {
-                Column(
-                    modifier = Modifier
-                        .heightIn(max = 600.dp)
-                        .padding(Space.lg),
-                    verticalArrangement = Arrangement.spacedBy(Space.sm),
-                ) {
-                    Text("开源许可", style = typography.sectionTitle, color = colors.textPrimary)
-                    Text(
-                        text = text,
-                        modifier = Modifier
-                            .weight(1f)
-                            .verticalScroll(rememberScrollState()),
-                        style = typography.body,
-                        color = colors.textSecondary,
-                    )
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                        CapsuleButton(
-                            text = "关闭",
-                            onClick = { licenses = false },
-                            style = CapsuleStyle.Neutral,
-                        )
-                    }
-                }
+        dev.nagi.app.ui.components.NagiDialog(
+            onDismissRequest = { licenses = false },
+            modifier = Modifier.heightIn(max = 600.dp),
+        ) {
+            Text("开源许可", style = typography.sectionTitle, color = colors.textPrimary)
+            Text(
+                text = text,
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState()),
+                style = typography.body,
+                color = colors.textSecondary,
+            )
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                CapsuleButton(
+                    text = "关闭",
+                    onClick = { licenses = false },
+                    style = CapsuleStyle.Neutral,
+                )
             }
         }
     }

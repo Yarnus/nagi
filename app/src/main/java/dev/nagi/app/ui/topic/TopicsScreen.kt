@@ -33,7 +33,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -151,39 +150,21 @@ fun TopicsScreen(
     }
 
     if (replacingDraft) {
-        AlertDialog(
+        dev.nagi.app.ui.components.NagiConfirmDialog(
             onDismissRequest = { replacingDraft = false },
-            shape = NagiThemeTokens.shapes.topicCard,
-            containerColor = colors.cardSurface,
-            tonalElevation = 0.dp,
-            title = { Text("替换现有草稿？", style = typography.sectionTitle, color = colors.textPrimary) },
-            text = {
-                Text(
-                    text = "请先复制需要保留的原草稿内容，替换后无法恢复。",
-                    style = typography.body,
-                    color = colors.textSecondary,
-                )
+            title = "替换现有草稿？",
+            message = "请先复制需要保留的原草稿内容，替换后无法恢复。",
+            confirmLabel = "替换",
+            onConfirm = {
+                publishTarget?.let { composer.open(it, "发布到 $activeTitle") }
+                replacingDraft = false
+                composing = true
             },
-            confirmButton = {
-                CapsuleButton(
-                    text = "替换",
-                    onClick = {
-                        publishTarget?.let { composer.open(it, "发布到 $activeTitle") }
-                        replacingDraft = false
-                        composing = true
-                    },
-                    style = CapsuleStyle.Destructive,
-                )
-            },
-            dismissButton = {
-                CapsuleButton(
-                    text = "查看原草稿",
-                    onClick = {
-                        replacingDraft = false
-                        composing = true
-                    },
-                    style = CapsuleStyle.Neutral,
-                )
+            confirmStyle = CapsuleStyle.Destructive,
+            dismissLabel = "查看原草稿",
+            onDismiss = {
+                replacingDraft = false
+                composing = true
             },
         )
     }

@@ -71,6 +71,8 @@ Nagi 使用中性背景、金色强调和胶囊控件。内容卡片不使用阴
 - 磨砂：36dp 有界背景模糊，叠加渐变釉层、颗粒和细描边。语义基色浅色为白色 85%，
   深色为 CardSurface 88%；菜单底色为 96%。这些不是最终合成像素值。
   Android 31 以下、省电、关闭系统动画或禁用模糊时使用静态回退。帖子正文不应用实时模糊。
+- 弹窗与浮动提示：确认与详情弹窗统一复用共享 `NagiDialog` / `NagiConfirmDialog` 或居中磨砂面板（基于 `FrostedSurface`，`20dp` 圆角、细描边、`0dp` 阴影，支持 36dp 有界背景模糊与静态回退），不直接使用原生 Material `AlertDialog`。
+  链接或上下文摘要放在 `InsetContainer`（`12dp` 圆角、无边框）内嵌区中；操作区使用等宽加宽的 `CapsuleButton` 撑满所在行（次操作 `Neutral`，常规确认 `SelectedGold`，警示操作 `Destructive`），窄屏或大字号下自动纵排。
 
 ## 列表与状态
 
