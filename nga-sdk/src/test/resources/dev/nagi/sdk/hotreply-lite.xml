@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="GB18030"?>
+<root>
+  <__GLOBAL>
+    <_ATTACH_BASE_VIEW>img.nga.cn/attachments</_ATTACH_BASE_VIEW>
+  </__GLOBAL>
+  <__U>
+    <item>
+      <uid>1001</uid>
+      <username>测试楼主</username>
+      <memberid>39</memberid>
+      <avatar/>
+      <postnum>631</postnum>
+      <rvrc>10</rvrc>
+    </item>
+    <item>
+      <uid>1002</uid>
+      <username>热评甲</username>
+      <memberid>73</memberid>
+      <avatar>https://img.nga.cn/avatars/example/1002.jpg</avatar>
+      <postnum>262</postnum>
+      <rvrc>28</rvrc>
+    </item>
+    <item>
+      <uid>1003</uid>
+      <username>热评乙</username>
+      <memberid>39</memberid>
+      <avatar/>
+      <postnum>656</postnum>
+      <rvrc>10</rvrc>
+    </item>
+    <item>
+      <uid>1004</uid>
+      <username>热评丙</username>
+      <memberid>42</memberid>
+      <avatar/>
+      <postnum>533</postnum>
+      <rvrc>-10</rvrc>
+    </item>
+    <item>
+      <uid>1005</uid>
+      <username>热评丁</username>
+      <memberid>39</memberid>
+      <avatar>https://img.nga.cn/avatars/example/1005.jpg</avatar>
+      <postnum>296</postnum>
+      <rvrc>10</rvrc>
+    </item>
+    <__GROUPS>
+      <item><item>学徒</item><item>98528</item><item>39</item></item>
+      <item><item>警告等级1</item><item>98528</item><item>42</item></item>
+      <item><item>学徒</item><item>360672</item><item>73</item></item>
+    </__GROUPS>
+  </__U>
+  <__R>
+    <item>
+      <content>主楼测试正文。</content>
+      <tid>47935130</tid>
+      <score>11</score>
+      <postdate>2026-11-17 12:06</postdate>
+      <authorid>1001</authorid>
+      <subject>测试主题标题</subject>
+      <fid>-7955747</fid>
+      <pid>0</pid>
+      <lou>0</lou>
+      <from_client>31 /</from_client>
+      <item>1005</item>
+      <item>,901,902,903,904</item>
+      <hotreply_id>
+        <item/>
+        <item>901</item>
+        <item>902</item>
+        <item>903</item>
+        <item>904</item>
+      </hotreply_id>
+      <hotreply>
+        <item>
+          <pid>901</pid>
+          <fid>-7955747</fid>
+          <tid>47935130</tid>
+          <authorid>1002</authorid>
+          <score>384</score>
+          <postdate>2026-11-17 12:24</postdate>
+          <content>[img]./mon_202611/17/test.jpg[/img]核心内容</content>
+          <lou>9</lou>
+          <from_client>7 iOS</from_client>
+        </item>
+        <item>
+          <pid>902</pid>
+          <fid>-7955747</fid>
+          <tid>47935130</tid>
+          <authorid>1003</authorid>
+          <score>122</score>
+          <postdate>2026-11-17 12:40</postdate>
+          <content>第二条热评第一行&lt;br/&gt;第二行内容</content>
+          <lou>18</lou>
+          <from_client>8 Android</from_client>
+        </item>
+        <item>
+          <pid>903</pid>
+          <fid>-7955747</fid>
+          <tid>47935130</tid>
+          <authorid>1004</authorid>
+          <score>37</score>
+          <postdate>2026-11-17 12:53</postdate>
+          <content>lou 为 0 的热点回复</content>
+          <lou>0</lou>
+          <from_client>0 /</from_client>
+        </item>
+        <item>
+          <pid>904</pid>
+          <fid>-7955747</fid>
+          <tid>47935130</tid>
+          <authorid>1005</authorid>
+          <score>30</score>
+          <postdate>2026-11-17 12:35</postdate>
+          <content>[quote][pid=901,47935130,1]Reply[/pid] [b]Post by [uid=1002]热评甲[/uid] (2026-11-17 12:24):[/b]&lt;br/&gt;&lt;br/&gt;[img]./mon_202611/17/test.jpg[/img]核心内容[/quote]&lt;br/&gt;&lt;br/&gt;这下看懂了。</content>
+          <lou>16</lou>
+          <from_client>8 Android</from_client>
+        </item>
+      </hotreply>
+    </item>
+    <item>
+      <pid>900</pid>
+      <fid>-7955747</fid>
+      <tid>47935130</tid>
+      <authorid>1003</authorid>
+      <score>17</score>
+      <postdate>2026-11-17 12:08</postdate>
+      <content>普通一楼回复</content>
+      <lou>1</lou>
+      <from_client>8 Android</from_client>
+    </item>
+  </__R>
+  <__T>
+    <tid>47935130</tid>
+    <subject>测试主题标题</subject>
+    <authorid>1001</authorid>
+    <replies>114</replies>
+  </__T>
+  <__R__ROWS>2</__R__ROWS>
+  <__R__ROWS_PAGE>20</__R__ROWS_PAGE>
+  <__ROWS>115</__ROWS>
+  <__PAGE>1</__PAGE>
+</root>

@@ -44,6 +44,7 @@ import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.LightSemanticColors
 import dev.nagi.sdk.ContentBlock
 import dev.nagi.sdk.ContentColors
+import dev.nagi.sdk.InlineSmile
 import dev.nagi.sdk.NgaUserLinks
 import dev.nagi.app.ui.components.LocalOpenUser
 import dev.nagi.sdk.NgaSmile
@@ -61,19 +62,32 @@ internal fun contentTextColor(name: String, background: Color): Color? {
     return target
 }
 
+internal fun AnnotatedString.Builder.appendSmileText(value: String, smiles: List<InlineSmile>) {
+    var offset = 0
+    smiles.forEachIndexed { index, inline ->
+        if (inline.start >= offset && inline.end <= value.length) {
+            append(value.substring(offset, inline.start))
+            appendInlineContent("smile-$index", value.substring(inline.start, inline.end))
+            offset = inline.end
+        }
+    }
+    append(value.substring(offset))
+}
+
+internal fun smileInlineContent(smiles: List<InlineSmile>): Map<String, InlineTextContent> =
+    smiles.mapIndexed { index, inline ->
+        "smile-$index" to InlineTextContent(
+            Placeholder(1.6.em, 1.6.em, PlaceholderVerticalAlign.TextCenter),
+        ) { SmileImage(inline.smile, Modifier.fillMaxSize()) }
+    }.toMap()
+
 internal fun paragraphText(
     block: ContentBlock.Text,
     linkColor: Color,
     background: Color = Color.White,
     onOpenUser: ((String) -> Unit)? = null,
 ): AnnotatedString = buildAnnotatedString {
-    var offset = 0
-    block.smiles.forEachIndexed { index, inline ->
-        append(block.value.substring(offset, inline.start))
-        appendInlineContent("smile-$index", block.value.substring(inline.start, inline.end))
-        offset = inline.end
-    }
-    append(block.value.substring(offset))
+    appendSmileText(block.value, block.smiles)
     block.spans.forEach { span ->
         val decoration = when {
             span.underline && span.strikethrough -> TextDecoration.combine(listOf(TextDecoration.Underline, TextDecoration.LineThrough))
@@ -111,13 +125,7 @@ internal fun PostParagraph(
     val text = remember(block, colors.goldText, colors.insetContainer, openUser) {
         paragraphText(block, colors.goldText, colors.insetContainer, openUser)
     }
-    val inlineContent = remember(block.smiles) {
-        block.smiles.mapIndexed { index, inline ->
-            "smile-$index" to InlineTextContent(
-                Placeholder(1.6.em, 1.6.em, PlaceholderVerticalAlign.TextCenter),
-            ) { SmileImage(inline.smile, Modifier.fillMaxSize()) }
-        }.toMap()
-    }
+    val inlineContent = remember(block.smiles) { smileInlineContent(block.smiles) }
     val fontSize = preferences.fontSize + if (heading) 2 else 0
     val largestScale = (block.spans.maxOfOrNull { it.scale ?: 1f } ?: 1f).coerceAtLeast(1f)
     Text(

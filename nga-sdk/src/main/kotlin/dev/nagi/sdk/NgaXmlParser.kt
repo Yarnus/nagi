@@ -24,20 +24,26 @@ internal object NgaXmlParser {
     fun topics(raw: String, page: Int, defaultPageSize: Int = 30): TopicPage {
         val root = parseRoot(raw)
         rootErrorOrNull(root)?.let { throw it }
-        val topicsNode = root.directChild("__T") ?: throw NgaException.Protocol(ProtocolReason.XML_TOPICS_NODE)
-        val items = topicsNode.directChildren("item").map { item ->
-            val id = item.field("tid")
-            if (id.isBlank()) throw NgaException.Protocol(ProtocolReason.XML_TOPIC_ID)
-            Topic(
-                id = id,
-                title = plain(item.field("subject")),
-                author = plain(item.field("author")),
-                authorId = item.field("authorid"),
-                createdAt = item.field("postdate").toLongOrNull() ?: 0L,
-                lastActiveAt = item.field("lastpost").toLongOrNull() ?: 0L,
-                replies = item.field("replies").toIntOrNull() ?: 0,
-                recommended = (item.field("recommend").toIntOrNull() ?: 0) > 0,
-            )
+        val topicsNode = root.directChild("__T")
+        val items = if (topicsNode != null) {
+            topicsNode.directChildren("item").map { item ->
+                val id = item.field("tid")
+                if (id.isBlank()) throw NgaException.Protocol(ProtocolReason.XML_TOPIC_ID)
+                Topic(
+                    id = id,
+                    title = plain(item.field("subject")),
+                    author = plain(item.field("author")),
+                    authorId = item.field("authorid"),
+                    createdAt = item.field("postdate").toLongOrNull() ?: 0L,
+                    lastActiveAt = item.field("lastpost").toLongOrNull() ?: 0L,
+                    replies = item.field("replies").toIntOrNull() ?: 0,
+                    recommended = (item.field("recommend").toIntOrNull() ?: 0) > 0,
+                )
+            }
+        } else if (root.fieldOrNull("__ROWS")?.toIntOrNull() == 0) {
+            emptyList()
+        } else {
+            throw NgaException.Protocol(ProtocolReason.XML_TOPICS_NODE)
         }
         val total = (root.fieldOrNull("__ROWS")?.toIntOrNull() ?: items.size).coerceAtLeast(0)
         val pageSize = (root.fieldOrNull("__T__ROWS_PAGE")?.toIntOrNull() ?: defaultPageSize).coerceAtLeast(1)
@@ -127,6 +133,11 @@ internal object NgaXmlParser {
                 authorReputation = reputation,
                 authorPosts = postCount,
                 clientPlatform = clientPlatform,
+                hotReplies = if (depth == 0) {
+                    item.directChild("hotreply")?.directChildren("item")?.mapIndexed { index, reply ->
+                        parsePost(reply, index, depth + 1)
+                    }.orEmpty()
+                } else emptyList(),
             )
         }
         val items = repliesNode.directChildren("item").mapIndexed { index, item ->

@@ -138,12 +138,17 @@ internal object NgaParser {
 
     fun topics(raw: String, page: Int, defaultPageSize: Int = 30): TopicPage {
         val data = data(raw)
-        if (!data.has("__T")) throw NgaException.Protocol(ProtocolReason.JSON_TOPICS_NODE)
-        val items = records(data.opt("__T")).map { item ->
-            val id = item.optString("tid")
-            if (id.isBlank()) throw NgaException.Protocol(ProtocolReason.JSON_TOPIC_ID)
-            Topic(id, plain(item.optString("subject")), plain(item.optString("author")), item.optString("authorid"),
-                item.optLong("postdate"), item.optLong("lastpost"), item.optInt("replies"), item.optInt("recommend") > 0)
+        val items = if (data.has("__T")) {
+            records(data.opt("__T")).map { item ->
+                val id = item.optString("tid")
+                if (id.isBlank()) throw NgaException.Protocol(ProtocolReason.JSON_TOPIC_ID)
+                Topic(id, plain(item.optString("subject")), plain(item.optString("author")), item.optString("authorid"),
+                    item.optLong("postdate"), item.optLong("lastpost"), item.optInt("replies"), item.optInt("recommend") > 0)
+            }
+        } else if (data.has("__ROWS") && data.optInt("__ROWS", -1) == 0) {
+            emptyList()
+        } else {
+            throw NgaException.Protocol(ProtocolReason.JSON_TOPICS_NODE)
         }
         val total = data.optInt("__ROWS", items.size).coerceAtLeast(0)
         val pageSize = data.optInt("__T__ROWS_PAGE", defaultPageSize).coerceAtLeast(1)
@@ -184,6 +189,9 @@ internal object NgaParser {
                 authorReputation = reputation,
                 authorPosts = postCount,
                 clientPlatform = clientPlatform,
+                hotReplies = if (depth == 0 && item.has("hotreply")) records(item.opt("hotreply")).mapIndexed { index, reply ->
+                    parsePost(reply, index, depth + 1)
+                } else emptyList(),
             )
         }
         val items = records(data.opt("__R")).mapIndexed { index, item -> parsePost(item, (page - 1) * 30 + index, 0) }

@@ -112,8 +112,23 @@ class TopicsViewModel @Inject constructor(
     val state = _state.asStateFlow()
     private val _sort = MutableStateFlow(TopicSort.entries.firstOrNull { it.name == saved.get<String>("sort") } ?: TopicSort.NEWEST)
     val sort = _sort.asStateFlow()
+    private val noRecommendSources = mutableSetOf<Pair<String, String?>>()
+    private val _recommendAvailable = MutableStateFlow(true)
+    val recommendAvailable = _recommendAvailable.asStateFlow()
+    init {
+        viewModelScope.launch {
+            accounts.state.collect {
+                if (!current()) {
+                    request?.cancel()
+                    noRecommendSources.clear()
+                    _recommendAvailable.value = true
+                }
+            }
+        }
+    }
     fun changeSort(value: TopicSort) {
-        if (_filterBusy.value || value == _sort.value) return
+        if (!current() || _filterBusy.value || value == _sort.value) return
+        if (value == TopicSort.RECOMMENDED && !_recommendAvailable.value) return
         _sort.value = value; saved["sort"] = value.name
         load(true)
     }
@@ -186,9 +201,16 @@ class TopicsViewModel @Inject constructor(
 
     fun openForum(id: String, collection: String?) {
         if (source == id to collection && keyword == null) return
-        source = id to collection; keyword = null; _state.value = ListState()
+        val target = id to collection
+        source = target; keyword = null; _state.value = ListState()
         _subforums.value = emptyList(); _filterNotice.value = null
-        _filterLocked.value = (id to collection) in lockedSources
+        _filterLocked.value = target in lockedSources
+        val hasRecommend = target !in noRecommendSources
+        _recommendAvailable.value = hasRecommend
+        if (!hasRecommend && _sort.value == TopicSort.RECOMMENDED) {
+            _sort.value = TopicSort.NEWEST
+            saved["sort"] = TopicSort.NEWEST.name
+        }
         val key = "$id:${collection.orEmpty()}"
         val pages = if (saved.get<String>("forum") == key) saved.get<Int>("pages") ?: 1 else 1
         saved["forum"] = key
@@ -229,13 +251,15 @@ class TopicsViewModel @Inject constructor(
                 var result: TopicPage? = null
                 val lastPage = if (refresh) throughPage.coerceAtLeast(1) else next
                 for (number in next..lastPage) {
+                    if (!current()) return@launch
                     val page = if (keyword != null) client.searchTopics(keyword, source!!.first, number, source.second) else client.getTopics(source!!.first, number, source.second, order)
                     ensureActive()
-                    if (version != generation) return@launch
+                    if (version != generation || !current()) return@launch
                     combined = (combined + page.items).distinctBy { it.id }
                     result = page
                     if (!page.hasMore) break
                 }
+                if (!current()) return@launch
                 val page = requireNotNull(result)
                 saved["pages"] = page.page
                 if (keyword == null) {
@@ -243,6 +267,15 @@ class TopicsViewModel @Inject constructor(
                     lockedSources.remove(source)
                     _filterLocked.value = false
                     _filterNotice.value = null
+                    if (next == 1 && order == TopicSort.RECOMMENDED) {
+                        if (combined.isEmpty()) {
+                            noRecommendSources.add(source!!)
+                            _recommendAvailable.value = false
+                        } else {
+                            noRecommendSources.remove(source!!)
+                            _recommendAvailable.value = true
+                        }
+                    }
                 }
                 _state.value = ListState(combined, page = page.page, hasMore = page.hasMore)
             } catch (error: CancellationException) { throw error }

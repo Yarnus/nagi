@@ -378,6 +378,9 @@ fun ReaderScreen(
                                                 Toast.makeText(context, "已复制楼层链接", Toast.LENGTH_SHORT).show()
                                             }
                                         } else null,
+                                        topicAuthorId = data.authorId,
+                                        showHotReplies = data.page == 1,
+                                        onLocateHotReply = { reply -> vm.locateReference(PostReference(id, reply.id)) },
                                     )
                                 }
                             }
@@ -747,6 +750,9 @@ internal fun ReaderPost(
     onFilterAuthor: (() -> Unit)? = null,
     onCopyText: (() -> Unit)? = null,
     onCopyLink: (() -> Unit)? = null,
+    topicAuthorId: String = "",
+    showHotReplies: Boolean = true,
+    onLocateHotReply: ((Post) -> Unit)? = null,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
@@ -964,6 +970,14 @@ internal fun ReaderPost(
                     }
                 }
             }
+        }
+        if (post.floor == 0 && post.hotReplies.isNotEmpty() && showHotReplies) {
+            HotRepliesSection(
+                replies = post.hotReplies,
+                topicAuthorId = topicAuthorId.ifBlank { if (isAuthor) post.authorId else "" },
+                preferences = preferences,
+                onLocate = onLocateHotReply,
+            )
         }
         if (post.id.toLongOrNull()?.let { it >= 0 } == true && onReply != null) {
             var actions by remember { mutableStateOf(false) }

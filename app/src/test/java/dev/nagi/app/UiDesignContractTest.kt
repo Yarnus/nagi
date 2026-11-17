@@ -231,6 +231,77 @@ class UiDesignContractTest {
         compose.onNodeWithText("正文").assertIsDisplayed()
     }
 
+    @Test fun hotRepliesRenderOnlyOnMainFloorSkipQuotedTextAndLocateByPid() {
+        val located = mutableListOf<String>()
+        val hotReplies = listOf(
+            Post(
+                id = "901", floor = 9, author = "热评甲", authorId = "1002", avatar = "", date = "",
+                content = listOf(ContentBlock.Image("https://img.nga.cn/attachments/test.jpg"), ContentBlock.Text("核心出装")),
+                score = 384,
+            ),
+            Post(
+                id = "903", floor = 0, author = "热评丙", authorId = "1004", avatar = "", date = "",
+                content = listOf(
+                    ContentBlock.Quote(listOf(ContentBlock.Image("https://img.nga.cn/attachments/quoted.jpg"), ContentBlock.Text("被引用的正文")), author = "热评甲"),
+                    ContentBlock.Text("这下看懂了。"),
+                ),
+                score = 37,
+            ),
+        )
+        var floor by mutableStateOf(0)
+        var replies by mutableStateOf(hotReplies)
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(
+                LocalDensity provides Density(density.density, 2f),
+                dev.nagi.app.ui.components.LocalOpenUser provides {},
+            ) {
+                NagiTheme {
+                    ReaderPost(
+                        post = Post(
+                            id = if (floor == 0) "0" else "900",
+                            floor = floor,
+                            author = "测试楼主",
+                            authorId = "1001",
+                            avatar = "",
+                            date = "",
+                            content = listOf(ContentBlock.Text("主楼正文")),
+                            hotReplies = replies,
+                        ),
+                        preferences = ReadingPreferences(),
+                        isAuthor = floor == 0,
+                        title = null,
+                        onImage = {},
+                        onLocateHotReply = { located += it.id },
+                    )
+                }
+            }
+        }
+        compose.onNodeWithText("热点回复").assertIsDisplayed()
+        compose.onNodeWithText("核心出装").assertIsDisplayed()
+        compose.onNodeWithText("这下看懂了。").assertIsDisplayed()
+        compose.onNodeWithContentDescription("热评丙，赞 37：这下看懂了。").assertIsDisplayed()
+        compose.onNodeWithText("热评甲").assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp)
+        compose.onAllNodesWithText("被引用的正文").assertCountEquals(0)
+        compose.onNodeWithText("#9").assertIsDisplayed()
+        compose.onAllNodesWithText("#0").assertCountEquals(1) // only main floor header #0, not hot reply lou=0
+        compose.onNodeWithText("这下看懂了。").assertHeightIsAtLeast(48.dp).performClick()
+        compose.runOnIdle { assertEquals(listOf("903"), located) }
+
+        compose.runOnIdle { replies = emptyList() }
+        compose.onAllNodesWithText("热点回复").assertCountEquals(0)
+        compose.runOnIdle { replies = hotReplies; floor = 1 }
+        compose.onAllNodesWithText("热点回复").assertCountEquals(0)
+
+        val smile = dev.nagi.sdk.NgaSmiles.resolve("a2:doge")!!
+        val preview = dev.nagi.app.ui.post.extractHotReplyPreview(listOf(
+            ContentBlock.Quote(listOf(ContentBlock.Text("引用"))),
+            ContentBlock.Text("  回复[s:a2:doge]  ", smiles = listOf(dev.nagi.sdk.InlineSmile(4, 13, smile))),
+        ))
+        assertEquals("回复[s:a2:doge]", preview.text)
+        assertEquals(listOf(dev.nagi.sdk.InlineSmile(2, 11, smile)), preview.smiles)
+    }
+
     private fun assertNoTextOverflow(label: String) {
         val layout = textLayout(label)
         assertFalse("$label exceeds its line limit", layout.multiParagraph.didExceedMaxLines)

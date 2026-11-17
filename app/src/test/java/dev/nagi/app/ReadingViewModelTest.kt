@@ -538,6 +538,70 @@ class ReadingViewModelTest {
         assertNull(vm.state.value.filterAuthorId)
         assertEquals(1 to null, client.postRequests.last())
     }
+
+    @Test fun recommendedSortReloadsRestoresAndHidesEntryOnlyAfterConfirmedEmptyPage() = runTest(dispatcher) {
+        val sessions = MemorySessionStore().apply { saveSession(NgaSession("7", "test-token")) }
+        val accounts = AccountManager(sessions, FakeBrowserCookies()).also { it.initialize() }
+        val calls = mutableListOf<Triple<String, Int, TopicSort>>()
+        var emptyDigestForForum7 = false
+        var failDigest = false
+        val client = object : NgaClient by FakeClient() {
+            override suspend fun getTopics(forumId: String, page: Int, collectionId: String?, sort: TopicSort): TopicPage {
+                calls += Triple(forumId, page, sort)
+                if (sort == TopicSort.RECOMMENDED && failDigest) throw NgaException.Network()
+                if (sort == TopicSort.RECOMMENDED && forumId == "7" && emptyDigestForForum7) {
+                    return TopicPage(emptyList(), page, 0, false)
+                }
+                return TopicPage(listOf(Topic("$forumId-$sort-$page", "Title", "Author", "7")), page, 35, false)
+            }
+        }
+        val saved = SavedStateHandle()
+        val vm = dev.nagi.app.viewmodel.TopicsViewModel(client, saved, accounts)
+        vm.openForum("7", null); runCurrent()
+        assertEquals(TopicSort.NEWEST, vm.sort.value)
+        assertTrue(vm.recommendAvailable.value)
+
+        failDigest = true
+        vm.changeSort(TopicSort.RECOMMENDED); runCurrent()
+        assertNotNull(vm.state.value.error)
+        assertTrue(vm.recommendAvailable.value)
+
+        failDigest = false
+        vm.load(true); runCurrent()
+        assertNull(vm.state.value.error)
+        assertEquals(TopicSort.RECOMMENDED, vm.sort.value)
+        assertEquals("RECOMMENDED", saved.get<String>("sort"))
+        assertTrue(vm.recommendAvailable.value)
+
+        val restored = dev.nagi.app.viewmodel.TopicsViewModel(client, saved, accounts)
+        restored.openForum("7", null); runCurrent()
+        assertEquals(TopicSort.RECOMMENDED, restored.sort.value)
+        assertEquals(Triple("7", 1, TopicSort.RECOMMENDED), calls.last())
+
+        emptyDigestForForum7 = true
+        restored.load(true); runCurrent()
+        assertTrue(restored.state.value.items.isEmpty())
+        assertFalse(restored.recommendAvailable.value)
+
+        restored.changeSort(TopicSort.NEWEST); runCurrent()
+        assertFalse(restored.recommendAvailable.value)
+        val countBeforeBlockedSwitch = calls.size
+        restored.changeSort(TopicSort.RECOMMENDED); runCurrent()
+        assertEquals(TopicSort.NEWEST, restored.sort.value)
+        assertEquals(countBeforeBlockedSwitch, calls.size)
+
+        restored.openForum("8", null); runCurrent()
+        assertTrue(restored.recommendAvailable.value)
+        restored.changeSort(TopicSort.RECOMMENDED); runCurrent()
+        assertEquals(TopicSort.RECOMMENDED, restored.sort.value)
+
+        restored.openForum("7", null); runCurrent()
+        assertFalse(restored.recommendAvailable.value)
+        assertEquals(TopicSort.NEWEST, restored.sort.value)
+
+        accounts.logout(); runCurrent()
+        assertTrue(restored.recommendAvailable.value)
+    }
 }
 
 class FakeClient : NgaClient {

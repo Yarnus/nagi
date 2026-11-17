@@ -11,7 +11,7 @@ data class Topic(
     val createdAt: Long = 0, val lastActiveAt: Long = 0, val replies: Int = 0,
     val recommended: Boolean = false,
 )
-enum class TopicSort { LAST_ACTIVE, NEWEST }
+enum class TopicSort { LAST_ACTIVE, NEWEST, RECOMMENDED }
 
 data class Subforum(val forum: Forum, val filterId: String, val attributes: Long?) {
     val filterable: Boolean get() = attributes != null && attributes > 40 && filterId.toLongOrNull() != null
@@ -29,6 +29,7 @@ data class Post(
     val authorReputation: String? = null,
     val authorPosts: Int? = null,
     val clientPlatform: String? = null,
+    val hotReplies: List<Post> = emptyList(),
 )
 data class PostPage(
     val items: List<Post>, val title: String, val authorId: String,

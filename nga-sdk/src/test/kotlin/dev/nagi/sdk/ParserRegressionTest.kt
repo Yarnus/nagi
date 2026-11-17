@@ -205,4 +205,78 @@ class ParserRegressionTest {
         assertEquals("iOS", xmlPost.clientPlatform)
         assertTrue((xmlPost.content.single() as ContentBlock.Text).spans.single().strikethrough)
     }
+
+    @Test fun xmlHotRepliesParseInOrderIgnoreStrayItemsAndRespectFloorIsolation() {
+        val raw = checkNotNull(javaClass.getResourceAsStream("/dev/nagi/sdk/hotreply-lite.xml"))
+            .bufferedReader().use { it.readText() }
+        val page = NgaXmlParser.posts(raw, 1)
+        assertEquals(2, page.items.size)
+        val main = page.items[0]
+        assertEquals(0, main.floor)
+        assertEquals(4, main.hotReplies.size)
+        assertEquals(listOf("901", "902", "903", "904"), main.hotReplies.map { it.id })
+        assertEquals(listOf("1002", "1003", "1004", "1005"), main.hotReplies.map { it.authorId })
+        assertEquals(listOf(384, 122, 37, 30), main.hotReplies.map { it.score })
+        assertEquals(listOf("热评甲", "热评乙", "热评丙", "热评丁"), main.hotReplies.map { it.author })
+        assertEquals("https://img.nga.cn/avatars/example/1002.jpg", main.hotReplies[0].avatar)
+        assertEquals(ContentBlock.Image("https://img.nga.cn/attachments/mon_202611/17/test.jpg"), main.hotReplies[0].content[0])
+        assertEquals(0, main.hotReplies[2].floor)
+        assertEquals("903", main.hotReplies[2].id)
+        assertTrue(main.hotReplies[3].content.first() is ContentBlock.Quote)
+        assertTrue(page.items[1].hotReplies.isEmpty())
+    }
+
+    @Test fun compactXmlWithoutHotRepliesParsesCommentsSafely() {
+        val raw = checkNotNull(javaClass.getResourceAsStream("/dev/nagi/sdk/compact-no-hotreply.xml"))
+            .bufferedReader().use { it.readText() }
+        val page = NgaXmlParser.posts(raw, 1)
+        val main = page.items.single()
+        assertTrue(main.hotReplies.isEmpty())
+        assertEquals(1, main.comments.size)
+        assertEquals("854038317", main.comments.single().id)
+        assertEquals("贴条用户", main.comments.single().author)
+    }
+
+    @Test fun hotRepliesEnforceCommentDepthLimitAndIgnoreNestedHotReplies() {
+        fun wrapComment(depth: Int): String = if (depth == 0) "<pid>99</pid><authorid>7</authorid><content>deep</content>"
+        else "<pid>$depth</pid><authorid>7</authorid><content>c</content><comment><item>${wrapComment(depth - 1)}</item></comment>"
+
+        val tooDeep = """
+            <root>
+              <__T><tid>1</tid><subject>T</subject><authorid>7</authorid></__T>
+              <__R><item><pid>0</pid><lou>0</lou><authorid>7</authorid><content>main</content>
+                <hotreply><item>${wrapComment(8)}</item></hotreply>
+              </item></__R>
+            </root>
+        """.trimIndent()
+        val error = assertThrows(NgaException.Protocol::class.java) { NgaXmlParser.posts(tooDeep, 1) }
+        assertEquals(ProtocolReason.XML_COMMENT_DEPTH.code, error.code)
+
+        val nestedHotReply = """
+            <root>
+              <__T><tid>1</tid><subject>T</subject><authorid>7</authorid></__T>
+              <__R><item><pid>0</pid><lou>0</lou><authorid>7</authorid><content>main</content>
+                <hotreply><item><pid>10</pid><lou>1</lou><authorid>7</authorid><content>hr</content>
+                  <hotreply><item><pid>11</pid><lou>2</lou><authorid>7</authorid><content>ignored</content></item></hotreply>
+                </item></hotreply>
+              </item></__R>
+            </root>
+        """.trimIndent()
+        val parsed = NgaXmlParser.posts(nestedHotReply, 1).items.single()
+        assertTrue(parsed.hotReplies.single().hotReplies.isEmpty())
+    }
+
+    @Test fun emptyTopicListWithZeroRowsDoesNotThrowWhileMissingRowsStillRejects() {
+        val xmlZero = NgaXmlParser.topics("""<root><__ROWS>0</__ROWS><__F><fid>1</fid></__F></root>""", 1)
+        assertTrue(xmlZero.items.isEmpty())
+        assertEquals(0, xmlZero.total)
+        assertFalse(xmlZero.hasMore)
+
+        val jsonZero = NgaParser.topics("""{"data":{"__ROWS":0}}""", 1)
+        assertTrue(jsonZero.items.isEmpty())
+        assertEquals(0, jsonZero.total)
+
+        assertTrue(runCatching { NgaXmlParser.topics("""<root><__F><fid>1</fid></__F></root>""", 1) }.exceptionOrNull() is NgaException.Protocol)
+        assertTrue(runCatching { NgaParser.topics("""{"data":{}}""", 1) }.exceptionOrNull() is NgaException.Protocol)
+    }
 }

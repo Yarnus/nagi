@@ -175,7 +175,10 @@ UID 不匹配是协议错误。不推断完整 IP。
 
 ## 帖子元数据与分页
 
+`getTopics` 支持 `TopicSort.RECOMMENDED`，发送 `recommend=1` 且不附带 `order_by`（适用于版块 `fid` 和合集 `stid`）；当服务端无主题且明确返回 `__ROWS=0` 时允许省略 `__T` 并返回空列表，缺少 `__ROWS=0` 仍视为协议错误。
+
 帖子解析器提供净分数 `score`（回退为零）、可选的作者级别、威望、发帖数和客户端平台。
+`Post.hotReplies` 仅在主楼（`depth == 0`）解析 `lite=xml`（及 JSON）中的 `hotreply` 节点，与 `comment` 共用递归深度上限，并忽略主楼其余直接 `item` 杂项子节点；`__output=10` 仅提供 ID 列表而不返回热点回复正文，HTML 兜底不解析热点回复。热点回复条目的 `lou` 不可信，跳转原楼层必须仅使用 `pid` 通过 `getPostPage` 定位。
 零分不能证明服务端提供了该值。级别先通过 `__GROUPS` 解析 `memberid`/`groupid`，
 再尝试用户组文本。威望先取 `rvrc`，再取 `fame`：整数除以十，小数直接格式化。
 无效或负数发帖数保持 null。客户端标签对 iOS/Android/Windows 及其数字代码

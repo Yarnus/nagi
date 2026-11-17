@@ -53,6 +53,27 @@ class NgaClientTest {
             assertEquals("postdatedesc", server.takeRequest().requestUrl!!.queryParameter("order_by"))
         }
     }
+    @Test fun recommendedSortUsesRecommendParameterForForumAndCollection() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody(topic))
+            server.enqueue(MockResponse().setBody("""<root><__T/><__ROWS>0</__ROWS></root>"""))
+            val client = HttpNgaClient(server.url("/"), MemorySessionStore())
+            val forumPage = client.getTopics("310", sort = TopicSort.RECOMMENDED)
+            assertEquals(1, forumPage.items.size)
+            val forumUrl = server.takeRequest().requestUrl!!
+            assertEquals("310", forumUrl.queryParameter("fid"))
+            assertEquals("1", forumUrl.queryParameter("recommend"))
+            assertNull(forumUrl.queryParameter("order_by"))
+
+            val collectionPage = client.getTopics("0", collectionId = "42", sort = TopicSort.RECOMMENDED)
+            assertTrue(collectionPage.items.isEmpty())
+            val collectionUrl = server.takeRequest().requestUrl!!
+            assertEquals("42", collectionUrl.queryParameter("stid"))
+            assertNull(collectionUrl.queryParameter("fid"))
+            assertEquals("1", collectionUrl.queryParameter("recommend"))
+            assertNull(collectionUrl.queryParameter("order_by"))
+        }
+    }
     @Test fun gbkTopicsWithJavascriptOrMislabeledContentTypeDecodeCleanly() = runBlocking {
         MockWebServer().use { server ->
             val gbk = Buffer().write(topic.toByteArray(charset("GBK")))

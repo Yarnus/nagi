@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="GB18030"?>
+<root>
+  <__GLOBAL>
+    <_ATTACH_BASE_VIEW>img.nga.cn/attachments</_ATTACH_BASE_VIEW>
+  </__GLOBAL>
+  <__U>
+    <item i="1001">
+      <uid>1001</uid>
+      <username>紧凑测试楼主</username>
+      <memberid>39</memberid>
+      <postnum>35</postnum>
+      <rvrc>10</rvrc>
+    </item>
+    <item i="1002">
+      <uid>1002</uid>
+      <username>贴条用户</username>
+      <memberid>39</memberid>
+      <postnum>329</postnum>
+      <rvrc>10</rvrc>
+    </item>
+    <__GROUPS>
+      <item i="39"><item i="0">学徒</item><item i="1">98528</item><item i="2">39</item></item>
+    </__GROUPS>
+  </__U>
+  <__R>
+    <item i="0">
+      <content>紧凑格式主楼正文。</content>
+      <tid>45952829</tid>
+      <score>0</score>
+      <postdate>2026-01-08 13:36</postdate>
+      <authorid>1001</authorid>
+      <subject>紧凑格式测试标题</subject>
+      <fid>-7955747</fid>
+      <pid>0</pid>
+      <lou>0</lou>
+      <comment_id>
+        <item i="0">854038317</item>
+      </comment_id>
+      <item i="14"><item i="13">3</item><item i="15">4</item></item>
+      <item i="17">,853914935,853915049</item>
+      <from_client>0 /</from_client>
+      <comment>
+        <item i="0">
+          <pid>854038317</pid>
+          <fid>-7955747</fid>
+          <tid>45952829</tid>
+          <authorid>1002</authorid>
+          <type>1</type>
+          <score>24</score>
+          <postdate>2026-01-09 14:45</postdate>
+          <content>[b]Reply to [tid=45952829]Topic[/tid] Post by [uid=1001]紧凑测试楼主[/uid] (2026-01-08 13:36)[/b]&lt;br/&gt;&lt;br/&gt;测试贴条内容</content>
+          <lou>0</lou>
+          <comment_to_id>-1</comment_to_id>
+          <from_client>0 /</from_client>
+        </item>
+      </comment>
+    </item>
+  </__R>
+  <__T>
+    <tid>45952829</tid>
+    <subject>紧凑格式测试标题</subject>
+    <authorid>1001</authorid>
+  </__T>
+  <__ROWS>1</__ROWS>
+  <__R__ROWS_PAGE>20</__R__ROWS_PAGE>
+</root>

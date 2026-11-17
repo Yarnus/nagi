@@ -17,17 +17,24 @@ import org.robolectric.annotation.GraphicsMode
 
 private class PagingClient : NgaClient by FakeClient() {
     val pages = mutableListOf<Int>()
+    val sorts = mutableListOf<TopicSort>()
     var failSecond = false
+    var emptyRecommended = false
     var secondGate: CompletableDeferred<Unit>? = null
     override suspend fun getTopics(forumId: String, page: Int, collectionId: String?, sort: TopicSort): TopicPage {
         pages += page
+        sorts += sort
+        if (sort == TopicSort.RECOMMENDED && emptyRecommended) {
+            return TopicPage(emptyList(), page, 0, false)
+        }
         if (page == 2) {
             secondGate?.await()
             if (failSecond) throw NgaException.Network()
         }
         return TopicPage((1..30).map { offset ->
             val id = (page - 1) * 30 + offset
-            Topic("$id", "主题 $id", "测试作者", "7")
+            Topic("$id", if (sort == TopicSort.RECOMMENDED) "精华 $id" else "主题 $id", "测试作者", "7",
+                recommended = sort == TopicSort.RECOMMENDED)
         }, page, 90, page < 3)
     }
 }
@@ -79,5 +86,30 @@ class TopicAutoPagingTest {
         compose.runOnIdle { assertEquals(listOf(1, 2, 2), client.pages) }
         compose.onNode(hasScrollToIndexAction()).performScrollToIndex(55)
         compose.onNodeWithText("主题 56").assertExists()
+    }
+
+    @Test fun recommendedSortPagesAcrossMultiplePages() {
+        compose.onNodeWithText("Forum").performClick()
+        compose.onNodeWithText("主题 1").assertIsDisplayed()
+        compose.onNodeWithContentDescription("排序方式").performClick()
+        compose.onNodeWithText("精华区").performClick()
+        compose.onNodeWithText("精华 1").assertIsDisplayed()
+        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(27)
+        compose.waitUntil { client.sorts.count { it == TopicSort.RECOMMENDED } >= 2 }
+        compose.waitForIdle()
+        compose.onNodeWithText("精华 31").assertExists()
+    }
+
+    @Test fun digestSortMenuAndEmptyDigestHidesEntryUntilForumSwitch() {
+        client.emptyRecommended = true
+        compose.onNodeWithText("Forum").performClick()
+        compose.onNodeWithText("主题 1").assertIsDisplayed()
+        compose.onNodeWithContentDescription("排序方式").performClick()
+        compose.onNodeWithText("精华区").performClick()
+        compose.onNodeWithText("本版暂无精华主题").assertIsDisplayed()
+        compose.onNodeWithText("切回最新发布").performClick()
+        compose.onNodeWithText("主题 1").assertIsDisplayed()
+        compose.onNodeWithContentDescription("排序方式").performClick()
+        compose.onAllNodesWithText("精华区").assertCountEquals(0)
     }
 }

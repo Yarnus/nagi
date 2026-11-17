@@ -55,10 +55,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -186,6 +182,7 @@ fun TopicsScreen(
 
     val state by vm.state.collectAsStateWithLifecycle()
     val sort by vm.sort.collectAsStateWithLifecycle()
+    val recommendAvailable by vm.recommendAvailable.collectAsStateWithLifecycle()
     val subforums by vm.subforums.collectAsStateWithLifecycle()
     val filterBusy by vm.filterBusy.collectAsStateWithLifecycle()
     val filterNotice by vm.filterNotice.collectAsStateWithLifecycle()
@@ -198,6 +195,13 @@ fun TopicsScreen(
     val filterLocked by vm.filterLocked.collectAsStateWithLifecycle()
     val filterEpoch by vm.filterEpoch.collectAsStateWithLifecycle()
     LaunchedEffect(filterEpoch) { if (filterEpoch > 0) listState.scrollToItem(0) }
+    var lastSort by remember { mutableStateOf(sort) }
+    LaunchedEffect(sort) {
+        if (lastSort != sort) {
+            lastSort = sort
+            listState.scrollToItem(0)
+        }
+    }
     var scopeKey by rememberSaveable { mutableStateOf<String?>(null) }
     var choosingForum by rememberSaveable { mutableStateOf(false) }
     var showingRelatedForums by rememberSaveable { mutableStateOf(false) }
@@ -422,6 +426,18 @@ fun TopicsScreen(
                                                     vm.changeSort(TopicSort.LAST_ACTIVE)
                                                 },
                                             )
+                                            if (recommendAvailable) {
+                                                FrostedDropdownItem(
+                                                    text = "精华区",
+                                                    leadingIcon = NagiIcons.Star,
+                                                    selected = sort == TopicSort.RECOMMENDED,
+                                                    onClick = {
+                                                        moreExpanded = false
+                                                        loadingMore = false
+                                                        vm.changeSort(TopicSort.RECOMMENDED)
+                                                    },
+                                                )
+                                            }
                                             HorizontalDivider(
                                                 modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.xs),
                                                 thickness = 1.dp,
@@ -491,7 +507,7 @@ fun TopicsScreen(
                                                 verticalArrangement = Arrangement.spacedBy(Space.xs),
                                                 itemVerticalAlignment = Alignment.CenterVertically,
                                             ) {
-                                                TopicSortMenu(sort) { next ->
+                                                TopicSortMenu(sort, recommendAvailable) { next ->
                                                     loadingMore = false
                                                     vm.changeSort(next)
                                                 }
@@ -624,7 +640,9 @@ fun TopicsScreen(
 
                                 if (!state.loading && state.error == null && state.items.isEmpty()) {
                                     item(key = "empty", contentType = "empty") {
+                                        val isEmptyDigest = activeForumId != null && sort == TopicSort.RECOMMENDED
                                         val emptyMessage = when {
+                                            isEmptyDigest -> "本版暂无精华主题"
                                             activeForumId != null -> "暂无主题"
                                             scope == null -> "先选择版块，再搜索该版主题"
                                             submitted.isBlank() -> "输入关键词查找主题"
@@ -636,7 +654,27 @@ fun TopicsScreen(
                                                 .padding(horizontal = gutter, vertical = Space.xs),
                                             shape = NagiThemeTokens.shapes.topicCard,
                                         ) {
-                                            Notice(emptyMessage)
+                                            if (isEmptyDigest) {
+                                                Column(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(Space.xl),
+                                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                                    verticalArrangement = Arrangement.spacedBy(Space.md),
+                                                ) {
+                                                    Text(emptyMessage, style = typography.body, color = colors.textSecondary)
+                                                    CapsuleButton(
+                                                        text = "切回最新发布",
+                                                        onClick = {
+                                                            loadingMore = false
+                                                            vm.changeSort(TopicSort.NEWEST)
+                                                        },
+                                                        style = CapsuleStyle.Neutral,
+                                                    )
+                                                }
+                                            } else {
+                                                Notice(emptyMessage)
+                                            }
                                         }
                                     }
                                 }
@@ -1012,10 +1050,15 @@ private fun RelatedForumRow(
 }
 
 @Composable
-private fun TopicSortMenu(current: TopicSort, onSelect: (TopicSort) -> Unit) {
+private fun TopicSortMenu(current: TopicSort, recommendAvailable: Boolean, onSelect: (TopicSort) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    val options = listOf(TopicSort.NEWEST to "最新发布", TopicSort.LAST_ACTIVE to "最近活跃")
-    val activeLabel = options.first { it.first == current }.second
+    val allOptions = listOf(
+        TopicSort.NEWEST to "最新发布",
+        TopicSort.LAST_ACTIVE to "最近活跃",
+        TopicSort.RECOMMENDED to "精华区",
+    )
+    val options = allOptions.filter { it.first != TopicSort.RECOMMENDED || recommendAvailable }
+    val activeLabel = allOptions.first { it.first == current }.second
     Box {
         CapsuleButton(
             text = activeLabel,
@@ -1173,25 +1216,10 @@ internal fun TopicRow(
 
     val parsed = remember(topic.title) { parseTopicSubject(topic.title) }
     val hasTopBadges = topic.recommended || parsed.tag != null
-    val indicatorColor = colors.goldAccent
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .drawWithContent {
-                drawContent()
-                if (selected) {
-                    val barW = 3.dp.toPx()
-                    val insetY = 10.dp.toPx()
-                    val barH = (size.height - insetY * 2f).coerceAtLeast(barW)
-                    drawRoundRect(
-                        color = indicatorColor,
-                        topLeft = Offset(0f, (size.height - barH) / 2f),
-                        size = Size(barW, barH),
-                        cornerRadius = CornerRadius(barW, barW),
-                    )
-                }
-            }
             .then(interactionModifier),
     ) {
         Column(
@@ -1272,7 +1300,7 @@ internal fun TopicRow(
                     }
                 },
                 trailing = {
-                    val primaryTime = if (sort == TopicSort.NEWEST) topic.createdAt else topic.lastActiveAt
+                    val primaryTime = if (sort == TopicSort.NEWEST || sort == TopicSort.RECOMMENDED) topic.createdAt else topic.lastActiveAt
                     val timestamp = primaryTime.takeIf { it > 0 } ?: topic.createdAt.takeIf { it > 0 } ?: topic.lastActiveAt
                     if (timestamp > 0) {
                         Text(

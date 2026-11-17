@@ -299,7 +299,11 @@ internal class HttpNgaClient(
         require(collectionId == null || collectionId.isNotBlank())
         val scope = if (collectionId == null) "fid" to forumId else "stid" to collectionId
         val parameters = mapOf(scope, "page" to "$page").toMutableMap()
-        if (sort == TopicSort.NEWEST) parameters["order_by"] = "postdatedesc"
+        when (sort) {
+            TopicSort.LAST_ACTIVE -> Unit
+            TopicSort.NEWEST -> parameters["order_by"] = "postdatedesc"
+            TopicSort.RECOMMENDED -> parameters["recommend"] = "1"
+        }
         return exchangeRead(formats = xmlFormats, cacheKey = "topics",
             request = { api, format -> api.topicsPost(parameters + format) },
             parse = { raw, _ -> parseStructuredTopics(raw, page) },
