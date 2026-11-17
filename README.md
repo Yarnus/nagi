@@ -23,12 +23,11 @@ Nagi 是一个非官方 NGA Android 客户端，使用 Kotlin 和 Jetpack Compos
 
 ## 截图
 
-艾泽拉斯议事厅帖子列表，截自 Android 模拟器。展开态通过调整模拟器为 2208×1840 尺寸展示，
-仅演示宽屏布局，不代表真实折叠行为已验证。
+艾泽拉斯议事厅帖子列表与阅读器截图，展示竖屏、折叠屏展开单栏与展开双栏布局。
 
-| 竖屏 | 折叠屏展开尺寸（模拟） |
-| --- | --- |
-| <img src="docs/images/azeroth-topics-portrait.png" alt="艾泽拉斯议事厅竖屏帖子列表" width="270"> | <img src="docs/images/azeroth-topics-expanded.png" alt="艾泽拉斯议事厅模拟折叠屏展开尺寸的帖子列表" width="552"> |
+| 竖屏 | 折叠屏展开（单栏） | 折叠屏展开（双栏） |
+| --- | --- | --- |
+| <img src="docs/images/azeroth-topics-portrait.png" alt="艾泽拉斯议事厅竖屏帖子列表" width="220"> | <img src="docs/images/azeroth-topics-unfolded-list.jpg" alt="艾泽拉斯议事厅折叠屏展开单栏帖子列表" width="265"> | <img src="docs/images/azeroth-topics-expanded.jpg" alt="艾泽拉斯议事厅折叠屏展开双栏列表与阅读器" width="465"> |
 
 ## 构建
 
