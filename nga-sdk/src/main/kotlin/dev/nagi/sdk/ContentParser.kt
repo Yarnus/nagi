@@ -13,11 +13,11 @@ import org.jsoup.nodes.TextNode
 object ContentParser {
     private val referenceTags = Regex("""\[(?:uid=-?\d+|pid=\d+(?:,(?:\d+|tid=\d+|reply=\d+))*|/(?:uid|pid))\]""", RegexOption.IGNORE_CASE)
     private val quoteHeader = Regex(
-        """^\s*(?:\[b\]\s*)?(?:(?:Reply\s+to\s+)?\[pid=(?:\d+,\d+,\d+|\d+,tid=\d+(?:,reply=\d+)?)\](?:Reply)?\[/pid\]\s*)?(?:\[b\]\s*)?Post\s+by\s+\[uid=-?\d+\]([^\[\]\r\n]+)(?:\[/uid\]|\[/b\])\s*(?:\(([^)\r\n]+)\))?\s*(?:\[/b\])?\s*""",
+        """^\s*(?:\[b\]\s*)?(?:(?:Reply\s+to\s+)?\[pid=(?:\d+,\d+,\d+|\d+,tid=\d+(?:,reply=\d+)?)\](?:Reply)?\[/pid\]\s*)?(?:\[b\]\s*)?Post\s+by\s+\[uid=-?\d+\]([^\[\]\r\n]+)(?:\[/uid\]|\[/b\])\s*(?:\(([^)\r\n]+)\))?\s*[:：]?\s*(?:\[/b\])?\s*[:：]?\s*(?:<br\s*/?>\s*|\[stripbr\]\s*)*""",
         RegexOption.IGNORE_CASE,
     )
     private val replyHeader = Regex(
-        """^\s*\[b\]\s*Reply\s+to\s+\[pid=([^\]]+)\](?:Reply)?\[/pid\][\s\S]*?\[/b\]""",
+        """^\s*\[b\]\s*Reply\s+to\s+\[pid=([^\]]+)\](?:Reply)?\[/pid\][\s\S]*?\[/b\]\s*[:：]?\s*(?:<br\s*/?>\s*|\[stripbr\]\s*)*""",
         RegexOption.IGNORE_CASE,
     )
     private val postReference = Regex("""\[pid=([^\]]+)\]""", RegexOption.IGNORE_CASE)
@@ -242,7 +242,24 @@ object ContentParser {
             val spans = mutableListOf<TextSpan>()
             val smiles = mutableListOf<InlineSmile>()
             fun flush() {
-                if (text.isNotBlank()) blocks += ContentBlock.Text(text.toString(), spans.toList(), smiles.toList())
+                var start = 0
+                while (start < text.length && (text[start] == '\n' || text[start] == '\r')) start++
+                var end = text.length
+                while (end > start && (text[end - 1] == '\n' || text[end - 1] == '\r')) end--
+                val trimmed = text.substring(start, end)
+                if (trimmed.isNotBlank()) {
+                    val trimmedSpans = spans.mapNotNull { span ->
+                        val s = (span.start - start).coerceAtLeast(0)
+                        val e = (span.end - start).coerceAtMost(trimmed.length)
+                        if (s < e) span.copy(start = s, end = e) else null
+                    }
+                    val trimmedSmiles = smiles.mapNotNull { smile ->
+                        val s = smile.start - start
+                        val e = smile.end - start
+                        if (s >= 0 && e <= trimmed.length) smile.copy(start = s, end = e) else null
+                    }
+                    blocks += ContentBlock.Text(trimmed, trimmedSpans, trimmedSmiles)
+                }
                 text.clear(); spans.clear(); smiles.clear()
             }
             fun append(value: String, style: TextSpan) {

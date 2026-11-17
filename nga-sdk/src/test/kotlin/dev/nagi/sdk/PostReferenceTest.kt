@@ -14,6 +14,30 @@ class PostReferenceTest {
         assertEquals(listOf(ContentBlock.Text("Original")), quote.children)
     }
 
+    @Test fun quoteAndReplyHeadersStripTrailingColonAndLeadingBreaks() {
+        val blocks = ContentParser.parse(
+            "[quote][pid=101,202,3]Reply[/pid] [b]Post by [uid=7]Author[/uid] (2026-11-04 10:15):[/b]<br/><br/>Original[/quote]<br/><br/>Reply",
+        )
+        assertEquals(2, blocks.size)
+        val quote = blocks[0] as ContentBlock.Quote
+        assertEquals("Author", quote.author)
+        assertEquals("2026-11-04 10:15", quote.date)
+        assertEquals(PostReference("202", "101", 3), quote.reference)
+        assertEquals(listOf(ContentBlock.Text("Original")), quote.children)
+        assertEquals(ContentBlock.Text("Reply"), blocks[1])
+
+        val fullWidthColon = ContentParser.parse(
+            "[quote][b]Reply to [pid=101,202,3]Reply[/pid] Post by [uid=7]Author[/uid] (2026-11-04 10:15)[/b]：<br/><br/>Original[/quote]",
+        ).single() as ContentBlock.Quote
+        assertEquals(listOf(ContentBlock.Text("Original")), fullWidthColon.children)
+
+        val bare = ContentParser.parse(
+            "[b]Reply to [pid=0,202,1]Reply[/pid] Post by [uid=7]Author[/uid] (2026-11-04 10:15):[/b]<br/><br/>My reply",
+        )
+        assertEquals(2, bare.size)
+        assertEquals(ContentBlock.Text("My reply"), bare[1])
+    }
+
     @Test fun bareReplyBecomesReferenceWithoutConsumingReplyBody() {
         val blocks = ContentParser.parse("[b]Reply to [pid=0,202,1]Reply[/pid] Post by [uid=7]Author[/uid][/b]My reply")
         val quote = blocks.first() as ContentBlock.Quote

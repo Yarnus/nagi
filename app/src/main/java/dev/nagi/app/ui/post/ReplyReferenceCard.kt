@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -33,13 +34,13 @@ internal data class PostReferences(
 
 internal val LocalPostReferences = staticCompositionLocalOf<PostReferences?> { null }
 
-internal fun referencePreview(blocks: List<ContentBlock>): String = blocks.joinToString("\n") { block ->
+internal fun referencePreview(blocks: List<ContentBlock>): String = blocks.mapNotNull { block ->
     when (block) {
         is ContentBlock.Text -> block.value
         is ContentBlock.Image -> "[图片]"
         is ContentBlock.Media -> "[附件]"
         is ContentBlock.Code -> block.value
-        is ContentBlock.Quote -> "" // Keep the directly referenced reply, not its ancestors.
+        is ContentBlock.Quote -> null // Keep the directly referenced reply, not its ancestors.
         is ContentBlock.Table -> "[表格]"
         is ContentBlock.Heading -> referencePreview(block.children)
         is ContentBlock.Divider -> referencePreview(block.children)
@@ -47,8 +48,10 @@ internal fun referencePreview(blocks: List<ContentBlock>): String = blocks.joinT
         is ContentBlock.ListBlock -> block.items.joinToString("\n") { referencePreview(it) }
         is ContentBlock.Collapse -> "[${block.title}]"
         is ContentBlock.Dice -> "[骰子]"
-    }
-}.trim().ifBlank { if (blocks.any { it is ContentBlock.Quote }) "[引用内容]" else "" }
+    }?.trim()?.takeIf(String::isNotEmpty)
+}.joinToString("\n")
+    .replace(Regex("\n{2,}"), "\n")
+    .ifBlank { if (blocks.any { it is ContentBlock.Quote }) "[引用内容]" else "" }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,23 +76,47 @@ internal fun ReplyReferenceCard(quote: ContentBlock.Quote, preferences: ReadingP
         append(if (author == null) "引用原文" else "回复 $author")
         if (floor != null) append(" · #$floor")
     }
+    val cardShape = RoundedCornerShape(12.dp)
+    val previewSize = (preferences.fontSize - 1).coerceAtLeast(13)
     Surface(
-        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "查看完整原文") { expanded = true },
-        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(cardShape)
+            .clickable(role = Role.Button, onClickLabel = "查看完整原文") { expanded = true },
+        shape = cardShape,
         color = colors.insetContainer,
     ) {
-        Column(Modifier.padding(Space.md), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(heading, Modifier.weight(1f), style = typography.bodyText, color = colors.textPrimary)
-                Icon(NagiIcons.ChevronRight, null, Modifier.size(18.dp), tint = colors.textSecondary)
+        Column(
+            modifier = Modifier.padding(horizontal = Space.md, vertical = Space.sm),
+            verticalArrangement = Arrangement.spacedBy(Space.xs),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Space.xs),
+            ) {
+                Text(
+                    text = heading,
+                    modifier = Modifier.weight(1f),
+                    style = typography.capsuleLabel,
+                    color = colors.textPrimary,
+                )
+                Icon(
+                    imageVector = NagiIcons.ChevronRight,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = colors.textSecondary,
+                )
             }
             Text(
                 text = preview.ifBlank {
                     result?.error ?: if (result?.loading == true) "正在加载原文…" else "点击查看原文"
                 },
-                style = typography.bodyText.copy(fontSize = preferences.fontSize.sp),
+                style = typography.bodyText.copy(
+                    fontSize = previewSize.sp,
+                    lineHeight = (previewSize + 6).sp,
+                ),
                 color = colors.textSecondary,
-                maxLines = 3,
+                maxLines = 5,
                 overflow = TextOverflow.Ellipsis,
             )
         }

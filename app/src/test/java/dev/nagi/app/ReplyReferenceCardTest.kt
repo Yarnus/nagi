@@ -5,6 +5,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.test.*
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.text.TextLayoutResult
 import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.ui.post.*
 import dev.nagi.app.ui.theme.NagiTheme
@@ -74,5 +75,24 @@ class ReplyReferenceCardTest {
             ContentBlock.Quote(listOf(ContentBlock.Text("Ancestor body"))),
             ContentBlock.Text("My body"), ContentBlock.Image("https://img.nga.cn/example.png"),
         )))
+        assertEquals("First\nSecond", referencePreview(listOf(
+            ContentBlock.Text("First\n\n"),
+            ContentBlock.Quote(listOf(ContentBlock.Text("Ancestor"))),
+            ContentBlock.Text("\n\nSecond"),
+        )))
+    }
+
+    @Test fun previewDisplaysUpToFiveLinesBeforeEllipsis() {
+        val sixLines = (1..6).joinToString("\n") { "Line $it" }
+        val quote = ContentBlock.Quote(listOf(ContentBlock.Text(sixLines)), "Author", reference = target)
+        compose.setContent { NagiTheme("light") {
+            ContentBlocks(listOf(quote), ReadingPreferences(), {})
+        } }
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText(sixLines, useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val layout = layouts.single()
+        assertEquals(5, layout.lineCount)
+        assertTrue(layout.isLineEllipsized(4))
     }
 }

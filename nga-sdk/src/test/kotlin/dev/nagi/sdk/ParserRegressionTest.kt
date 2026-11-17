@@ -222,7 +222,13 @@ class ParserRegressionTest {
         assertEquals(ContentBlock.Image("https://img.nga.cn/attachments/mon_202611/17/test.jpg"), main.hotReplies[0].content[0])
         assertEquals(0, main.hotReplies[2].floor)
         assertEquals("903", main.hotReplies[2].id)
-        assertTrue(main.hotReplies[3].content.first() is ContentBlock.Quote)
+        val quotedReply = main.hotReplies[3].content.first() as ContentBlock.Quote
+        assertEquals("热评甲", quotedReply.author)
+        assertEquals(
+            listOf(ContentBlock.Image("https://img.nga.cn/attachments/mon_202611/17/test.jpg"), ContentBlock.Text("核心内容")),
+            quotedReply.children,
+        )
+        assertEquals(ContentBlock.Text("这下看懂了。"), main.hotReplies[3].content[1])
         assertTrue(page.items[1].hotReplies.isEmpty())
     }
 
