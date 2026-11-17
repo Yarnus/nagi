@@ -1283,22 +1283,11 @@ internal fun TopicRow(
 
             EdgeAlignedMetaRow(
                 leading = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(
-                            imageVector = NagiIcons.Person,
-                            contentDescription = null,
-                            modifier = Modifier.size(13.dp),
-                            tint = colors.textSecondary,
-                        )
-                        Text(
-                            text = topic.author.ifBlank { "匿名" },
-                            style = typography.metadata,
-                            color = colors.textSecondary,
-                        )
-                    }
+                    Text(
+                        text = topic.author.ifBlank { "匿名" },
+                        style = typography.metadata,
+                        color = colors.textSecondary,
+                    )
                 },
                 trailing = {
                     val primaryTime = if (sort == TopicSort.NEWEST || sort == TopicSort.RECOMMENDED) topic.createdAt else topic.lastActiveAt
