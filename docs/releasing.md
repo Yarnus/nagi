@@ -2,13 +2,16 @@
 
 ## GitHub Actions
 
-[Build and release](../.github/workflows/build.yml) 在 PR、`master` 推送和 `v*` 标签推送时运行
+[Build and release](../.github/workflows/build.yml) 在 PR 和 `master` 推送时运行
 SDK 检查、Android 单元测试、Debug 构建和 lint，提供 7 天保留期的 Debug APK 与检查报告。
 不运行真实 NGA 接口测试或设备插桩测试。项目当前 lint 配置不会因 lint 告警导致构建失败，需查看报告。
 
-只有标签推送且检查成功后才构建签名 Release APK，并创建 GitHub Release，附带三个独立 APK 和
-`SHA256SUMS`。标签必须是 `vMAJOR.MINOR.PATCH`，指向 `master` 历史中的提交，且版本与 APK
-的 `versionName` 一致。分支和 PR 构建不读取签名 Secrets。
+`v*` 标签推送不重复运行上述检查，而由独立门禁查询同一提交 SHA 在 `build.yml` 中由
+`master` 推送触发的最新 CI 运行，只有该运行已完成且成功才构建签名 Release APK，并创建
+GitHub Release，附带三个独立 APK 和 `SHA256SUMS`。PR 或其他提交的成功检查不能替代此门禁；
+没有匹配记录、运行未完成或未成功、API 查询失败均阻止发布，不自动等待或重试。
+标签必须是 `vMAJOR.MINOR.PATCH`，指向 `master` 历史中的提交，且版本与 APK 的
+`versionName` 一致。分支、PR 构建和发布门禁不读取签名 Secrets。
 
 Debug / Release 均通过 ABI splits 生成 `arm64-v8a`、`armeabi-v7a`、`x86_64` 三种 APK，
 不生成通用 APK 或 32 位 x86 APK。发布附件命名为 `nagi-<tag>-<abi>.apk`；发布前会核对三种
@@ -72,7 +75,9 @@ git push origin v0.1.0
 查看 [Actions](https://github.com/Yarnus/nagi/actions) 和
 [Releases](https://github.com/Yarnus/nagi/releases)。只创建本地标签不会触发发布；
 不要把标签打在未合并分支上，也不要移动已发布标签。
-发布失败时检查 Actions 日志；修复 Secrets 后可重跑失败任务。流程不覆盖已存在的 Release。
+发布失败时检查 Actions 日志；门禁会输出匹配的 master CI 链接。如果标签推早了，等待该提交的
+master CI 成功后重跑失败任务，无需移动标签；没有匹配记录时，需先让该提交触发 master 推送检查。
+修复 Secrets 后也可重跑失败任务。流程不覆盖已存在的 Release。
 
 工作流检查构建、测试、APK 架构与签名，但不能证明三种架构的设备运行行为或真实 NGA 接口可用。
 首次发布前应在设备上安装测试，并记录签名证书指纹；后续用新 APK 覆盖安装验证升级与数据保留。

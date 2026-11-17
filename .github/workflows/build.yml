@@ -17,6 +17,7 @@ concurrency:
 jobs:
   check:
     name: Tests, lint and debug APK
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -49,14 +50,14 @@ jobs:
             nga-sdk/build/reports/
           retention-days: 7
 
-  release:
-    name: Signed APK and GitHub Release
+  verify-release:
+    name: Verify release prerequisites
     if: github.event_name == 'push' && github.ref_type == 'tag'
-    needs: check
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
     permissions:
-      contents: write
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -73,6 +74,55 @@ jobs:
             exit 1
           fi
           git merge-base --is-ancestor HEAD origin/master
+      - name: Require successful master CI for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+
+          sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          repo = os.environ['GITHUB_REPOSITORY']
+          endpoint = (
+              f'repos/{repo}/actions/workflows/build.yml/runs'
+              f'?branch=master&event=push&head_sha={sha}&per_page=100'
+          )
+          pages = json.loads(subprocess.check_output(
+              ['gh', 'api', '--paginate', '--slurp', endpoint], text=True,
+          ))
+          runs = [
+              run for page in pages for run in page['workflow_runs']
+              if run['head_sha'] == sha
+              and run['event'] == 'push'
+              and run['head_branch'] == 'master'
+          ]
+          if not runs:
+              raise SystemExit(f'No master push CI found for {sha}. Push to master and wait for CI first.')
+          latest = max(runs, key=lambda run: run['run_number'])
+          print(f"Master CI: {latest['html_url']}", flush=True)
+          if latest['status'] != 'completed' or latest['conclusion'] != 'success':
+              raise SystemExit(
+                  f"Master CI is not successful: {latest['status']} / {latest['conclusion']}. "
+                  'Wait for master CI to succeed, then rerun failed release jobs.'
+              )
+          PY
+
+  release:
+    name: Signed APK and GitHub Release
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: verify-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin

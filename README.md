@@ -79,8 +79,9 @@ NAGI_READ_SMOKE=1 ./gradlew -PsdkOnly :nga-sdk:smoke
 替换不同签名的安装包通常需要卸载，卸载会清除本地数据。
 
 GitHub Actions 会在 PR 和 `master` 推送时执行检查并提供 Debug APK；推送 `vMAJOR.MINOR.PATCH`
-标签时，检查通过后自动构建签名 APK 并发布 GitHub Release。标签须指向 `master` 历史中的提交，
-且匹配 `versionName`。密钥生成、GitHub Secrets 配置和发版步骤见[发布指南](docs/releasing.md)。
+标签时，不重复运行检查，而是验证同一提交的最新 master 推送 CI 已成功，再构建签名 APK 并发布
+GitHub Release。标签须指向 `master` 历史中的提交，且匹配 `versionName`。如果标签推早了，
+等待 master CI 成功后重跑失败任务即可。密钥生成、GitHub Secrets 配置和发版步骤见[发布指南](docs/releasing.md)。
 
 ## 致谢
 
