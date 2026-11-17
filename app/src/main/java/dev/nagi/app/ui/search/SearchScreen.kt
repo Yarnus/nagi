@@ -21,7 +21,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -47,6 +46,7 @@ import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.CardGroupPosition
 import dev.nagi.app.ui.components.ChromeIconButton
+import dev.nagi.app.ui.components.ForumScopePickerSheet
 import dev.nagi.app.ui.components.LoadingLine
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.Notice
@@ -318,110 +318,29 @@ fun SearchScreen(
     }
 
     if (choosingScope) {
-        val filtered = remember(directory.items, scopeFilter) {
-            directory.items.filter { it.name.contains(scopeFilter, ignoreCase = true) }
+        val selectedKey = state.forumId?.let { id ->
+            directory.items.firstOrNull { it.id == id && it.collectionId == state.collectionId }?.key
         }
-        ModalBottomSheet(
+        ForumScopePickerSheet(
+            forums = directory.items,
+            selectedForumKey = selectedKey,
+            includeAllOption = true,
+            allSelected = state.forumId == null && state.collectionId == null,
+            onSelectAll = {
+                choosingScope = false
+                scopeFilter = ""
+                vm.scope(null)
+            },
+            onSelectForum = { forum ->
+                choosingScope = false
+                scopeFilter = ""
+                vm.scope(forum)
+            },
             onDismissRequest = { choosingScope = false },
-            shape = NagiThemeTokens.shapes.bottomSheet,
-            containerColor = colors.groupedCanvas,
-            tonalElevation = 0.dp,
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Space.lg)
-                    .padding(bottom = Space.xl),
-                verticalArrangement = Arrangement.spacedBy(Space.sm),
-            ) {
-                Text("选择搜索版块", style = typography.sectionTitle, color = colors.textPrimary)
-                OutlinedTextField(
-                    value = scopeFilter,
-                    onValueChange = { scopeFilter = it },
-                    placeholder = { Text("筛选版块", style = typography.body, color = colors.textSecondary) },
-                    singleLine = true,
-                    shape = CircleShape,
-                    leadingIcon = {
-                        Icon(NagiIcons.Search, null, Modifier.size(18.dp), tint = colors.textSecondary)
-                    },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = colors.cardSurface,
-                        unfocusedContainerColor = colors.cardSurface,
-                        focusedBorderColor = colors.goldAccent,
-                        unfocusedBorderColor = colors.cardBorder,
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 360.dp),
-                    contentPadding = PaddingValues(vertical = Space.xs),
-                ) {
-                    val total = filtered.size + 1
-                    item(key = "__all_forums__") {
-                        SectionCardItem(
-                            position = CardGroupPosition.at(0, total),
-                            margin = 0.dp,
-                            dividerIndent = Space.lg,
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        choosingScope = false
-                                        scopeFilter = ""
-                                        vm.scope(null)
-                                    }
-                                    .heightIn(min = 48.dp)
-                                    .padding(horizontal = Space.lg, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = "所有版块",
-                                    modifier = Modifier.weight(1f),
-                                    style = typography.topicTitle,
-                                    color = if (state.forumId == null && state.collectionId == null) colors.goldText else colors.textPrimary,
-                                )
-                                if (state.forumId == null && state.collectionId == null) {
-                                    Icon(NagiIcons.Check, null, Modifier.size(18.dp), tint = colors.goldText)
-                                }
-                            }
-                        }
-                    }
-                    itemsIndexed(filtered, key = { _, forum -> forum.key }) { idx, forum ->
-                        SectionCardItem(
-                            position = CardGroupPosition.at(idx + 1, total),
-                            margin = 0.dp,
-                            dividerIndent = Space.lg,
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        choosingScope = false
-                                        scopeFilter = ""
-                                        vm.scope(forum)
-                                    }
-                                    .heightIn(min = 48.dp)
-                                    .padding(horizontal = Space.lg, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = forum.name,
-                                    modifier = Modifier.weight(1f),
-                                    style = typography.topicTitle,
-                                    color = colors.textPrimary,
-                                )
-                                Icon(NagiIcons.ChevronRight, null, Modifier.size(18.dp), tint = colors.textSecondary)
-                            }
-                        }
-                    }
-                    if (directory.loading) item { LoadingLine() }
-                    directory.error?.let { error -> item { Notice(error, library::loadForums) } }
-                }
-            }
-        }
+            loading = directory.loading,
+            error = directory.error,
+            onRetry = library::loadForums,
+        )
     }
 
     topicDetails?.let { topic ->

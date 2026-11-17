@@ -10,12 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.layer.drawLayer
-import androidx.compose.ui.graphics.rememberGraphicsLayer
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.material3.Surface
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.DisposableEffect
@@ -37,6 +32,7 @@ import dev.nagi.app.ui.library.NotificationsScreen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,10 +48,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import dev.nagi.app.ui.components.BackdropBlurScope
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import dev.nagi.app.ui.components.LoadingLine
 import dev.nagi.app.ui.components.LocalAccountIdentity
-import dev.nagi.app.ui.components.LocalBackdropBlur
+import dev.nagi.app.ui.components.LocalNagiBlurEnabled
+import dev.nagi.app.ui.components.LocalNagiHaze
 import dev.nagi.app.ui.components.Notice
 import dev.nagi.app.ui.components.hardwareBlurAllowed
 import dev.nagi.app.ui.forum.ForumScreen
@@ -169,31 +167,13 @@ fun NagiApp(
                 }
                 val showClipboardPrompt = clipboardLink != null && !account.busy && deepLinkUri == null
                 val useBackdropBlur = hardwareBlurAllowed() && showClipboardPrompt
-                val backdropLayer = rememberGraphicsLayer()
-                var rootCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
-                val backdropScope = remember(backdropLayer, useBackdropBlur) {
-                    BackdropBlurScope(
-                        source = backdropLayer,
-                        hardware = useBackdropBlur,
-                        rootCoordinates = { rootCoords },
-                    )
-                }
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .onGloballyPositioned { rootCoords = it },
-                ) {
+                val rootHazeState = rememberHazeState(blurEnabled = useBackdropBlur)
+                SideEffect { rootHazeState.blurEnabled = useBackdropBlur }
+                Box(Modifier.fillMaxSize()) {
                     Surface(
                         modifier = Modifier
                             .fillMaxSize()
-                            .drawWithContent {
-                                if (useBackdropBlur) {
-                                    backdropLayer.record { this@drawWithContent.drawContent() }
-                                    drawLayer(backdropLayer)
-                                } else {
-                                    drawContent()
-                                }
-                            }
+                            .then(if (useBackdropBlur) Modifier.hazeSource(state = rootHazeState) else Modifier)
                             .then(if (account.busy || showClipboardPrompt) Modifier.clearAndSetSemantics { } else Modifier),
                         color = colors.groupedCanvas,
                         shadowElevation = 0.dp,
@@ -378,7 +358,10 @@ fun NagiApp(
                     if (showClipboardPrompt) {
                         val activeClipboardLink = clipboardLink!!
                         BackHandler { onClipboardLinkHandled(activeClipboardLink) }
-                        CompositionLocalProvider(LocalBackdropBlur provides backdropScope) {
+                        CompositionLocalProvider(
+                            LocalNagiHaze provides rootHazeState,
+                            LocalNagiBlurEnabled provides useBackdropBlur,
+                        ) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()

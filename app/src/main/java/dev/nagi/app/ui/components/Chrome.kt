@@ -1,9 +1,15 @@
 package dev.nagi.app.ui.components
 
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.rememberTransition
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,8 +17,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.DropdownMenu
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -22,14 +30,29 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
 
@@ -118,6 +141,49 @@ fun NagiHeader(
     }
 }
 
+private class NagiMenuPositionProvider(
+    private val density: Density,
+    private val shadowPadH: Int,
+    private val shadowPadTop: Int,
+    private val shadowPadBottom: Int,
+    private val onTransformOrigin: (TransformOrigin) -> Unit,
+) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset {
+        val marginH = with(density) { 12.dp.roundToPx() }
+        val marginV = with(density) { 48.dp.roundToPx() }
+        val gap = with(density) { 4.dp.roundToPx() }
+        val menuW = (popupContentSize.width - shadowPadH * 2).coerceAtLeast(1)
+        val menuH = (popupContentSize.height - shadowPadTop - shadowPadBottom).coerceAtLeast(1)
+
+        val alignRight = anchorBounds.left + menuW > windowSize.width - marginH
+        val menuX = if (alignRight) {
+            (anchorBounds.right - menuW).coerceIn(marginH, (windowSize.width - menuW - marginH).coerceAtLeast(marginH))
+        } else {
+            anchorBounds.left.coerceIn(marginH, (windowSize.width - menuW - marginH).coerceAtLeast(marginH))
+        }
+
+        val belowY = anchorBounds.bottom + gap
+        val aboveY = anchorBounds.top - gap - menuH
+        val showAbove = belowY + menuH > windowSize.height - marginV && aboveY >= marginV
+        val menuY = if (showAbove) {
+            aboveY.coerceAtLeast(marginV)
+        } else {
+            belowY.coerceIn(marginV, (windowSize.height - menuH - marginV).coerceAtLeast(marginV))
+        }
+
+        val originX = ((anchorBounds.left + anchorBounds.right) / 2f - menuX) / menuW.toFloat()
+        val originY = if (showAbove) 1f else 0f
+        onTransformOrigin(TransformOrigin(originX.coerceIn(0f, 1f), originY))
+
+        return IntOffset(menuX - shadowPadH, menuY - shadowPadTop)
+    }
+}
+
 @Composable
 fun FrostedDropdownMenu(
     expanded: Boolean,
@@ -126,17 +192,70 @@ fun FrostedDropdownMenu(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = NagiThemeTokens.colors
-    DropdownMenu(
-        expanded = expanded,
+    val shape = NagiThemeTokens.shapes.dropdown
+    val expandedState = remember { MutableTransitionState(false) }
+    expandedState.targetState = expanded
+    if (!expandedState.currentState && !expandedState.targetState) return
+
+    val density = LocalDensity.current
+    val isInspecting = LocalInspectionMode.current
+    val transition = rememberTransition(expandedState, label = "FrostedDropdownMenu")
+    val scale by transition.animateFloat(
+        transitionSpec = { tween(if (targetState) 140 else 90) },
+        label = "menu-scale",
+    ) { if (it) 1f else 0.92f }
+    val alpha by transition.animateFloat(
+        transitionSpec = { tween(if (targetState) 120 else 85) },
+        label = "menu-alpha",
+    ) { if (it) 1f else 0f }
+    val transformOrigin = remember { mutableStateOf(TransformOrigin(0.5f, 0f)) }
+
+    val padH = 20.dp
+    val padTop = 14.dp
+    val padBottom = 26.dp
+    val padHPx = with(density) { padH.roundToPx() }
+    val padTopPx = with(density) { padTop.roundToPx() }
+    val padBottomPx = with(density) { padBottom.roundToPx() }
+    val positionProvider = remember(density, padHPx, padTopPx, padBottomPx) {
+        NagiMenuPositionProvider(density, padHPx, padTopPx, padBottomPx) {
+            transformOrigin.value = it
+        }
+    }
+
+    Popup(
+        popupPositionProvider = positionProvider,
         onDismissRequest = onDismissRequest,
-        modifier = modifier.widthIn(min = 200.dp),
-        shape = NagiThemeTokens.shapes.dropdown,
-        containerColor = colors.frostedDropdown,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        border = BorderStroke(1.dp, colors.cardBorder),
-        content = content,
-    )
+        properties = PopupProperties(focusable = true),
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(start = padH, end = padH, top = padTop, bottom = padBottom)
+                .graphicsLayer {
+                    if (!isInspecting) {
+                        scaleX = scale
+                        scaleY = scale
+                        this.alpha = alpha
+                        this.transformOrigin = transformOrigin.value
+                    }
+                },
+        ) {
+            FrostedSurface(
+                modifier = Modifier
+                    .widthIn(min = 200.dp)
+                    .then(modifier),
+                shape = shape,
+                backgroundColor = colors.frostedDropdown,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .width(IntrinsicSize.Max)
+                        .verticalScroll(rememberScrollState())
+                        .padding(vertical = 8.dp),
+                    content = content,
+                )
+            }
+        }
+    }
 }
 
 @Composable

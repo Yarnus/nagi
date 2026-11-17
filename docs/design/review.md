@@ -10,8 +10,9 @@
 - [ ] 文字与图标对比度符合用途；半透明控件按实际背景检查。
 - [ ] 独立控件热区至少 48dp，无障碍名称、角色、选中及禁用状态正确。
 - [ ] 系统栏、输入法和浮动控件不遮挡操作或列表末项；大字号下控件可增高。
-- [ ] 磨砂静态回退可用，动画关闭时交互正常；隐藏控件不拦截触控或保留动作语义。
-- [ ] 弹窗与浮动提示复用共享 Nagi 容器（0 阴影、1dp 边框、内嵌详情区与胶囊按钮），未使用未统一样式的原生 Material `AlertDialog`。
+- [ ] 磨砂静态回退可用，动画关闭时交互正常；隐藏控件不拦截触控或保留动作语义；顶栏与底栏渐进过渡区无重影，悬浮控件淡阴影不被外层 `48dp` 热区容器裁切。
+- [ ] 弹窗、轻量悬浮面板、下拉菜单与浮动提示复用共享 `NagiDialog` / `NagiConfirmDialog` / `NagiFrostedSheet` / `ForumScopePickerSheet` / `FrostedDropdownMenu` 容器（`menu` 材质、发丝描边、顶部内高光、淡悬浮阴影、透明列表行或内嵌详情区与胶囊按钮），未使用未统一样式的原生 Material `AlertDialog`。
+- [ ] 胶囊在高饱和彩色底色合成后的主要文字对比度在浅色、深色与回退态均达到 `>= 4.5:1`，且快速滑动帧时间不劣于基线。
 - [ ] 加载、空、错误、刷新、追加状态可区分，刷新和失败保留已读内容。
 - [ ] 列表独立虚拟化、键稳定；窗口变化和返回导航保持阅读位置。
 
@@ -44,6 +45,8 @@
 | 本地收藏与历史 | 版块 / 合集区分、目录和抽屉状态一致、账号隔离、Room 2→3 / 5→6 迁移保留数据；历史时间展示、筛选、单条移除与清空（含未收藏进度清理选项）；未收藏阅读进度自动淘汰与收藏进度保护 |
 
 ## 验证边界
+
+Haze 磨砂玻璃材质、悬浮磨砂面板、点击反馈与高对比主按钮重做（分支 `feat/haze-materials`）的本地 **模拟测试通过**：最终代码改动后运行 `./gradlew --no-daemon --max-workers=1 :nga-sdk:check :app:assembleDebug :app:lintDebug :app:testDebugUnitTest` 全部通过（SDK 202 项、应用 339 项单元测试 0 失败 0 跳过，lint 0 个错误、30 个警告、2 个提示）；**集成测试通过**（仅 API 36 `nagi-validation` 模拟器）：安装最新构建后通过 `am instrument` 运行 `ProgressiveBlurTest`、`GlassMaterialTest`、`ForumDirectoryDeviceTest`、`ReaderRenderingTest` 共 5 项测试全部通过；并在 API 36 模拟器上通过 `screencap` 实机截图核验了收缩至 `topPadding + 10.dp` 的 `ReaderScreen` 顶部渐进磨砂边缘（首楼顶边圆角无虚化遮挡）、浅/深色 `PageJumpSheet`（浅色石墨黑 `#1A1C20` 白字、深色柔白 `#ECEEF2` 黑字）、`ForumScopePickerSheet`（浅/深色）、`showingSubforums`、`RelatedForumsSheet`、`TopicsScreen` 主题详情 `NagiDialog` 与按压反馈；全量仪器测试中的 `ReplyPopupDeviceTest` 未在本次扩展验证中重跑。**未验证：** 真机、API 31–32 设备、TalkBack、物理折叠屏与省电模式真实切换表现。
 
 引用卡片与定位的本地 **模拟测试通过**：197 项 SDK、316 项应用测试、Debug 构建和 lint 通过
 （0 个错误、27 个警告、1 个提示）。覆盖引用解析与 PID 请求、摘要 / 原文面板、显式重试、请求去重及账号隔离，

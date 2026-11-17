@@ -2,8 +2,8 @@ package dev.nagi.app.ui.post
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,9 +18,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.nagi.app.ui.components.frostedCapsuleBackdrop
+import dev.nagi.app.ui.components.nagiPressFeedback
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.ProgressiveBlurScaffold
 import dev.nagi.app.ui.theme.NagiThemeTokens
@@ -69,9 +70,15 @@ private fun ReaderReplyCapsule(onReply: () -> Unit, visible: Boolean) {
         animationSpec = tween(if (visible) 180 else 120),
         label = "reader-reply-opacity",
     )
+    val interactionSource = remember { MutableInteractionSource() }
     val action = if (visible) {
         Modifier
-            .clickable(role = Role.Button, onClick = onReply)
+            .clickable(
+                role = Role.Button,
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onReply,
+            )
             .semantics { contentDescription = "回复帖子" }
     } else {
         Modifier.clearAndSetSemantics { }
@@ -80,15 +87,19 @@ private fun ReaderReplyCapsule(onReply: () -> Unit, visible: Boolean) {
         modifier = Modifier
             .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
             .graphicsLayer { alpha = opacity }
-            .clip(CircleShape)
             .then(action),
         contentAlignment = Alignment.Center,
     ) {
         Row(
             modifier = Modifier
                 .heightIn(min = 42.dp)
+                .nagiPressFeedback(
+                    interactionSource = interactionSource,
+                    enabled = visible,
+                    pressedScale = 0.94f,
+                    shape = CircleShape,
+                )
                 .frostedCapsuleBackdrop(colors.frostedChrome, CircleShape)
-                .border(1.dp, colors.cardBorder, CircleShape)
                 .padding(horizontal = 14.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),

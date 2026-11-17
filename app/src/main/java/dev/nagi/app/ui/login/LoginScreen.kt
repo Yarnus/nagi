@@ -171,8 +171,8 @@ fun LoginScreen(back: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
                     shape = CircleShape,
                     elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = colors.goldText,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        containerColor = colors.goldSolidFill,
+                        contentColor = colors.goldSolidText,
                     ),
                 ) {
                     Text(

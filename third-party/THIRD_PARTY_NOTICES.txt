@@ -22,20 +22,20 @@ MPL-2.0 license text: https://www.mozilla.org/media/MPL/2.0/index.f75d2927d3c1.t
 
 COMPONENTS
 
-androidx.activity:activity-compose:1.10.1
-Project: https://developer.android.com/jetpack/androidx/releases/activity#1.10.1
+androidx.activity:activity-compose:1.11.0
+Project: https://developer.android.com/jetpack/androidx/releases/activity#1.11.0
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/activity/activity-compose/LICENSE.txt -> bb28c48e3e07
 
-androidx.activity:activity-ktx:1.10.1
-Project: https://developer.android.com/jetpack/androidx/releases/activity#1.10.1
+androidx.activity:activity-ktx:1.11.0
+Project: https://developer.android.com/jetpack/androidx/releases/activity#1.11.0
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/activity/activity-ktx/LICENSE.txt -> bb28c48e3e07
 
-androidx.activity:activity:1.10.1
-Project: https://developer.android.com/jetpack/androidx/releases/activity#1.10.1
+androidx.activity:activity:1.11.0
+Project: https://developer.android.com/jetpack/androidx/releases/activity#1.11.0
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/activity/activity/LICENSE.txt -> bb28c48e3e07
@@ -83,26 +83,26 @@ License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/collection/collection-ktx/LICENSE.txt -> bb28c48e3e07
 
-androidx.compose.animation:animation-android:1.9.0
-Project: https://developer.android.com/jetpack/androidx/releases/compose-animation#1.9.0
+androidx.compose.animation:animation-android:1.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/compose-animation#1.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/compose/animation/animation/LICENSE.txt -> bb28c48e3e07
 
-androidx.compose.animation:animation-core-android:1.9.0
-Project: https://developer.android.com/jetpack/androidx/releases/compose-animation#1.9.0
+androidx.compose.animation:animation-core-android:1.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/compose-animation#1.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/compose/animation/animation-core/LICENSE.txt -> bb28c48e3e07
 
-androidx.compose.foundation:foundation-android:1.9.0
-Project: https://developer.android.com/jetpack/androidx/releases/compose-foundation#1.9.0
+androidx.compose.foundation:foundation-android:1.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/compose-foundation#1.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/compose/foundation/foundation/LICENSE.txt -> bb28c48e3e07
 
-androidx.compose.foundation:foundation-layout-android:1.9.0
-Project: https://developer.android.com/jetpack/androidx/releases/compose-foundation#1.9.0
+androidx.compose.foundation:foundation-layout-android:1.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/compose-foundation#1.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/compose/foundation/foundation-layout/LICENSE.txt -> bb28c48e3e07
@@ -134,80 +134,80 @@ License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/compose/material/material-ripple/LICENSE.txt -> bb28c48e3e07
 
-androidx.compose.runtime:runtime-android:1.9.0
-Project: https://developer.android.com/jetpack/androidx/releases/compose-runtime#1.9.0
+androidx.compose.runtime:runtime-android:1.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/compose-runtime#1.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/compose/runtime/runtime/LICENSE.txt -> bb28c48e3e07
 
-androidx.compose.runtime:runtime-annotation-android:1.9.0
-Project: https://developer.android.com/jetpack/androidx/releases/compose-runtime#1.9.0
+androidx.compose.runtime:runtime-annotation-android:1.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/compose-runtime#1.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/compose/runtime/runtime-annotation/LICENSE.txt -> bb28c48e3e07
 
-androidx.compose.runtime:runtime-saveable-android:1.9.0
-Project: https://developer.android.com/jetpack/androidx/releases/compose-runtime#1.9.0
+androidx.compose.runtime:runtime-saveable-android:1.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/compose-runtime#1.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/compose/runtime/runtime-saveable/LICENSE.txt -> bb28c48e3e07
 
-androidx.compose.ui:ui-android:1.9.0
-Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.0
+androidx.compose.ui:ui-android:1.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/compose/ui/ui/LICENSE.txt -> bb28c48e3e07
 
-androidx.compose.ui:ui-geometry-android:1.9.0
-Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.0
+androidx.compose.ui:ui-geometry-android:1.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/compose/ui/ui-geometry/LICENSE.txt -> bb28c48e3e07
 
-androidx.compose.ui:ui-graphics-android:1.9.0
-Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.0
+androidx.compose.ui:ui-graphics-android:1.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/compose/ui/ui-graphics/LICENSE.txt -> bb28c48e3e07
 
-androidx.compose.ui:ui-test-manifest:1.9.0
-Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.0
+androidx.compose.ui:ui-test-manifest:1.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/compose/ui/ui-test-manifest/LICENSE.txt -> bb28c48e3e07
 
-androidx.compose.ui:ui-text-android:1.9.0
-Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.0
+androidx.compose.ui:ui-text-android:1.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/compose/ui/ui-text/LICENSE.txt -> bb28c48e3e07
 
-androidx.compose.ui:ui-tooling-android:1.9.0
-Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.0
+androidx.compose.ui:ui-tooling-android:1.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/compose/ui/ui-tooling/LICENSE.txt -> bb28c48e3e07
 
-androidx.compose.ui:ui-tooling-data-android:1.9.0
-Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.0
+androidx.compose.ui:ui-tooling-data-android:1.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/compose/ui/ui-tooling-data/LICENSE.txt -> bb28c48e3e07
 
-androidx.compose.ui:ui-tooling-preview-android:1.9.0
-Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.0
+androidx.compose.ui:ui-tooling-preview-android:1.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/compose/ui/ui-tooling-preview/LICENSE.txt -> bb28c48e3e07
 
-androidx.compose.ui:ui-unit-android:1.9.0
-Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.0
+androidx.compose.ui:ui-unit-android:1.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/compose/ui/ui-unit/LICENSE.txt -> bb28c48e3e07
 
-androidx.compose.ui:ui-util-android:1.9.0
-Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.0
+androidx.compose.ui:ui-util-android:1.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/compose-ui#1.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/compose/ui/ui-util/LICENSE.txt -> bb28c48e3e07
@@ -315,92 +315,92 @@ Project: http://developer.android.com/tools/extras/support-library.html
 License: Apache-2.0
 Texts: 50e6751797c5
 
-androidx.lifecycle:lifecycle-common-java8:2.9.3
-Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.3
+androidx.lifecycle:lifecycle-common-java8:2.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/lifecycle/lifecycle-common-java8/LICENSE.txt -> bb28c48e3e07
 
-androidx.lifecycle:lifecycle-common-jvm:2.9.3
-Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.3
+androidx.lifecycle:lifecycle-common-jvm:2.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/lifecycle/lifecycle-common/LICENSE.txt -> bb28c48e3e07
 
-androidx.lifecycle:lifecycle-livedata-core-ktx:2.9.3
-Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.3
+androidx.lifecycle:lifecycle-livedata-core-ktx:2.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/lifecycle/lifecycle-livedata-core-ktx/LICENSE.txt -> bb28c48e3e07
 
-androidx.lifecycle:lifecycle-livedata-core:2.9.3
-Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.3
+androidx.lifecycle:lifecycle-livedata-core:2.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/lifecycle/lifecycle-livedata-core/LICENSE.txt -> bb28c48e3e07
 
-androidx.lifecycle:lifecycle-livedata:2.9.3
-Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.3
+androidx.lifecycle:lifecycle-livedata:2.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/lifecycle/lifecycle-livedata/LICENSE.txt -> bb28c48e3e07
 
-androidx.lifecycle:lifecycle-process:2.9.3
-Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.3
+androidx.lifecycle:lifecycle-process:2.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/lifecycle/lifecycle-process/LICENSE.txt -> bb28c48e3e07
 
-androidx.lifecycle:lifecycle-runtime-android:2.9.3
-Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.3
+androidx.lifecycle:lifecycle-runtime-android:2.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/lifecycle/lifecycle-runtime/LICENSE.txt -> bb28c48e3e07
 
-androidx.lifecycle:lifecycle-runtime-compose-android:2.9.3
-Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.3
+androidx.lifecycle:lifecycle-runtime-compose-android:2.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/lifecycle/lifecycle-runtime-compose/LICENSE.txt -> bb28c48e3e07
 
-androidx.lifecycle:lifecycle-runtime-ktx-android:2.9.3
-Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.3
+androidx.lifecycle:lifecycle-runtime-ktx-android:2.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/lifecycle/lifecycle-runtime-ktx/LICENSE.txt -> bb28c48e3e07
 
-androidx.lifecycle:lifecycle-viewmodel-android:2.9.3
-Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.3
+androidx.lifecycle:lifecycle-viewmodel-android:2.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/lifecycle/lifecycle-viewmodel/LICENSE.txt -> bb28c48e3e07
 
-androidx.lifecycle:lifecycle-viewmodel-compose-android:2.9.3
-Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.3
+androidx.lifecycle:lifecycle-viewmodel-compose-android:2.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/lifecycle/lifecycle-viewmodel-compose/LICENSE.txt -> bb28c48e3e07
 
-androidx.lifecycle:lifecycle-viewmodel-ktx:2.9.3
-Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.3
+androidx.lifecycle:lifecycle-viewmodel-ktx:2.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/lifecycle/lifecycle-viewmodel-ktx/LICENSE.txt -> bb28c48e3e07
 
-androidx.lifecycle:lifecycle-viewmodel-savedstate-android:2.9.3
-Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.3
+androidx.lifecycle:lifecycle-viewmodel-savedstate-android:2.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/lifecycle/lifecycle-viewmodel-savedstate/LICENSE.txt -> bb28c48e3e07
 
-androidx.lifecycle:lifecycle-viewmodel-savedstate:2.9.3
-Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.3
+androidx.lifecycle:lifecycle-viewmodel-savedstate:2.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/lifecycle/lifecycle-viewmodel-savedstate/LICENSE.txt -> bb28c48e3e07
 
-androidx.lifecycle:lifecycle-viewmodel:2.9.3
-Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.3
+androidx.lifecycle:lifecycle-viewmodel:2.9.4
+Project: https://developer.android.com/jetpack/androidx/releases/lifecycle#2.9.4
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/lifecycle/lifecycle-viewmodel/LICENSE.txt -> bb28c48e3e07
@@ -452,26 +452,26 @@ License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/room/room-runtime/LICENSE.txt -> bb28c48e3e07
 
-androidx.savedstate:savedstate-android:1.3.1
-Project: https://developer.android.com/jetpack/androidx/releases/savedstate#1.3.1
+androidx.savedstate:savedstate-android:1.3.3
+Project: https://developer.android.com/jetpack/androidx/releases/savedstate#1.3.3
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/savedstate/savedstate/LICENSE.txt -> bb28c48e3e07
 
-androidx.savedstate:savedstate-compose-android:1.3.1
-Project: https://developer.android.com/jetpack/androidx/releases/savedstate#1.3.1
+androidx.savedstate:savedstate-compose-android:1.3.3
+Project: https://developer.android.com/jetpack/androidx/releases/savedstate#1.3.3
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/savedstate/savedstate-compose/LICENSE.txt -> bb28c48e3e07
 
-androidx.savedstate:savedstate-ktx:1.3.1
-Project: https://developer.android.com/jetpack/androidx/releases/savedstate#1.3.1
+androidx.savedstate:savedstate-ktx:1.3.3
+Project: https://developer.android.com/jetpack/androidx/releases/savedstate#1.3.3
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/savedstate/savedstate-ktx/LICENSE.txt -> bb28c48e3e07
 
-androidx.savedstate:savedstate:1.3.1
-Project: https://developer.android.com/jetpack/androidx/releases/savedstate#1.3.1
+androidx.savedstate:savedstate:1.3.3
+Project: https://developer.android.com/jetpack/androidx/releases/savedstate#1.3.3
 License: Apache-2.0
 Texts: 50e6751797c5, bb28c48e3e07
 Bundled attribution: META-INF/androidx/savedstate/savedstate/LICENSE.txt -> bb28c48e3e07
@@ -493,10 +493,17 @@ Project: https://developer.android.com/jetpack/androidx/releases/startup#1.1.1
 License: Apache-2.0
 Texts: 50e6751797c5
 
-androidx.tracing:tracing:1.2.0
-Project: https://developer.android.com/jetpack/androidx/releases/tracing#1.2.0
+androidx.tracing:tracing-android:1.3.0
+Project: https://developer.android.com/jetpack/androidx/releases/tracing#1.3.0
 License: Apache-2.0
-Texts: 50e6751797c5
+Texts: 50e6751797c5, bb28c48e3e07
+Bundled attribution: META-INF/androidx/tracing/tracing/LICENSE.txt -> bb28c48e3e07
+
+androidx.tracing:tracing-ktx:1.3.0
+Project: https://developer.android.com/jetpack/androidx/releases/tracing#1.3.0
+License: Apache-2.0
+Texts: 50e6751797c5, bb28c48e3e07
+Bundled attribution: META-INF/androidx/tracing/tracing-ktx/LICENSE.txt -> bb28c48e3e07
 
 androidx.vectordrawable:vectordrawable-animated:1.1.0
 Project: https://developer.android.com/jetpack/androidx
@@ -574,6 +581,11 @@ Project: https://github.com/square/retrofit
 License: Apache-2.0
 Texts: 50e6751797c5
 
+dev.chrisbanes.haze:haze-android:1.7.1
+Project: https://github.com/chrisbanes/haze/
+License: Apache-2.0
+Texts: 50e6751797c5
+
 io.coil-kt:coil-base:2.7.0
 Project: https://github.com/coil-kt/coil
 License: Apache-2.0
@@ -631,7 +643,7 @@ Project: https://kotlinlang.org/
 License: Apache-2.0
 Texts: 50e6751797c5
 
-org.jetbrains.kotlin:kotlin-stdlib:2.2.10
+org.jetbrains.kotlin:kotlin-stdlib:2.2.21
 Project: https://kotlinlang.org/
 License: Apache-2.0
 Texts: 50e6751797c5

@@ -128,6 +128,7 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.7")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("io.coil-kt:coil-gif:2.7.0")
+    implementation("dev.chrisbanes.haze:haze:1.7.1")
     testImplementation("com.google.dagger:hilt-android-testing:2.57.2")
     kaptTest("com.google.dagger:hilt-compiler:2.57.2")
     testImplementation("junit:junit:4.13.2")

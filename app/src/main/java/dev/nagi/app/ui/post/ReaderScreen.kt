@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,14 +36,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -90,14 +89,17 @@ import dev.nagi.app.ui.components.CardGroupPosition
 import dev.nagi.app.ui.components.ChromeIconButton
 import dev.nagi.app.ui.components.EdgeAlignedMetaRow
 import dev.nagi.app.ui.components.FlatCard
+import dev.nagi.app.ui.components.FrostedDropdownMenu
 import dev.nagi.app.ui.components.FrostedSurface
 import dev.nagi.app.ui.components.GoldTagBadge
 import dev.nagi.app.ui.components.UserTagBadge
 import dev.nagi.app.ui.components.InlineStatusBanner
 import dev.nagi.app.ui.components.LoadingLine
+import dev.nagi.app.ui.components.NagiFrostedSheet
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.Notice
 import dev.nagi.app.ui.components.ProgressiveBlurScaffold
+import dev.nagi.app.ui.components.nagiPressFeedback
 import dev.nagi.app.ui.components.SectionCardItem
 import dev.nagi.app.ui.components.SegmentedCapsuleControl
 import dev.nagi.app.ui.theme.NagiThemeTokens
@@ -547,12 +549,19 @@ private fun ReaderTopBar(
                 if (totalPages > 0) append("，共 $totalPages 页")
                 if (authorOnly) append("，$activeFilterLabel")
             }
+            val pageInteractionSource = remember { MutableInteractionSource() }
             Box(
                 modifier = Modifier
                     .padding(end = Space.xs)
                     .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                    .clip(CircleShape)
-                    .clickable(enabled = enabled, role = Role.Button, onClickLabel = "跳转到指定页或楼层", onClick = onPage)
+                    .clickable(
+                        enabled = enabled,
+                        role = Role.Button,
+                        interactionSource = pageInteractionSource,
+                        indication = null,
+                        onClickLabel = "跳转到指定页或楼层",
+                        onClick = onPage,
+                    )
                     .semantics {
                         contentDescription = description
                         stateDescription = if (authorOnly) activeFilterLabel else "全部回复"
@@ -560,6 +569,12 @@ private fun ReaderTopBar(
                 contentAlignment = Alignment.Center,
             ) {
                 FrostedSurface(
+                    modifier = Modifier.nagiPressFeedback(
+                        interactionSource = pageInteractionSource,
+                        enabled = enabled,
+                        pressedScale = 0.95f,
+                        shape = CircleShape,
+                    ),
                     backgroundColor = if (authorOnly) colors.goldContainer else colors.frostedChrome,
                     borderColor = if (authorOnly) colors.goldBorder else colors.cardBorder,
                 ) {
@@ -602,14 +617,9 @@ private fun ReaderTopBar(
                 onClick = { menu = true },
                 state = if (favorite) "已收藏" else "未收藏",
             )
-            DropdownMenu(
+            FrostedDropdownMenu(
                 expanded = menu,
                 onDismissRequest = { menu = false },
-                shape = NagiThemeTokens.shapes.dropdown,
-                containerColor = colors.frostedDropdown,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                border = BorderStroke(1.dp, colors.cardBorder),
             ) {
                 DropdownMenuItem(
                     text = {
@@ -1048,15 +1058,10 @@ internal fun ReaderPost(
                                 tint = colors.textSecondary,
                             )
                         }
-                        DropdownMenu(
+                        FrostedDropdownMenu(
                             expanded = actions,
                             onDismissRequest = { actions = false },
                             modifier = Modifier.widthIn(min = 184.dp),
-                            shape = NagiThemeTokens.shapes.dropdown,
-                            containerColor = colors.frostedDropdown,
-                            tonalElevation = 0.dp,
-                            shadowElevation = 0.dp,
-                            border = BorderStroke(1.dp, colors.cardBorder),
                         ) {
                             if (onRating != null) {
                                 listOf(PostRating.UP to "点赞", PostRating.DOWN to "踩").forEach { (rating, label) ->
@@ -1210,7 +1215,6 @@ private fun ReaderEdgeButton(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PageJumpSheet(
     currentPage: Int,
@@ -1234,17 +1238,14 @@ private fun PageJumpSheet(
             if (floorMode) onFloor(value!!) else onPage(value!!)
         }
     }
-    ModalBottomSheet(
+    NagiFrostedSheet(
         onDismissRequest = dismiss,
-        shape = NagiThemeTokens.shapes.bottomSheet,
-        containerColor = colors.groupedCanvas,
-        tonalElevation = 0.dp,
+        maxWidth = 480.dp,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = Space.lg)
-                .padding(bottom = Space.xl),
+                .padding(Space.lg),
             verticalArrangement = Arrangement.spacedBy(Space.md),
         ) {
             if (canJumpFloor) {
@@ -1276,10 +1277,10 @@ private fun PageJumpSheet(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(onGo = { submit() }),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = colors.cardSurface,
-                    unfocusedContainerColor = colors.cardSurface,
+                    focusedContainerColor = colors.insetContainer.copy(alpha = if (colors.isDark) 0.85f else 0.90f),
+                    unfocusedContainerColor = colors.insetContainer.copy(alpha = if (colors.isDark) 0.72f else 0.78f),
                     focusedBorderColor = colors.goldAccent,
-                    unfocusedBorderColor = colors.cardBorder,
+                    unfocusedBorderColor = colors.cardBorder.copy(alpha = 0.75f),
                 ),
             )
             if (!floorMode && totalPages > 1) {

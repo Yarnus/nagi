@@ -26,7 +26,6 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -58,20 +57,20 @@ fun FrostedSurface(
     borderColor: Color = NagiThemeTokens.colors.cardBorder,
     content: @Composable () -> Unit,
 ) {
-    val isDark = NagiThemeTokens.colors.isDark
-    val effectiveBorder = if (borderColor == NagiThemeTokens.colors.cardBorder) {
-        if (isDark) Color(0xFF2E3138) else Color(0xFFE2E5EB)
-    } else {
-        borderColor
-    }
+    val colors = NagiThemeTokens.colors
+    val customBorder = if (borderColor == colors.cardBorder) null else borderColor
     Surface(
         modifier = modifier
-            .frostedCapsuleBackdrop(backgroundColor, shape),
+            .frostedCapsuleBackdrop(
+                backgroundColor = backgroundColor,
+                shape = shape,
+                borderColor = customBorder,
+            ),
         shape = shape,
         color = Color.Transparent,
         shadowElevation = 0.dp,
         tonalElevation = 0.dp,
-        border = BorderStroke(1.dp, effectiveBorder),
+        border = null,
         content = content,
     )
 }
@@ -90,21 +89,17 @@ fun ChromeIconButton(
     containerColor: Color = NagiThemeTokens.colors.frostedChrome,
     borderColor: Color = NagiThemeTokens.colors.cardBorder,
 ) {
-    val isDark = NagiThemeTokens.colors.isDark
-    val effectiveBorder = if (borderColor == NagiThemeTokens.colors.cardBorder) {
-        if (isDark) Color(0xFF2E3138) else Color(0xFFE2E5EB)
-    } else {
-        borderColor
-    }
+    val colors = NagiThemeTokens.colors
+    val customBorder = if (borderColor == colors.cardBorder) null else borderColor
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
             .size(48.dp)
-            .clip(CircleShape)
             .clickable(
                 enabled = enabled,
                 role = Role.Button,
-                interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true, radius = 21.dp),
+                interactionSource = interactionSource,
+                indication = null,
                 onClick = onClick,
             )
             .semantics {
@@ -116,8 +111,17 @@ fun ChromeIconButton(
         Box(
             modifier = Modifier
                 .size(visualSize)
-                .frostedCapsuleBackdrop(containerColor, CircleShape)
-                .border(1.dp, effectiveBorder, CircleShape),
+                .nagiPressFeedback(
+                    interactionSource = interactionSource,
+                    enabled = enabled,
+                    pressedScale = 0.92f,
+                    shape = CircleShape,
+                )
+                .frostedCapsuleBackdrop(
+                    backgroundColor = containerColor,
+                    shape = CircleShape,
+                    borderColor = customBorder,
+                ),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -166,16 +170,16 @@ fun CapsuleButton(
     val effectiveBg = if (enabled) bg else tokens.insetContainer
     val effectiveFg = if (enabled) fg else tokens.textMuted
     val effectiveBorder = if (enabled) border else tokens.cardBorder
+    val interactionSource = remember { MutableInteractionSource() }
 
     Box(
         modifier = modifier
             .sizeIn(minWidth = 48.dp, minHeight = minTouchHeight)
-            .clip(CircleShape)
             .clickable(
                 enabled = enabled,
                 role = Role.Button,
-                interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true),
+                interactionSource = interactionSource,
+                indication = null,
                 onClick = onClick,
             )
             .semantics {
@@ -188,12 +192,25 @@ fun CapsuleButton(
             modifier = Modifier
                 .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier)
                 .heightIn(min = visualHeight)
-                .clip(CircleShape)
-                .then(
-                    if (enabled && style == CapsuleStyle.FrostedGold) Modifier.frostedCapsuleBackdrop(effectiveBg, CircleShape)
-                    else Modifier.background(effectiveBg),
+                .nagiPressFeedback(
+                    interactionSource = interactionSource,
+                    enabled = enabled,
+                    pressedScale = 0.965f,
+                    shape = CircleShape,
+                    overlayColor = if (style == CapsuleStyle.SolidGold) {
+                        if (tokens.isDark) Color.Black.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.14f)
+                    } else null,
                 )
-                .border(1.dp, effectiveBorder, CircleShape)
+                .then(
+                    if (enabled && style == CapsuleStyle.FrostedGold) {
+                        Modifier.frostedCapsuleBackdrop(effectiveBg, CircleShape)
+                    } else {
+                        Modifier
+                            .clip(CircleShape)
+                            .background(effectiveBg)
+                            .border(1.dp, effectiveBorder, CircleShape)
+                    },
+                )
                 .padding(contentPadding),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
@@ -381,18 +398,25 @@ fun SegmentedCapsuleControl(
                     else -> tokens.textSecondary
                 }
 
+                val tabInteraction = remember { MutableInteractionSource() }
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                        .nagiPressFeedback(
+                            interactionSource = tabInteraction,
+                            enabled = isEnabled,
+                            pressedScale = 0.97f,
+                            shape = CircleShape,
+                        )
                         .clip(CircleShape)
                         .background(pillBg)
                         .then(if (isSelected) Modifier.border(1.dp, pillBorder, CircleShape) else Modifier)
                         .clickable(
                             enabled = isEnabled,
                             role = Role.Tab,
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = ripple(bounded = true),
+                            interactionSource = tabInteraction,
+                            indication = null,
                             onClick = { onSelect(index) },
                         )
                         .semantics { selected = isSelected }
@@ -422,15 +446,20 @@ fun SearchCapsuleBar(
     actionDescription: String = "搜索",
 ) {
     val tokens = NagiThemeTokens.colors
+    val interactionSource = remember { MutableInteractionSource() }
     FrostedSurface(
         modifier = modifier
             .fillMaxWidth()
             .height(Space.dockHeight)
-            .clip(CircleShape)
+            .nagiPressFeedback(
+                interactionSource = interactionSource,
+                pressedScale = 0.985f,
+                shape = CircleShape,
+            )
             .clickable(
                 role = Role.Button,
-                interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true),
+                interactionSource = interactionSource,
+                indication = null,
                 onClick = onClick,
             )
             .semantics { contentDescription = actionDescription },
@@ -502,15 +531,15 @@ fun TopicListFloatingDock(
                 tint = if (subforumFilterActive) tokens.goldText else tokens.textPrimary,
             )
 
+            val searchInteraction = remember { MutableInteractionSource() }
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .height(48.dp)
-                    .clip(CircleShape)
                     .clickable(
                         role = Role.Button,
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = ripple(bounded = true),
+                        interactionSource = searchInteraction,
+                        indication = null,
                         onClick = onSearchClick,
                     )
                     .semantics { contentDescription = searchContentDescription },
@@ -520,6 +549,11 @@ fun TopicListFloatingDock(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(38.dp)
+                        .nagiPressFeedback(
+                            interactionSource = searchInteraction,
+                            pressedScale = 0.98f,
+                            shape = CircleShape,
+                        )
                         .clip(CircleShape)
                         .background(
                             tokens.insetContainer,
@@ -557,14 +591,14 @@ fun TopicListFloatingDock(
                 tint = tokens.textPrimary,
             )
 
+            val composeInteraction = remember { MutableInteractionSource() }
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(CircleShape)
                     .clickable(
                         role = Role.Button,
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = ripple(bounded = true, radius = 20.dp),
+                        interactionSource = composeInteraction,
+                        indication = null,
                         onClick = onComposeClick,
                     )
                     .semantics { contentDescription = composeContentDescription },
@@ -573,6 +607,11 @@ fun TopicListFloatingDock(
                 Box(
                     modifier = Modifier
                         .size(40.dp)
+                        .nagiPressFeedback(
+                            interactionSource = composeInteraction,
+                            pressedScale = 0.92f,
+                            shape = CircleShape,
+                        )
                         .clip(CircleShape)
                         .background(composeFill)
                         .border(1.dp, tokens.cardBorder, CircleShape),
@@ -597,24 +636,35 @@ private fun DockIconAction(
     onClick: () -> Unit,
     tint: Color,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
             .size(48.dp)
-            .clip(CircleShape)
             .clickable(
                 role = Role.Button,
-                interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true, radius = 20.dp),
+                interactionSource = interactionSource,
+                indication = null,
                 onClick = onClick,
             )
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = tint,
-            modifier = Modifier.size(20.dp),
-        )
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .nagiPressFeedback(
+                    interactionSource = interactionSource,
+                    pressedScale = 0.90f,
+                    shape = CircleShape,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(20.dp),
+            )
+        }
     }
 }

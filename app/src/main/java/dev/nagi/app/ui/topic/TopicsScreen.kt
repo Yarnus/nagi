@@ -38,7 +38,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -83,21 +82,22 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
-import dev.nagi.app.ui.components.CardGroupPosition
 import dev.nagi.app.ui.components.ChromeIconButton
 import dev.nagi.app.ui.components.EdgeAlignedMetaRow
 import dev.nagi.app.ui.components.NeutralTagBadge
 import dev.nagi.app.ui.components.FlatCard
+import dev.nagi.app.ui.components.ForumScopePickerSheet
 import dev.nagi.app.ui.components.FrostedDropdownItem
 import dev.nagi.app.ui.components.FrostedDropdownMenu
 import dev.nagi.app.ui.components.GoldSwitch
 import dev.nagi.app.ui.components.GoldTagBadge
 import dev.nagi.app.ui.components.InlineStatusBanner
+import dev.nagi.app.ui.components.NagiDialog
+import dev.nagi.app.ui.components.NagiFrostedSheet
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.Notice
 import dev.nagi.app.ui.components.ProgressiveBlurScaffold
 import dev.nagi.app.ui.components.ReplyCountPill
-import dev.nagi.app.ui.components.SectionCardItem
 import dev.nagi.app.ui.components.TopicListFloatingDock
 import dev.nagi.app.ui.post.ComposerScreen
 import dev.nagi.app.ui.post.ReaderScreen
@@ -202,7 +202,6 @@ fun TopicsScreen(
     var choosingForum by rememberSaveable { mutableStateOf(false) }
     var showingRelatedForums by rememberSaveable { mutableStateOf(false) }
     var moreExpanded by remember { mutableStateOf(false) }
-    var forumFilter by rememberSaveable { mutableStateOf("") }
     val scope = remember(searchForums, scopeKey) { searchForums.firstOrNull { it.key == scopeKey } }
     val keyboard = LocalSoftwareKeyboardController.current
     var details by remember { mutableStateOf<Topic?>(null) }
@@ -673,77 +672,118 @@ fun TopicsScreen(
     }
 
     details?.let { topic ->
-        ModalBottomSheet(
+        NagiDialog(
             onDismissRequest = { details = null },
-            shape = NagiThemeTokens.shapes.bottomSheet,
-            containerColor = colors.cardSurface,
-            tonalElevation = 0.dp,
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Space.xl)
-                    .padding(bottom = Space.xxl),
-                verticalArrangement = Arrangement.spacedBy(Space.md),
+            Text(topic.title, style = typography.sectionTitle, color = colors.textPrimary)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Space.sm),
             ) {
-                Text(topic.title, style = typography.sectionTitle, color = colors.textPrimary)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Space.sm),
-                ) {
-                    Icon(NagiIcons.Person, contentDescription = null, modifier = Modifier.size(16.dp), tint = colors.textSecondary)
-                    Text(topic.author.ifBlank { "匿名" }, style = typography.body, color = colors.textSecondary)
-                }
-                if (topic.createdAt > 0) {
-                    Text("发布 ${formatTime(topic.createdAt)}", style = typography.metadata, color = colors.textSecondary)
-                }
-                if (topic.lastActiveAt > 0) {
-                    Text("活跃 ${formatTime(topic.lastActiveAt)}", style = typography.metadata, color = colors.textSecondary)
-                }
-                Text("${topic.replies} 条回复", style = typography.metadata, color = colors.goldText)
-                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                    CapsuleButton(
-                        text = "关闭",
-                        onClick = { details = null },
-                        style = CapsuleStyle.Neutral,
-                    )
-                }
+                Icon(NagiIcons.Person, contentDescription = null, modifier = Modifier.size(16.dp), tint = colors.textSecondary)
+                Text(topic.author.ifBlank { "匿名" }, style = typography.body, color = colors.textSecondary)
+            }
+            if (topic.createdAt > 0) {
+                Text("发布 ${formatTime(topic.createdAt)}", style = typography.metadata, color = colors.textSecondary)
+            }
+            if (topic.lastActiveAt > 0) {
+                Text("活跃 ${formatTime(topic.lastActiveAt)}", style = typography.metadata, color = colors.textSecondary)
+            }
+            Text("${topic.replies} 条回复", style = typography.metadata, color = colors.goldText)
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                CapsuleButton(
+                    text = "关闭",
+                    onClick = { details = null },
+                    style = CapsuleStyle.Neutral,
+                )
             }
         }
     }
 
     if (showingSubforums) {
-        ModalBottomSheet(
+        val dividerColor = colors.cardBorder.copy(alpha = 0.55f)
+        NagiFrostedSheet(
             onDismissRequest = { showingSubforums = false },
-            containerColor = colors.groupedCanvas,
-            tonalElevation = 0.dp,
+            maxHeight = 520.dp,
         ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = Space.lg, end = Space.sm, top = Space.md, bottom = Space.sm),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("子板块筛选", style = typography.sectionTitle, color = colors.textPrimary)
+                    Text(
+                        "开关设置当前 NGA 账号的帖子显示范围，与本地收藏无关；点按名称进入子板块。",
+                        style = typography.metadata,
+                        color = colors.textSecondary,
+                    )
+                }
+                ChromeIconButton(
+                    icon = NagiIcons.Close,
+                    description = "关闭面板",
+                    onClick = { showingSubforums = false },
+                )
+            }
+            HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
             LazyColumn(
-                modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp),
-                contentPadding = PaddingValues(horizontal = Space.lg, vertical = Space.lg),
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(bottom = Space.md),
             ) {
                 item {
-                    Text("子板块筛选", style = NagiThemeTokens.typography.sectionTitle, color = colors.textPrimary)
-                    Text("开关设置当前 NGA 账号的帖子显示范围，与本地收藏无关；点按名称进入子板块。",
-                        style = NagiThemeTokens.typography.metadata, color = colors.textSecondary)
-                    filterNotice?.let { Notice(it) }
-                    if (filterBusy) Notice("正在保存子板块设置…")
-                    if (state.loading) Notice("正在读取子板块设置…")
-                    state.error?.let { Notice(it) }
-                    if (!state.loading && subforums.isEmpty()) Notice("当前版块暂无子板块筛选")
+                    val hasNotices = filterNotice != null ||
+                        filterBusy ||
+                        state.loading ||
+                        state.error != null ||
+                        (!state.loading && subforums.isEmpty())
+                    if (hasNotices) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = Space.lg, vertical = Space.xs),
+                            verticalArrangement = Arrangement.spacedBy(Space.xs),
+                        ) {
+                            filterNotice?.let { Notice(it) }
+                            if (filterBusy) Notice("正在保存子板块设置…")
+                            if (state.loading) Notice("正在读取子板块设置…")
+                            state.error?.let { Notice(it) }
+                            if (!state.loading && subforums.isEmpty()) Notice("当前版块暂无子板块筛选")
+                        }
+                    }
                 }
-                itemsIndexed(subforums, key = { _, sub -> sub.forum.key }) { _, sub ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f).clickable(enabled = !filterBusy) {
-                            showingSubforums = false
-                            activeForumId = sub.forum.id
-                            activeCollection = sub.forum.collectionId
-                            activeTitle = sub.forum.name
-                            onSwitchForum?.invoke(sub.forum)
-                        }.heightIn(min = 48.dp).padding(vertical = 8.dp)) {
-                            Text(sub.forum.name, style = NagiThemeTokens.typography.topicTitle, color = colors.textPrimary)
-                            if (sub.forum.description.isNotBlank()) Text(sub.forum.description,
-                                style = NagiThemeTokens.typography.metadata, color = colors.textSecondary)
+                itemsIndexed(subforums, key = { _, sub -> sub.forum.key }) { index, sub ->
+                    if (index > 0) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = Space.lg),
+                            thickness = 0.5.dp,
+                            color = dividerColor,
+                        )
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Space.lg, vertical = Space.xs),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable(enabled = !filterBusy) {
+                                    showingSubforums = false
+                                    activeForumId = sub.forum.id
+                                    activeCollection = sub.forum.collectionId
+                                    activeTitle = sub.forum.name
+                                    onSwitchForum?.invoke(sub.forum)
+                                }
+                                .heightIn(min = 48.dp)
+                                .padding(vertical = 8.dp),
+                        ) {
+                            Text(sub.forum.name, style = typography.topicTitle, color = colors.textPrimary)
+                            if (sub.forum.description.isNotBlank()) {
+                                Text(sub.forum.description, style = typography.metadata, color = colors.textSecondary)
+                            }
                         }
                         GoldSwitch(
                             checked = sub.selected,
@@ -754,7 +794,13 @@ fun TopicsScreen(
                     }
                 }
                 item {
-                    CapsuleButton(text = "刷新核对", onClick = { vm.load(true) })
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Space.lg, vertical = Space.sm),
+                    ) {
+                        CapsuleButton(text = "刷新核对", onClick = { vm.load(true) })
+                    }
                 }
             }
         }
@@ -782,119 +828,20 @@ fun TopicsScreen(
     }
 
     if (choosingForum) {
-        val filteredForums = remember(searchForums, forumFilter) {
-            searchForums.filter { it.name.contains(forumFilter, ignoreCase = true) }
-        }
-        ModalBottomSheet(
+        ForumScopePickerSheet(
+            forums = searchForums,
+            selectedForumKey = scopeKey,
+            onSelectForum = { forum ->
+                scopeKey = forum.key
+                choosingForum = false
+                submitted = ""
+                selected = null
+                loadingMore = false
+                vm.clearSearch()
+            },
             onDismissRequest = { choosingForum = false },
-            containerColor = colors.groupedCanvas,
-            shape = NagiThemeTokens.shapes.bottomSheet,
-            tonalElevation = 0.dp,
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 560.dp)
-                    .padding(horizontal = Space.lg),
-            ) {
-                Text("选择搜索版块", style = typography.sectionTitle, color = colors.textPrimary)
-                OutlinedTextField(
-                    value = forumFilter,
-                    onValueChange = { forumFilter = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = Space.md),
-                    singleLine = true,
-                    shape = CircleShape,
-                    placeholder = { Text("筛选版块", style = typography.body, color = colors.textSecondary) },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = NagiIcons.Search,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = colors.textSecondary,
-                        )
-                    },
-                    trailingIcon = if (forumFilter.isNotEmpty()) {
-                        {
-                            IconButton(onClick = { forumFilter = "" }) {
-                                Icon(
-                                    imageVector = NagiIcons.ClearCircle,
-                                    contentDescription = "清空筛选",
-                                    modifier = Modifier.size(18.dp),
-                                    tint = colors.textSecondary,
-                                )
-                            }
-                        }
-                    } else null,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedContainerColor = colors.cardSurface,
-                        focusedContainerColor = colors.cardSurface,
-                        unfocusedBorderColor = colors.cardBorder,
-                        focusedBorderColor = colors.goldAccent,
-                    ),
-                )
-                LazyColumn(contentPadding = PaddingValues(bottom = Space.xl)) {
-                    itemsIndexed(filteredForums, key = { _, forum -> forum.key }) { index, forum ->
-                        val active = forum.key == scopeKey
-                        SectionCardItem(
-                            position = CardGroupPosition.at(index, filteredForums.size),
-                            margin = 0.dp,
-                            dividerIndent = Space.lg,
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 52.dp)
-                                    .clickable {
-                                        scopeKey = forum.key
-                                        choosingForum = false
-                                        forumFilter = ""
-                                        submitted = ""
-                                        selected = null
-                                        loadingMore = false
-                                        vm.clearSearch()
-                                    }
-                                    .padding(horizontal = Space.lg, vertical = Space.md),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        text = forum.name,
-                                        style = typography.topicTitle,
-                                        color = if (active) colors.goldText else colors.textPrimary,
-                                    )
-                                    val groupLine = listOf(forum.category, forum.group)
-                                        .filter { it.isNotBlank() }
-                                        .distinct()
-                                        .joinToString(" / ")
-                                    if (groupLine.isNotBlank()) {
-                                        Text(
-                                            text = groupLine,
-                                            style = typography.metadata,
-                                            color = colors.textSecondary,
-                                        )
-                                    }
-                                }
-                                if (active) {
-                                    Icon(
-                                        imageVector = NagiIcons.Check,
-                                        contentDescription = "当前已选",
-                                        modifier = Modifier.size(18.dp),
-                                        tint = colors.goldText,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    if (searchForums.isEmpty()) {
-                        item { Notice("版块目录尚未加载，请返回版块页重试") }
-                    } else if (filteredForums.isEmpty()) {
-                        item { Notice("没有匹配的版块") }
-                    }
-                }
-            }
-        }
+            emptyMessage = if (searchForums.isEmpty()) "版块目录尚未加载，请返回版块页重试" else "没有匹配的版块",
+        )
     }
 }
 
@@ -924,76 +871,72 @@ private fun RelatedForumsSheet(
         }
     }
 
-    ModalBottomSheet(
+    val dividerColor = colors.cardBorder.copy(alpha = 0.55f)
+    NagiFrostedSheet(
         onDismissRequest = onDismiss,
-        shape = NagiThemeTokens.shapes.bottomSheet,
-        containerColor = colors.groupedCanvas,
-        tonalElevation = 0.dp,
+        maxHeight = 520.dp,
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 520.dp)
-                .padding(bottom = Space.xl),
-            verticalArrangement = Arrangement.spacedBy(Space.sm),
+                .padding(start = Space.lg, end = Space.sm, top = Space.md, bottom = Space.sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Space.lg),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = "同组版块与主题合集",
-                        style = typography.sectionTitle,
-                        color = colors.textPrimary,
-                    )
-                    Text(
-                        text = "点按切换版块；右侧开关可将版块加入本地收藏（仅保存在此设备）",
-                        style = typography.metadata,
-                        color = colors.textSecondary,
-                    )
-                }
-                ChromeIconButton(
-                    icon = NagiIcons.Close,
-                    description = "关闭面板",
-                    onClick = onDismiss,
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = "同组版块与主题合集",
+                    style = typography.sectionTitle,
+                    color = colors.textPrimary,
+                )
+                Text(
+                    text = "点按切换版块；右侧开关可将版块加入本地收藏（仅保存在此设备）",
+                    style = typography.metadata,
+                    color = colors.textSecondary,
                 )
             }
+            ChromeIconButton(
+                icon = NagiIcons.Close,
+                description = "关闭面板",
+                onClick = onDismiss,
+            )
+        }
+        HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
 
-            if (related.isEmpty()) {
-                val single = currentForum
-                if (single != null) {
-                    SectionCardItem(position = CardGroupPosition.Single) {
-                        RelatedForumRow(
-                            forum = single,
-                            isCurrent = true,
-                            isFavorite = single.key in favoriteForumKeys,
-                            onClick = onDismiss,
-                            onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(single) } },
-                        )
-                    }
-                } else {
-                    Notice("暂无同组版块或合集")
+        if (related.isEmpty()) {
+            val single = currentForum
+            if (single != null) {
+                Box(Modifier.padding(bottom = Space.sm)) {
+                    RelatedForumRow(
+                        forum = single,
+                        isCurrent = true,
+                        isFavorite = single.key in favoriteForumKeys,
+                        onClick = onDismiss,
+                        onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(single) } },
+                    )
                 }
             } else {
-                LazyColumn(contentPadding = PaddingValues(vertical = Space.xs)) {
-                    itemsIndexed(related, key = { _, forum -> forum.key }) { index, forum ->
-                        SectionCardItem(
-                            position = CardGroupPosition.at(index, related.size),
-                            dividerIndent = Space.lg,
-                        ) {
-                            RelatedForumRow(
-                                forum = forum,
-                                isCurrent = forum.key == currentForum?.key,
-                                isFavorite = forum.key in favoriteForumKeys,
-                                onClick = { onSelectForum(forum) },
-                                onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(forum) } },
-                            )
-                        }
+                Box(Modifier.padding(horizontal = Space.lg, vertical = Space.md)) {
+                    Notice("暂无同组版块或合集")
+                }
+            }
+        } else {
+            LazyColumn(contentPadding = PaddingValues(bottom = Space.md)) {
+                itemsIndexed(related, key = { _, forum -> forum.key }) { index, forum ->
+                    if (index > 0) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = Space.lg),
+                            thickness = 0.5.dp,
+                            color = dividerColor,
+                        )
                     }
+                    RelatedForumRow(
+                        forum = forum,
+                        isCurrent = forum.key == currentForum?.key,
+                        isFavorite = forum.key in favoriteForumKeys,
+                        onClick = { onSelectForum(forum) },
+                        onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(forum) } },
+                    )
                 }
             }
         }

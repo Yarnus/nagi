@@ -5,10 +5,22 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.LocalActivity
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.IndicationNodeFactory
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.InteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.ripple.RippleAlpha
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RippleConfiguration
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -19,12 +31,18 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.node.DelegatableNode
+import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 object Space {
     val xxs = 2.dp
@@ -40,7 +58,6 @@ object Space {
 object GoldAccent {
     val decorative = Color(0xFFC09D73)
     val lightAccent = Color(0xFFB58838)
-    val lightSolidFill = Color(0xFFB8863B)
     val lightText = Color(0xFF8C651E)
     val darkAccent = Color(0xFFD6BA8B)
     val darkText = Color(0xFFE5C494)
@@ -89,9 +106,9 @@ val LightSemanticColors = NagiSemanticColors(
     textSecondary = Color(0xFF4B5563),
     textMuted = Color(0xFF9CA3AF),
     goldAccent = GoldAccent.lightAccent,
-    goldSolidFill = GoldAccent.lightSolidFill,
-    goldSolidContent = Color(0xFFFFFFFF),
-    goldSolidText = Color(0xFF18120A),
+    goldSolidFill = Color(0xFF1A1C20),
+    goldSolidContent = Color.White,
+    goldSolidText = Color.White,
     goldContainer = Color(0xFFFBF5EB),
     goldText = GoldAccent.lightText,
     goldBorder = Color(0xFFEAD9BA),
@@ -113,9 +130,9 @@ val DarkSemanticColors = NagiSemanticColors(
     textSecondary = Color(0xFF9CA3AF),
     textMuted = Color(0xFF6B7280),
     goldAccent = GoldAccent.darkAccent,
-    goldSolidFill = GoldAccent.darkAccent,
-    goldSolidContent = Color(0xFF18120A),
-    goldSolidText = Color(0xFF18120A),
+    goldSolidFill = Color(0xFFECEEF2),
+    goldSolidContent = Color(0xFF1A1C20),
+    goldSolidText = Color(0xFF1A1C20),
     goldContainer = Color(0xFF2D251A),
     goldText = GoldAccent.darkText,
     goldBorder = Color(0xFF4A3B24),
@@ -303,6 +320,88 @@ private val NagiTypography = Typography(
     labelSmall = DefaultTypeTokens.tagBadge,
 )
 
+private data class NagiPressIndication(
+    private val overlayColor: Color,
+) : IndicationNodeFactory {
+    override fun create(interactionSource: InteractionSource): DelegatableNode =
+        NagiPressIndicationNode(interactionSource, overlayColor)
+}
+
+private class NagiPressIndicationNode(
+    private val interactionSource: InteractionSource,
+    private val overlayColor: Color,
+) : Modifier.Node(), DrawModifierNode {
+    private val pressProgress = Animatable(0f)
+    private var animJob: Job? = null
+
+    override fun onAttach() {
+        coroutineScope.launch {
+            interactionSource.interactions.collect { interaction ->
+                when (interaction) {
+                    is PressInteraction.Press -> {
+                        animJob?.cancel()
+                        animJob = launch {
+                            pressProgress.animateTo(
+                                targetValue = 1f,
+                                animationSpec = tween(durationMillis = 50, easing = FastOutLinearInEasing),
+                            )
+                        }
+                    }
+                    is PressInteraction.Release, is PressInteraction.Cancel -> {
+                        val activePress = animJob
+                        animJob = launch {
+                            if (activePress?.isActive == true && pressProgress.value < 0.75f) {
+                                pressProgress.animateTo(
+                                    targetValue = 0.75f,
+                                    animationSpec = tween(durationMillis = 40, easing = FastOutLinearInEasing),
+                                )
+                            }
+                            pressProgress.animateTo(
+                                targetValue = 0f,
+                                animationSpec = tween(durationMillis = 160, easing = FastOutSlowInEasing),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    override fun ContentDrawScope.draw() {
+        drawContent()
+        val progress = pressProgress.value
+        if (progress > 0f) {
+            drawRect(color = overlayColor.copy(alpha = overlayColor.alpha * progress))
+        }
+    }
+}
+
+private val LightPressIndication = NagiPressIndication(Color(0xFF1F1A12).copy(alpha = 0.042f))
+private val DarkPressIndication = NagiPressIndication(Color.White.copy(alpha = 0.065f))
+
+@OptIn(ExperimentalMaterial3Api::class)
+private val LightRippleConfiguration = RippleConfiguration(
+    color = Color(0xFF1F1A12),
+    rippleAlpha = RippleAlpha(
+        draggedAlpha = 0.07f,
+        focusedAlpha = 0.06f,
+        hoveredAlpha = 0.04f,
+        pressedAlpha = 0.055f,
+    ),
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+private val DarkRippleConfiguration = RippleConfiguration(
+    color = Color.White,
+    rippleAlpha = RippleAlpha(
+        draggedAlpha = 0.08f,
+        focusedAlpha = 0.07f,
+        hoveredAlpha = 0.05f,
+        pressedAlpha = 0.065f,
+    ),
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NagiTheme(theme: String = "system", content: @Composable () -> Unit) {
     val dark = when (theme) {
@@ -384,6 +483,9 @@ fun NagiTheme(theme: String = "system", content: @Composable () -> Unit) {
         )
     }
 
+    val pressIndication = if (dark) DarkPressIndication else LightPressIndication
+    val rippleConfig = if (dark) DarkRippleConfiguration else LightRippleConfiguration
+
     CompositionLocalProvider(
         LocalNagiColors provides semantic,
         LocalNagiTypography provides typeTokens,
@@ -393,7 +495,12 @@ fun NagiTheme(theme: String = "system", content: @Composable () -> Unit) {
             colorScheme = colors,
             shapes = NagiMaterialShapes,
             typography = NagiTypography,
-            content = content,
-        )
+        ) {
+            CompositionLocalProvider(
+                LocalIndication provides pressIndication,
+                LocalRippleConfiguration provides rippleConfig,
+                content = content,
+            )
+        }
     }
 }

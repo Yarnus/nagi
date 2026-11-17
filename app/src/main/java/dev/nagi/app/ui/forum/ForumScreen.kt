@@ -1,5 +1,7 @@
 package dev.nagi.app.ui.forum
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -20,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -27,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -109,6 +113,15 @@ internal fun ForumDirectory(
     val allGroupKeys = remember(grouped) { grouped.keys.map { "${it.first}\u0000${it.second}" } }
     var collapsed by rememberSaveable { mutableStateOf(listOf<String>()) }
     val allCollapsed = allGroupKeys.isNotEmpty() && allGroupKeys.all { it in collapsed }
+    val listState = rememberLazyListState()
+    val showTopChrome by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 }
+    }
+    val chromeAlpha by animateFloatAsState(
+        targetValue = if (showTopChrome) 1f else 0f,
+        animationSpec = tween(180),
+        label = "forum chrome",
+    )
 
     val favoriteResolvedForums = remember(favoriteForums, state.items) {
         val byKey = state.items.associateBy { it.key }
@@ -127,6 +140,7 @@ internal fun ForumDirectory(
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         ProgressiveBlurScaffold(
             modifier = Modifier.widthIn(max = 760.dp),
+            topVisible = { chromeAlpha },
             bottomEdgeBlur = false,
             topBar = {
                 Row(
@@ -213,6 +227,7 @@ internal fun ForumDirectory(
             ) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
+                    state = listState,
                     contentPadding = padding,
                 ) {
                     item(key = "brand-header", contentType = "brand") {

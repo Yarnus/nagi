@@ -47,6 +47,9 @@ class GoldThemeTest {
                     assertReadable("$appearance accent on $background", colors.primary, background)
                 }
                 assertReadable("$appearance filled button", colors.onPrimary, colors.primary)
+                assertReadable("$appearance solid gold button text", tokens.goldSolidText, tokens.goldSolidFill)
+                assertReadable("$appearance solid gold button content", tokens.goldSolidContent, tokens.goldSolidFill)
+                assertEquals(tokens.goldSolidText, tokens.goldSolidContent)
                 assertReadable("$appearance selected label", tokens.selectedControlText, tokens.selectedControlFill)
                 assertReadable("$appearance metadata", colors.onSurfaceVariant, colors.surface)
             }

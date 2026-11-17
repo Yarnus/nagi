@@ -2,6 +2,8 @@ package dev.nagi.app.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,17 +14,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -31,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -121,39 +123,42 @@ fun AccountMenuButton(onSelect: (String) -> Unit) {
     val appUpdate = LocalAppUpdate.current
     val unread = notifications.takeIf { it.revision == identity.revision && it.userId == identity.userId }?.unreadCount ?: 0
     var expanded by rememberSaveable(identity.revision) { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
     Box {
-        IconButton(
-            onClick = { expanded = true },
+        Box(
             modifier = Modifier
                 .size(48.dp)
+                .clickable(
+                    role = Role.Button,
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = { expanded = true },
+                )
                 .semantics {
                     contentDescription = if (unread > 0) "头像菜单，$unread 条未读通知" else "头像菜单"
                     stateDescription = identity.user?.name ?: identity.userId?.let { "UID $it" } ?: "访客模式"
                 },
+            contentAlignment = Alignment.Center,
         ) {
-            Surface(
-                modifier = Modifier.size(42.dp),
-                shape = CircleShape,
-                color = colors.frostedChrome,
-                border = BorderStroke(1.dp, colors.cardBorder),
-                shadowElevation = 0.dp,
-                tonalElevation = 0.dp,
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .nagiPressFeedback(
+                        interactionSource = interactionSource,
+                        pressedScale = 0.92f,
+                        shape = CircleShape,
+                    )
+                    .frostedCapsuleBackdrop(colors.frostedChrome, CircleShape),
+                contentAlignment = Alignment.Center,
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    AccountAvatar(identity, Modifier.size(28.dp))
-                }
+                AccountAvatar(identity, Modifier.size(28.dp))
             }
         }
         UnreadBadge(unread, Modifier.align(Alignment.TopEnd))
-        DropdownMenu(
+        FrostedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
             modifier = Modifier.width(280.dp),
-            shape = NagiThemeTokens.shapes.dropdown,
-            containerColor = colors.frostedDropdown,
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp,
-            border = BorderStroke(1.dp, colors.cardBorder),
         ) {
             @Composable
             fun entry(

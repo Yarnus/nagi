@@ -48,8 +48,11 @@ class ProgressiveBlurTest {
                             val stripe = 8.dp.toPx()
                             val colorPhase = phase
                             for (x in 0..(size.width / stripe).toInt()) {
-                                drawRect(if (colorPhase == 2) Color.Red else if ((x + colorPhase) % 2 == 0) Color.Black else Color.White,
-                                    topLeft = Offset(x * stripe, 0f), size = Size(stripe, size.height))
+                                drawRect(
+                                    if (colorPhase == 2) Color.Red else if ((x + colorPhase) % 2 == 0) Color.Black else Color.White,
+                                    topLeft = Offset(x * stripe, 0f),
+                                    size = Size(stripe, size.height),
+                                )
                             }
                         }
                     }
@@ -71,18 +74,37 @@ class ProgressiveBlurTest {
         listOf("gpu-blur" to blurred, "gradient-fallback" to fallback).forEach { (name, image) ->
             File(output, "$name.png").outputStream().use { image.asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
-        val topY = (62 * density).toInt()
-        val bottomY = blurred.height - (64 * density).toInt()
-        android.util.Log.i("NagiBlurTest", "top=${variation(blurred, topY)}/${variation(fallback, topY)}, bottom=${variation(blurred, bottomY)}/${variation(fallback, bottomY)}, size=${blurred.width}x${blurred.height}, density=$density")
-        assertTrue("Top strip must soften the source", variation(blurred, topY) < variation(fallback, topY) * .9f)
-        assertTrue("Bottom strip must soften the source", variation(blurred, bottomY) < variation(fallback, bottomY) * .9f)
-        assertTrue("Body must remain sharp", variation(blurred, blurred.height / 2) > .9f)
+        val topY = (24 * density).toInt()
+        val topMidY = (50 * density).toInt()
+        val bottomY = blurred.height - (28 * density).toInt()
+        val bottomMidY = blurred.height - (70 * density).toInt()
+        val bodyY = blurred.height / 2
+        val topBlurVar = variation(blurred, topY)
+        val topMidVar = variation(blurred, topMidY)
+        val bottomBlurVar = variation(blurred, bottomY)
+        val bottomMidVar = variation(blurred, bottomMidY)
+        val bodyVar = variation(blurred, bodyY)
+        android.util.Log.i(
+            "NagiBlurTest",
+            "top=$topBlurVar/${variation(fallback, topY)}, topMid=$topMidVar, bottom=$bottomBlurVar/${variation(fallback, bottomY)}, bottomMid=$bottomMidVar, body=$bodyVar",
+        )
+        assertTrue("Top strip must soften the source", topBlurVar < variation(fallback, topY) * .9f)
+        assertTrue("Bottom strip must soften the source", bottomBlurVar < variation(fallback, bottomY) * .9f)
+        assertTrue("Body must remain sharp", bodyVar > .9f)
+        assertTrue(
+            "Top transition ($topMidVar) must sit strictly between blurred top ($topBlurVar) and sharp body ($bodyVar)",
+            topMidVar > topBlurVar && topMidVar < bodyVar * .95f,
+        )
+        assertTrue(
+            "Bottom transition ($bottomMidVar) must sit strictly between blurred bottom ($bottomBlurVar) and sharp body ($bodyVar)",
+            bottomMidVar > bottomBlurVar && bottomMidVar < bodyVar * .95f,
+        )
 
         compose.runOnIdle { enabled = true; phase = 1 }
         compose.waitForIdle()
         val updated = compose.onRoot().captureToImage()
         val middleX = (40 * density).toInt()
-        assertTrue("Source must update", blurred.toPixelMap()[middleX, blurred.height / 2] != updated.toPixelMap()[middleX, updated.height / 2])
+        assertTrue("Source must update", blurred.toPixelMap()[middleX, bodyY] != updated.toPixelMap()[middleX, bodyY])
         compose.runOnIdle { phase = 2 }
         compose.waitForIdle()
         val changedStrip = compose.onRoot().captureToImage().toPixelMap()[middleX, topY]
