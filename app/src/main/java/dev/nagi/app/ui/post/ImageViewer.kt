@@ -3,6 +3,7 @@ package dev.nagi.app.ui.post
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -186,13 +187,44 @@ private suspend fun saveImageToGallery(context: Context, bytes: ByteArray, forma
         }
     }
 
+internal suspend fun prepareShareImageUri(
+    context: Context,
+    fileName: String,
+    write: (File) -> Unit,
+): Uri = withContext(Dispatchers.IO) {
+    val dir = File(context.cacheDir, "shared-images").apply { mkdirs() }
+    dir.listFiles()?.forEach { old -> old.delete() }
+    val file = File(dir, fileName)
+    try {
+        write(file)
+    } catch (error: Throwable) {
+        file.delete()
+        throw error
+    }
+    FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+}
+
+internal fun launchShareImageIntent(
+    context: Context,
+    uri: Uri,
+    mimeType: String,
+    chooserTitle: String,
+) {
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = mimeType
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    runCatching {
+        context.startActivity(Intent.createChooser(send, chooserTitle))
+    }.onFailure {
+        Toast.makeText(context, "无法打开分享菜单", Toast.LENGTH_SHORT).show()
+    }
+}
+
 private suspend fun prepareShareImageUri(context: Context, url: String, bytes: ByteArray, format: DecodedImageFormat) =
-    withContext(Dispatchers.IO) {
-        val dir = File(context.cacheDir, "shared-images").apply { mkdirs() }
-        dir.listFiles()?.forEach { old -> old.delete() }
-        val file = File(dir, "nagi_${url.hashCode().toUInt()}.${format.extension}")
+    prepareShareImageUri(context, "nagi_${url.hashCode().toUInt()}.${format.extension}") { file ->
         file.writeBytes(bytes)
-        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
     }
 
 private suspend fun PointerInputScope.detectImageZoomAndPan(
@@ -334,16 +366,7 @@ internal fun ImageViewer(
                                         }
                                         val format = detectImageFormat(bytes)
                                         val uri = prepareShareImageUri(context, currentUrl, bytes, format)
-                                        val send = Intent(Intent.ACTION_SEND).apply {
-                                            type = format.mimeType
-                                            putExtra(Intent.EXTRA_STREAM, uri)
-                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                        }
-                                        runCatching {
-                                            context.startActivity(Intent.createChooser(send, "分享图片"))
-                                        }.onFailure {
-                                            Toast.makeText(context, "无法打开分享菜单", Toast.LENGTH_SHORT).show()
-                                        }
+                                        launchShareImageIntent(context, uri, format.mimeType, "分享图片")
                                     } finally {
                                         busyAction = false
                                     }

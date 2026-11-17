@@ -173,6 +173,7 @@ fun ReaderScreen(
         initialPage?.let { vm.jumpToPage(it); initialPageConsumed() }
     }
     val referenceStates by vm.references.collectAsStateWithLifecycle()
+    val shareCard by vm.shareCard.collectAsStateWithLifecycle()
     val uriHandler = LocalUriHandler.current
     var viewerImages by rememberSaveable(id) { mutableStateOf<List<String>>(emptyList()) }
     var viewerIndex by rememberSaveable(id) { mutableStateOf(0) }
@@ -263,6 +264,7 @@ fun ReaderScreen(
                                     else vm.load(page = 1, authorOnly = true)
                                 },
                                 onRefresh = { vm.load(page = currentPage) },
+                                onShareCard = vm::openShareCard,
                                 onShare = {
                                     runCatching {
                                         val send = Intent(Intent.ACTION_SEND).apply {
@@ -378,6 +380,7 @@ fun ReaderScreen(
                                                 Toast.makeText(context, "已复制楼层链接", Toast.LENGTH_SHORT).show()
                                             }
                                         } else null,
+                                        onShareCard = if (post.floor == 0) vm::openShareCard else null,
                                         topicAuthorId = data.authorId,
                                         showHotReplies = data.page == 1,
                                         onLocateHotReply = { reply -> vm.locateReference(PostReference(id, reply.id)) },
@@ -502,10 +505,21 @@ fun ReaderScreen(
             close = { viewerImages = emptyList() },
         )
     }
+    if (shareCard.open && state.id == id) {
+        PostShareCardDialog(
+            topicId = id,
+            topicTitle = data?.title.orEmpty(),
+            post = state.mainPost ?: state.items.firstOrNull { it.floor == 0 },
+            shareState = shareCard,
+            preferences = preferences,
+            onRetry = vm::retryShareCard,
+            close = vm::closeShareCard,
+        )
+    }
 }
 
 @Composable
-private fun ReaderTopBar(
+internal fun ReaderTopBar(
     title: String,
     showTitle: Boolean,
     favorite: Boolean,
@@ -520,6 +534,7 @@ private fun ReaderTopBar(
     onFavorite: () -> Unit,
     onFilter: () -> Unit,
     onRefresh: () -> Unit,
+    onShareCard: () -> Unit = {},
     onShare: () -> Unit = {},
     onCopyLink: () -> Unit = {},
     onOpenBrowser: () -> Unit = {},
@@ -709,6 +724,13 @@ private fun ReaderTopBar(
                     color = colors.cardBorder,
                 )
                 DropdownMenuItem(
+                    text = { Text("分享主楼卡片", style = typography.body, color = colors.textPrimary) },
+                    leadingIcon = { Icon(NagiIcons.ShareCard, contentDescription = null, modifier = Modifier.size(18.dp), tint = colors.textSecondary) },
+                    enabled = enabled,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    onClick = { menu = false; onShareCard() },
+                )
+                DropdownMenuItem(
                     text = { Text("分享主题链接", style = typography.body, color = colors.textPrimary) },
                     leadingIcon = { Icon(NagiIcons.Share, contentDescription = null, modifier = Modifier.size(18.dp), tint = colors.textSecondary) },
                     modifier = Modifier.heightIn(min = 48.dp),
@@ -750,6 +772,7 @@ internal fun ReaderPost(
     onFilterAuthor: (() -> Unit)? = null,
     onCopyText: (() -> Unit)? = null,
     onCopyLink: (() -> Unit)? = null,
+    onShareCard: (() -> Unit)? = null,
     topicAuthorId: String = "",
     showHotReplies: Boolean = true,
     onLocateHotReply: ((Post) -> Unit)? = null,
@@ -1182,6 +1205,24 @@ internal fun ReaderPost(
                                     onClick = {
                                         actions = false
                                         onCopyLink()
+                                    },
+                                )
+                            }
+                            if (onShareCard != null) {
+                                DropdownMenuItem(
+                                    text = { Text("分享主楼卡片", style = typography.body, color = colors.textPrimary) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = NagiIcons.ShareCard,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                            tint = colors.textSecondary,
+                                        )
+                                    },
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    onClick = {
+                                        actions = false
+                                        onShareCard()
                                     },
                                 )
                             }

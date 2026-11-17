@@ -22,13 +22,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -39,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.ui.components.FlatCard
 import dev.nagi.app.ui.components.NagiIcons
@@ -47,6 +51,21 @@ import dev.nagi.app.ui.theme.Space
 import dev.nagi.sdk.ContentAlignment
 import dev.nagi.sdk.ContentBlock
 import dev.nagi.sdk.MediaKind
+
+internal val LocalAllowHardwareImages = staticCompositionLocalOf { true }
+
+@Composable
+internal fun rememberPostImageModel(url: String): Any {
+    val allowHardware = LocalAllowHardwareImages.current
+    if (allowHardware) return url
+    val context = LocalContext.current
+    return remember(context, url) {
+        ImageRequest.Builder(context)
+            .data(url)
+            .allowHardware(false)
+            .build()
+    }
+}
 
 @Composable
 fun ContentBlocks(
@@ -71,6 +90,32 @@ internal fun collectContentImages(blocks: List<ContentBlock>): List<String> {
                 is ContentBlock.Collapse -> walk(block.children)
                 is ContentBlock.Quote,
                 is ContentBlock.Text,
+                is ContentBlock.Code,
+                is ContentBlock.Media,
+                is ContentBlock.Dice,
+                -> Unit
+            }
+        }
+    }
+    walk(blocks)
+    return result.toList()
+}
+
+internal fun collectVisibleCardMediaUrls(blocks: List<ContentBlock>): List<String> {
+    val result = LinkedHashSet<String>()
+    fun walk(items: List<ContentBlock>) {
+        items.forEach { block ->
+            when (block) {
+                is ContentBlock.Text -> block.smiles.forEach { result.add(it.smile.url) }
+                is ContentBlock.Image -> result.add(block.url)
+                is ContentBlock.Heading -> walk(block.children)
+                is ContentBlock.Divider -> walk(block.children)
+                is ContentBlock.Aligned -> walk(block.children)
+                is ContentBlock.ListBlock -> block.items.forEach(::walk)
+                is ContentBlock.Table -> block.rows.forEach { row -> row.forEach(::walk) }
+                // Collapse blocks render closed on share cards, and Quote blocks render text-only summaries.
+                is ContentBlock.Collapse,
+                is ContentBlock.Quote,
                 is ContentBlock.Code,
                 is ContentBlock.Media,
                 is ContentBlock.Dice,
@@ -194,7 +239,7 @@ private fun RenderContentBlocks(
                 )
 
                 is ContentBlock.Image -> AsyncImage(
-                    model = block.url,
+                    model = rememberPostImageModel(block.url),
                     contentDescription = "帖子图片，点击查看",
                     contentScale = ContentScale.Fit,
                     modifier = Modifier

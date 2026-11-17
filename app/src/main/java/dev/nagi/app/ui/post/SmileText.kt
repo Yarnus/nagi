@@ -158,7 +158,7 @@ internal fun SmileImage(smile: NgaSmile, modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center,
     ) {
         AsyncImage(
-            model = smile.url,
+            model = rememberPostImageModel(smile.url),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Fit,

@@ -602,6 +602,44 @@ class ReadingViewModelTest {
         accounts.logout(); runCurrent()
         assertTrue(restored.recommendAvailable.value)
     }
+
+    @Test fun shareCardUsesCachedMainPostOnPageOneAndFetchesOnDemandFromLaterPages() = runTest(dispatcher) {
+        val client = FakeClient()
+        val (vm, daos, accounts) = readerEnv(client = client)
+        vm.open("42"); runCurrent()
+        assertEquals(1, client.postRequests.size)
+        assertNotNull(vm.state.value.mainPost)
+
+        vm.openShareCard()
+        assertTrue(vm.shareCard.value.open)
+        assertFalse(vm.shareCard.value.loading)
+        assertEquals(1, client.postRequests.size)
+        vm.closeShareCard()
+
+        daos.forUser(null).savePosition(ReadingPosition("43", page = 3, index = 0, offset = 0, updatedAt = 1L))
+        vm.open("43"); runCurrent()
+        assertEquals(3, vm.state.value.data?.page)
+        assertNull(vm.state.value.mainPost)
+        val countBeforeShare = client.postRequests.size
+
+        client.failPosts = true
+        vm.openShareCard(); runCurrent()
+        assertTrue(vm.shareCard.value.open)
+        assertNotNull(vm.shareCard.value.error)
+        assertEquals(3, vm.state.value.data?.page)
+
+        client.failPosts = false
+        vm.retryShareCard(); runCurrent()
+        assertTrue(vm.shareCard.value.open)
+        assertFalse(vm.shareCard.value.loading)
+        assertNull(vm.shareCard.value.error)
+        assertEquals(0, vm.state.value.mainPost?.floor)
+        assertEquals(3, vm.state.value.data?.page)
+        assertEquals(countBeforeShare + 2, client.postRequests.size)
+
+        accounts.logout(); runCurrent()
+        assertFalse(vm.shareCard.value.open)
+    }
 }
 
 class FakeClient : NgaClient {

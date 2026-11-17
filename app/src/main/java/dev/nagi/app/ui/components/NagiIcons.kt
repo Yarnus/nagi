@@ -257,6 +257,21 @@ object NagiIcons {
         moveTo(5.2f, 11.5f); lineTo(5.2f, 19.8f); lineTo(18.8f, 19.8f); lineTo(18.8f, 11.5f)
     }
 
+    val ShareCard: ImageVector = strokeIcon("ShareCard") {
+        moveTo(5f, 4.5f); lineTo(19f, 4.5f)
+        curveTo(19.8f, 4.5f, 20.5f, 5.2f, 20.5f, 6f)
+        lineTo(20.5f, 18f)
+        curveTo(20.5f, 18.8f, 19.8f, 19.5f, 19f, 19.5f)
+        lineTo(5f, 19.5f)
+        curveTo(4.2f, 19.5f, 3.5f, 18.8f, 3.5f, 18f)
+        lineTo(3.5f, 6f)
+        curveTo(3.5f, 5.2f, 4.2f, 4.5f, 5f, 4.5f); close()
+        moveTo(7.2f, 15.2f); lineTo(10.5f, 11.6f); lineTo(13.2f, 14.3f); lineTo(15.3f, 12.2f); lineTo(17.2f, 15.2f)
+        moveTo(8.5f, 8.8f)
+        arcTo(0.8f, 0.8f, 0f, true, true, 10.1f, 8.8f)
+        arcTo(0.8f, 0.8f, 0f, true, true, 8.5f, 8.8f)
+    }
+
     val Globe: ImageVector = strokeIcon("Globe") {
         moveTo(3.5f, 12f); arcTo(8.5f, 8.5f, 0f, true, true, 20.5f, 12f); arcTo(8.5f, 8.5f, 0f, true, true, 3.5f, 12f)
         moveTo(3.5f, 12f); lineTo(20.5f, 12f)

@@ -284,6 +284,12 @@ class TopicsViewModel @Inject constructor(
     }
 }
 
+data class MainPostShareState(
+    val open: Boolean = false,
+    val loading: Boolean = false,
+    val error: String? = null,
+)
+
 data class ReaderState(
     val id: String = "", val data: PostPage? = null, val loading: Boolean = false,
     val error: String? = null, val position: ReadingPosition? = null,
@@ -292,6 +298,7 @@ data class ReaderState(
     val loadingPrevious: Boolean = false, val previousError: String? = null,
     val epoch: Int = 0, val targetFloor: Int? = null,
     val loadedRevision: Long = 0, val loadedPostIds: List<String> = emptyList(),
+    val mainPost: Post? = null,
 ) {
     val authorOnly: Boolean get() = filterAuthorId != null
     val pages: List<PostPage> = listOfNotNull(data) + more
@@ -347,12 +354,21 @@ class ReaderViewModel @Inject constructor(
     val references = _references.asStateFlow()
     private val referenceJobs = mutableMapOf<String, Job>()
     private var referenceGeneration = 0L
+    private val _shareCard = MutableStateFlow(MainPostShareState())
+    val shareCard = _shareCard.asStateFlow()
+    private var mainPostRequest: Job? = null
+    private var mainPostGeneration = 0L
     private fun currentReferenceOwner() = accounts.state.value.let {
         it.ready && !it.busy && it.revision == owner.revision && it.userId == owner.userId
     }
     init {
         viewModelScope.launch {
-            accounts.state.collect { if (!currentReferenceOwner()) clearReferences() }
+            accounts.state.collect {
+                if (!currentReferenceOwner()) {
+                    clearReferences()
+                    closeShareCard()
+                }
+            }
         }
     }
     private fun clearReferences() {
@@ -360,6 +376,57 @@ class ReaderViewModel @Inject constructor(
         referenceJobs.values.forEach { it.cancel() }
         referenceJobs.clear()
         _references.value = emptyMap()
+    }
+    fun openShareCard() {
+        val current = _state.value
+        val topicId = current.id
+        if (topicId.isBlank() || !currentReferenceOwner()) return
+        val existing = current.mainPost ?: current.items.firstOrNull { it.floor == 0 }
+        if (existing != null) {
+            if (current.mainPost == null) {
+                _state.update { if (it.id == topicId && it.mainPost == null) it.copy(mainPost = existing) else it }
+            }
+            _shareCard.value = MainPostShareState(open = true)
+            return
+        }
+        fetchMainPostForShare(topicId)
+    }
+    fun retryShareCard() {
+        val topicId = _state.value.id
+        if (topicId.isBlank() || !currentReferenceOwner()) return
+        if (_state.value.mainPost != null) {
+            _shareCard.value = MainPostShareState(open = true)
+            return
+        }
+        fetchMainPostForShare(topicId)
+    }
+    fun closeShareCard() {
+        mainPostGeneration++
+        mainPostRequest?.cancel()
+        mainPostRequest = null
+        _shareCard.value = MainPostShareState()
+    }
+    private fun fetchMainPostForShare(topicId: String) {
+        val version = ++mainPostGeneration
+        mainPostRequest?.cancel()
+        _shareCard.value = MainPostShareState(open = true, loading = true)
+        mainPostRequest = viewModelScope.launch {
+            try {
+                if (sessions.snapshot().revision != owner.revision) throw CancellationException("Account changed")
+                val page = client.getPosts(topicId, 1, null)
+                ensureActive()
+                if (version != mainPostGeneration || !currentReferenceOwner() || sessions.snapshot().revision != owner.revision) return@launch
+                if (_state.value.id != topicId) return@launch
+                val post = page.items.firstOrNull { it.floor == 0 } ?: throw NgaException.NotFound()
+                _state.update { if (it.id == topicId) it.copy(mainPost = post) else it }
+                _shareCard.value = MainPostShareState(open = true)
+            } catch (error: CancellationException) { throw error }
+            catch (error: Exception) {
+                if (version == mainPostGeneration && currentReferenceOwner() && _state.value.id == topicId) {
+                    _shareCard.value = MainPostShareState(open = true, error = userMessage(error))
+                }
+            }
+        }
     }
     fun resolveReference(reference: PostReference, retry: Boolean = false) {
         if (!currentReferenceOwner()) return
@@ -409,6 +476,7 @@ class ReaderViewModel @Inject constructor(
             return
         }
         clearReferences()
+        closeShareCard()
         requestedPage = null; requestedFloor = null; requestedReference = null; requestedAuthorId = null; requestedAuthorName = null; latestPosition = null
         moreRequest?.cancel()
         _state.value = ReaderState(id = id, loadedRevision = _state.value.loadedRevision)
@@ -466,11 +534,14 @@ class ReaderViewModel @Inject constructor(
                 catch (_: Exception) {  }
                 if (version != generation) return@launch
                 clearReferences()
+                val currentMainPost = _state.value.takeIf { it.id == old.id }?.mainPost
+                val resolvedMainPost = data.items.firstOrNull { it.floor == 0 } ?: currentMainPost
                 _state.value = ReaderState(
                     old.id, data, position = position?.takeIf { it.page == data.page && !filtered && targetFloor == null && targetReference == null },
                     filterAuthorId = resolvedAuthorId, filterAuthorName = resolvedAuthorName,
                     epoch = old.epoch + 1, targetFloor = resolvedFloor ?: targetFloor,
                     loadedRevision = old.loadedRevision + 1, loadedPostIds = data.items.map { it.id },
+                    mainPost = resolvedMainPost,
                 )
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) { if (version == generation) _state.update { it.copy(loading = false, error = userMessage(error)) } }
@@ -512,7 +583,11 @@ class ReaderViewModel @Inject constructor(
                     val fresh = result.copy(items = result.items.filter { it.id !in known })
                     val updated = if (prepend) current.copy(data = fresh, more = listOf(current.data) + current.more, loadingPrevious = false, previousError = null)
                     else current.copy(more = current.more + fresh, loadingMore = false, moreError = null)
-                    updated.copy(loadedRevision = current.loadedRevision + 1, loadedPostIds = fresh.items.map { it.id })
+                    updated.copy(
+                        loadedRevision = current.loadedRevision + 1,
+                        loadedPostIds = fresh.items.map { it.id },
+                        mainPost = result.items.firstOrNull { it.floor == 0 } ?: current.mainPost,
+                    )
                 }
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) {
