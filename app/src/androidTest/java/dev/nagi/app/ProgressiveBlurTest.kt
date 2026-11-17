@@ -41,6 +41,7 @@ class ProgressiveBlurTest {
                 Box(Modifier.fillMaxSize()) {
                     ProgressiveBlurScaffold(
                         blurEnabled = enabled,
+                        contentWindowInsets = WindowInsets(0),
                         topBar = { Spacer(Modifier.fillMaxWidth().height(56.dp)) },
                         bottomBar = { Spacer(Modifier.fillMaxWidth().height(64.dp)) },
                     ) {

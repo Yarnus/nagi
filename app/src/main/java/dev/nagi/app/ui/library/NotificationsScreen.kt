@@ -23,10 +23,11 @@ fun NotificationsScreen(
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
-    Column(Modifier.fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 760.dp)) {
+    Column(Modifier.fillMaxSize()) {
         NagiHeader("通知", state.unreadCount?.let { "$it 条未读" } ?: "社区通知", back = back) {
             ChromeIconButton(NagiIcons.Refresh, "刷新通知", onClick = refresh)
         }
+        Column(Modifier.weight(1f).fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 760.dp)) {
         if (state.userId == null) {
             Notice("请先登录 NGA", login)
         } else {
@@ -35,7 +36,7 @@ fun NotificationsScreen(
                     CapsuleButton("全部已读", markAllRead, style = CapsuleStyle.Neutral)
                 }
             }
-            LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(vertical = Space.md)) {
+            LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(top = Space.md, bottom = Space.md + safeBottomPadding())) {
                 if (state.loading) item { LoadingLine() }
                 state.error?.let { error -> item { Notice(error, refresh) } }
                 if (state.loaded && !state.loading && state.items.isEmpty()) item { Notice("暂无通知") }
@@ -58,6 +59,7 @@ fun NotificationsScreen(
                     }
                 }
             }
+        }
         }
     }
 }

@@ -6,6 +6,9 @@ import android.os.PowerManager
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.dp
@@ -15,6 +18,7 @@ import dev.nagi.app.ui.components.ProgressiveBlurScaffold
 import dev.nagi.app.ui.components.SectionCardItem
 import dev.nagi.app.ui.theme.NagiTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -66,5 +70,44 @@ class GroupedChromeTest {
         }
         compose.onNodeWithText("内容保留").assertIsDisplayed()
         compose.onNodeWithText("节能顶栏").assertIsDisplayed()
+    }
+
+    @Test
+    @Config(sdk = [35])
+    fun edgeToEdgeInsetsPushChromeControlsBelowTopAndAboveBottomWithoutGap() {
+        var topBarTopY = -1f
+        var bodyTopDp = -1f
+        var bodyBottomDp = -1f
+        compose.setContent {
+            NagiTheme {
+                Box(Modifier.fillMaxSize()) {
+                    ProgressiveBlurScaffold(
+                        contentWindowInsets = WindowInsets(top = 32.dp, bottom = 24.dp),
+                        topBar = {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp)
+                                    .onGloballyPositioned { topBarTopY = it.positionInRoot().y }
+                                    .testTag("edge-top-bar"),
+                            ) {
+                                Text("阅读")
+                            }
+                        },
+                    ) { padding ->
+                        bodyTopDp = padding.calculateTopPadding().value
+                        bodyBottomDp = padding.calculateBottomPadding().value
+                        Text("正文", Modifier.padding(padding))
+                    }
+                }
+            }
+        }
+        compose.onNodeWithText("阅读").assertIsDisplayed()
+        compose.onNodeWithText("正文").assertIsDisplayed()
+        compose.runOnIdle {
+            assertTrue("Top bar content must sit below 32dp top inset (y=$topBarTopY)", topBarTopY > 0f)
+            assertTrue("Body top padding ($bodyTopDp) must clear 32dp inset + 56dp bar", bodyTopDp >= 96f)
+            assertTrue("Body bottom padding ($bodyBottomDp) must clear 24dp bottom inset", bodyBottomDp >= 48f)
+        }
     }
 }

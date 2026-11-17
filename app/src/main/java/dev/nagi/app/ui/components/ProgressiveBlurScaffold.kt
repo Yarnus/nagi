@@ -76,6 +76,7 @@ fun ProgressiveBlurScaffold(
     topVisible: () -> Float = { 1f },
     blurEnabled: Boolean = true,
     bottomEdgeBlur: Boolean = true,
+    contentWindowInsets: WindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical),
     topBar: @Composable () -> Unit,
     bottomBar: (@Composable () -> Unit)? = null,
     content: @Composable (PaddingValues) -> Unit,
@@ -85,10 +86,14 @@ fun ProgressiveBlurScaffold(
     val hazeState = rememberHazeState(blurEnabled = hardware)
     SideEffect { hazeState.blurEnabled = hardware }
     val chromeSpec = NagiMaterials.chrome()
+    val topInsets = contentWindowInsets.only(WindowInsetsSides.Top)
+    val bottomInsets = contentWindowInsets.only(WindowInsetsSides.Bottom)
     var topSize by remember { mutableStateOf(IntSize.Zero) }
     var bottomSize by remember { mutableStateOf(IntSize.Zero) }
     val topPadding = with(density) { topSize.height.toDp() }
     val bottomPadding = with(density) { bottomSize.height.toDp() }
+    val fallbackBottomPadding = with(density) { bottomInsets.getBottom(density).toDp() }
+    val effectiveBottomPadding = if (bottomBar != null) bottomPadding else fallbackBottomPadding
 
     CompositionLocalProvider(
         LocalNagiHaze provides hazeState,
@@ -101,7 +106,7 @@ fun ProgressiveBlurScaffold(
                 .background(MaterialTheme.colorScheme.background),
         ) {
             Box(Modifier.fillMaxSize().hazeSource(state = hazeState)) {
-                content(PaddingValues(top = topPadding + 8.dp, bottom = bottomPadding + 24.dp))
+                content(PaddingValues(top = topPadding + 8.dp, bottom = effectiveBottomPadding + 24.dp))
             }
             Box(
                 modifier = Modifier
@@ -136,9 +141,21 @@ fun ProgressiveBlurScaffold(
                         },
                 )
             }
-            Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().onSizeChanged { topSize = it }) { topBar() }
+            Box(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .onSizeChanged { topSize = it }
+                    .windowInsetsPadding(topInsets),
+            ) { topBar() }
             if (bottomBar != null) {
-                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { bottomSize = it }) { bottomBar() }
+                Box(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .onSizeChanged { bottomSize = it }
+                        .windowInsetsPadding(bottomInsets),
+                ) { bottomBar() }
             }
         }
     }

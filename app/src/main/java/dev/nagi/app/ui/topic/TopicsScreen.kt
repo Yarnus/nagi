@@ -42,7 +42,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -91,6 +90,7 @@ import dev.nagi.app.ui.components.InlineStatusBanner
 import dev.nagi.app.ui.components.NagiDialog
 import dev.nagi.app.ui.components.NagiFrostedSheet
 import dev.nagi.app.ui.components.NagiIcons
+import dev.nagi.app.ui.components.NagiPullToRefreshBox
 import dev.nagi.app.ui.components.Notice
 import dev.nagi.app.ui.components.ProgressiveBlurScaffold
 import dev.nagi.app.ui.components.ReplyCountPill
@@ -478,12 +478,13 @@ fun TopicsScreen(
                             }
                         },
                     ) { chromePadding ->
-                        PullToRefreshBox(
+                        NagiPullToRefreshBox(
                             isRefreshing = state.loading && state.items.isNotEmpty() && !loadingMore,
                             onRefresh = {
                                 loadingMore = false
                                 vm.load(true)
                             },
+                            topPadding = chromePadding.calculateTopPadding(),
                             modifier = Modifier.fillMaxSize(),
                         ) {
                             LazyColumn(

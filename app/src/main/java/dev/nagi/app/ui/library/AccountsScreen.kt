@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,6 +32,7 @@ import dev.nagi.app.ui.components.NagiHeader
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.Notice
 import dev.nagi.app.ui.components.SectionCardItem
+import dev.nagi.app.ui.components.safeBottomPadding
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
 import dev.nagi.app.viewmodel.AccountIdentity
@@ -47,7 +50,7 @@ fun AccountsScreen(
     Column(Modifier.fillMaxSize()) {
         NagiHeader("账号管理", back = back)
         LazyColumn(
-            contentPadding = PaddingValues(vertical = Space.lg),
+            contentPadding = PaddingValues(top = Space.lg, bottom = Space.lg + safeBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(Space.md),
         ) {
             item(key = "current-status") {
@@ -141,8 +144,10 @@ fun OwnProfileScreen(
         identity.error?.let { Notice(it, retry) }
         Column(
             modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
                 .fillMaxWidth()
-                .padding(vertical = Space.lg),
+                .padding(top = Space.lg, bottom = Space.lg + safeBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(Space.md),
         ) {
             FlatCard(

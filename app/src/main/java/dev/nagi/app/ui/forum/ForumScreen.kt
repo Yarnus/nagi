@@ -28,7 +28,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -63,6 +62,7 @@ import dev.nagi.app.ui.components.FrostedDropdownMenu
 import dev.nagi.app.ui.components.GoldTagBadge
 import dev.nagi.app.ui.components.LoadingLine
 import dev.nagi.app.ui.components.NagiIcons
+import dev.nagi.app.ui.components.NagiPullToRefreshBox
 import dev.nagi.app.ui.components.Notice
 import dev.nagi.app.ui.components.ProgressiveBlurScaffold
 import dev.nagi.app.ui.components.SearchCapsuleBar
@@ -221,9 +221,10 @@ internal fun ForumDirectory(
                 }
             },
         ) { padding ->
-            PullToRefreshBox(
+            NagiPullToRefreshBox(
                 isRefreshing = state.loading && state.items.isNotEmpty(),
                 onRefresh = refresh,
+                topPadding = padding.calculateTopPadding(),
             ) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),

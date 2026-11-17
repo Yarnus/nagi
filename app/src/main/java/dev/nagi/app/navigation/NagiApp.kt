@@ -6,9 +6,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Surface
@@ -186,7 +191,13 @@ fun NagiApp(
                             },
                             LocalOpenLogin provides { select("login") },
                         ) {
-                            NavHost(nav, startDestination = "forums", modifier = Modifier.safeDrawingPadding().fillMaxSize()) {
+                            NavHost(
+                                nav,
+                                startDestination = "forums",
+                                modifier = Modifier
+                                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                                    .fillMaxSize(),
+                            ) {
                                 composable("forums") {
                                     ForumScreen(library, select, navigateToForum)
                                 }
@@ -261,7 +272,13 @@ fun NagiApp(
                                 composable("about") { entry -> AboutScreen(back = { popBackFrom(entry) }) }
                                 composable("profile") { entry ->
                                     if (account.userId == null) {
-                                        Notice("请先登录 NGA") { select("login") }
+                                        Box(
+                                            Modifier
+                                                .fillMaxSize()
+                                                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical)),
+                                        ) {
+                                            Notice("请先登录 NGA") { select("login") }
+                                        }
                                     } else {
                                         OwnProfileScreen(
                                             identity = identity,

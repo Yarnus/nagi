@@ -42,6 +42,7 @@ import dev.nagi.app.ui.components.NagiHeader
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.Notice
 import dev.nagi.app.ui.components.SectionCardItem
+import dev.nagi.app.ui.components.safeBottomPadding
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
 import dev.nagi.app.ui.topic.formatTime
@@ -137,7 +138,7 @@ fun HistoryScreen(vm: LibraryViewModel, back: () -> Unit, read: (String) -> Unit
                 ),
             )
         }
-        LazyColumn(contentPadding = PaddingValues(vertical = Space.lg)) {
+        LazyColumn(contentPadding = PaddingValues(top = Space.lg, bottom = Space.lg + safeBottomPadding())) {
             itemsIndexed(visibleHistory, key = { _, item -> item.topicId }) { index, item ->
                 SectionCardItem(CardGroupPosition.at(index, visibleHistory.size)) {
                     Row(

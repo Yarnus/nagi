@@ -39,6 +39,7 @@ import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.Notice
 import dev.nagi.app.ui.components.ReplyCountPill
 import dev.nagi.app.ui.components.SectionCardItem
+import dev.nagi.app.ui.components.safeBottomPadding
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
 import dev.nagi.app.ui.topic.formatTime
@@ -59,10 +60,11 @@ fun UserContentScreen(
     val replies = vm.selected.collectAsStateWithLifecycle().value
     val profile = profileVm.state.collectAsStateWithLifecycle().value
     val scrollStates = rememberSaveableStateHolder()
-    Column(Modifier.fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 760.dp)) {
+    Column(Modifier.fillMaxSize()) {
         NagiHeader("用户详情", "UID ${vm.userId}", back = back) {
             ChromeIconButton(NagiIcons.Refresh, "刷新", onClick = { profileVm.refresh(); vm.refresh() })
         }
+        Column(Modifier.weight(1f).fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 760.dp)) {
         key(replies) {
         scrollStates.SaveableStateProvider("${vm.userId}:$replies") {
         val listState = rememberLazyListState()
@@ -76,7 +78,7 @@ fun UserContentScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(vertical = Space.md),
+            contentPadding = PaddingValues(top = Space.md, bottom = Space.md + safeBottomPadding()),
         ) {
             item(key = "profile") { UserProfileCard(profile, profileVm::refresh, sendMessage) }
             stickyHeader(key = "tabs") {
@@ -169,6 +171,7 @@ fun UserContentScreen(
             if (state.loaded && state.hasMore == null) {
                 item(key = "unknown-bounds") { Text("总页数未知", style = typography.metadata, color = colors.textSecondary, modifier = Modifier.padding(Space.lg)) }
             }
+        }
         }
         }
         }

@@ -50,6 +50,7 @@ import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.Notice
 import dev.nagi.app.ui.components.SectionCardItem
 import dev.nagi.app.ui.components.SegmentedCapsuleControl
+import dev.nagi.app.ui.components.safeBottomPadding
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
 import dev.nagi.app.viewmodel.LibraryViewModel
@@ -75,7 +76,7 @@ fun FavoritesScreen(
         }
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(vertical = Space.md),
+            contentPadding = PaddingValues(top = Space.md, bottom = Space.md + safeBottomPadding()),
         ) {
             if (forumFavorites.isNotEmpty()) {
                 item(key = "forum-fav-header") {
@@ -208,7 +209,7 @@ fun SettingsScreen(
             AccountMenuButton(onSelect)
         }
         LazyColumn(
-            contentPadding = PaddingValues(vertical = Space.lg),
+            contentPadding = PaddingValues(top = Space.lg, bottom = Space.lg + safeBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(Space.md),
         ) {
             item(key = "appearance-header") {
@@ -360,7 +361,7 @@ fun AboutScreen(back: () -> Unit) {
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .fillMaxWidth()
-                .padding(vertical = Space.lg),
+                .padding(top = Space.lg, bottom = Space.lg + safeBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(Space.md),
         ) {
             FlatCard(
