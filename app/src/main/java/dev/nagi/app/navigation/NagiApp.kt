@@ -288,7 +288,13 @@ fun NagiApp(
                                 composable("accounts") { entry ->
                                     AccountsScreen(account, accountVm, back = { popBackFrom(entry) }, login = { select("login") })
                                 }
-                                composable("about") { entry -> AboutScreen(back = { popBackFrom(entry) }) }
+                                composable("about") { entry ->
+                                    AboutScreen(
+                                        onCheckUpdate = updateVm::checkNow,
+                                        onResetUpdateStatus = updateVm::resetManualStatus,
+                                        back = { popBackFrom(entry) },
+                                    )
+                                }
                                 composable("profile") { entry ->
                                     if (account.userId == null) {
                                         Box(

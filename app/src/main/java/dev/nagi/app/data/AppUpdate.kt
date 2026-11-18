@@ -66,9 +66,19 @@ internal fun parseReleaseTagFromLocation(location: String?): String? {
     return "v${version.major}.${version.minor}.${version.patch}"
 }
 
+enum class UpdateCheckStatus {
+    IDLE,
+    CHECKING,
+    UP_TO_DATE,
+    UPDATE_AVAILABLE,
+    FAILED,
+}
+
 data class AppUpdateState(
     val latestTag: String? = null,
     val hasUpdate: Boolean = false,
+    val checking: Boolean = false,
+    val manualStatus: UpdateCheckStatus = UpdateCheckStatus.IDLE,
 )
 
 fun interface ReleaseChecker {
@@ -129,7 +139,7 @@ class DataStoreUpdateCacheStore @Inject constructor(
 class GitHubReleaseChecker(
     private val url: String = LATEST_RELEASE_URL,
     private val userAgent: String = "Nagi/${BuildConfig.VERSION_NAME}",
-    private val timeoutMillis: Int = 5_000,
+    private val timeoutMillis: Int = 10_000,
 ) : ReleaseChecker {
     override suspend fun fetchLatestReleaseTag(): String? = withContext(Dispatchers.IO) {
         var connection: HttpURLConnection? = null
@@ -182,7 +192,7 @@ class ReleaseUpdateRepository(
                 UpdateCheckCache()
             }
             val cachedHasUpdate = isNewerRelease(current, cache.latestTag)
-            _state.value = AppUpdateState(
+            _state.value = _state.value.copy(
                 latestTag = cache.latestTag.takeIf { cachedHasUpdate },
                 hasUpdate = cachedHasUpdate,
             )
@@ -199,7 +209,7 @@ class ReleaseUpdateRepository(
             lastAttemptMillis = now
             val remoteTag = checker.fetchLatestReleaseTag() ?: return
             val hasUpdate = isNewerRelease(current, remoteTag)
-            _state.value = AppUpdateState(
+            _state.value = _state.value.copy(
                 latestTag = remoteTag.takeIf { hasUpdate },
                 hasUpdate = hasUpdate,
             )
@@ -214,6 +224,53 @@ class ReleaseUpdateRepository(
                 throw error
             } catch (_: Exception) {
             }
+        }
+    }
+
+    suspend fun checkNow() {
+        mutex.withLock {
+            _state.value = _state.value.copy(
+                checking = true,
+                manualStatus = UpdateCheckStatus.CHECKING,
+            )
+            val remoteTag = checker.fetchLatestReleaseTag()
+            val current = currentVersion()
+            if (remoteTag == null) {
+                val preservedHasUpdate = _state.value.hasUpdate && isNewerRelease(current, _state.value.latestTag)
+                _state.value = AppUpdateState(
+                    latestTag = _state.value.latestTag.takeIf { preservedHasUpdate },
+                    hasUpdate = preservedHasUpdate,
+                    checking = false,
+                    manualStatus = UpdateCheckStatus.FAILED,
+                )
+                return
+            }
+            val now = nowMillis()
+            val hasUpdate = isNewerRelease(current, remoteTag)
+            lastAttemptMillis = now
+            _state.value = AppUpdateState(
+                latestTag = remoteTag.takeIf { hasUpdate },
+                hasUpdate = hasUpdate,
+                checking = false,
+                manualStatus = if (hasUpdate) UpdateCheckStatus.UPDATE_AVAILABLE else UpdateCheckStatus.UP_TO_DATE,
+            )
+            try {
+                cacheStore.write(
+                    UpdateCheckCache(
+                        lastCheckedAtMillis = now,
+                        latestTag = remoteTag,
+                    ),
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun resetManualStatus() {
+        if (!_state.value.checking) {
+            _state.value = _state.value.copy(manualStatus = UpdateCheckStatus.IDLE)
         }
     }
 }

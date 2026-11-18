@@ -1,5 +1,7 @@
 package dev.nagi.app
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -16,6 +18,7 @@ import dev.nagi.app.data.ReleaseChecker
 import dev.nagi.app.data.ReleaseUpdateRepository
 import dev.nagi.app.data.UPDATE_CHECK_INTERVAL_MILLIS
 import dev.nagi.app.data.UpdateCheckCache
+import dev.nagi.app.data.UpdateCheckStatus
 import dev.nagi.app.data.isNewerRelease
 import dev.nagi.app.data.parseReleaseTagFromLocation
 import dev.nagi.app.data.parseSemVer
@@ -138,6 +141,64 @@ class AppUpdateLogicTest {
         assertEquals(1, networkCalls)
         assertEquals(AppUpdateState(latestTag = "v0.2.1", hasUpdate = true), repo.state.value)
     }
+
+    @Test fun manualCheckNowBypassesThrottleReportsStatusesAndPreservesCachedUpdateOnFailure() = runTest {
+        var now = 10_000_000L
+        var installedVersion = "0.3.2"
+        var remoteTag: String? = "v0.3.2"
+        var networkCalls = 0
+        val cache = InMemoryUpdateCacheStore()
+
+        val repo = ReleaseUpdateRepository(
+            checker = ReleaseChecker {
+                networkCalls++
+                remoteTag
+            },
+            cacheStore = cache,
+            currentVersion = { installedVersion },
+            nowMillis = { now },
+        )
+
+        repo.checkIfNeeded()
+        assertEquals(1, networkCalls)
+        assertEquals(UpdateCheckStatus.IDLE, repo.state.value.manualStatus)
+
+        // Manual check within 24h bypasses throttle and reports up-to-date
+        now += 1_000L
+        repo.checkNow()
+        assertEquals(2, networkCalls)
+        assertFalse(repo.state.value.hasUpdate)
+        assertFalse(repo.state.value.checking)
+        assertEquals(UpdateCheckStatus.UP_TO_DATE, repo.state.value.manualStatus)
+
+        // Manual check discovers a newer release
+        now += 1_000L
+        remoteTag = "v0.4.0"
+        repo.checkNow()
+        assertEquals(3, networkCalls)
+        assertTrue(repo.state.value.hasUpdate)
+        assertEquals("v0.4.0", repo.state.value.latestTag)
+        assertEquals(UpdateCheckStatus.UPDATE_AVAILABLE, repo.state.value.manualStatus)
+
+        // Failed manual check reports FAILED while preserving previously known update
+        now += 1_000L
+        remoteTag = null
+        repo.checkNow()
+        assertEquals(4, networkCalls)
+        assertTrue(repo.state.value.hasUpdate)
+        assertEquals("v0.4.0", repo.state.value.latestTag)
+        assertEquals(UpdateCheckStatus.FAILED, repo.state.value.manualStatus)
+
+        // Leaving screen resets manual status while keeping cached update state
+        repo.resetManualStatus()
+        assertEquals(UpdateCheckStatus.IDLE, repo.state.value.manualStatus)
+        assertTrue(repo.state.value.hasUpdate)
+
+        // Installed version upgraded clears badge
+        installedVersion = "0.4.0"
+        repo.checkIfNeeded()
+        assertFalse(repo.state.value.hasUpdate)
+    }
 }
 
 @HiltAndroidTest
@@ -170,5 +231,53 @@ class AppUpdateFlowTest {
 
         compose.onNodeWithText("查看最新版本").assertIsDisplayed()
         compose.onNodeWithText("v99.0.0").assertIsDisplayed()
+        compose.onNodeWithText("检查更新").performClick()
+        compose.onNodeWithText("发现新版本 v99.0.0，可点击下方「查看最新版本」前往下载").assertIsDisplayed()
+    }
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(application = android.app.Application::class, sdk = [35], qualifiers = "w320dp-h850dp")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class AboutCheckUpdateUiTest {
+    @get:Rule val compose = androidx.compose.ui.test.junit4.createComposeRule()
+
+    @Test fun checkUpdateButtonAndStatusesRenderCleanlyOnNarrowLargeFont() {
+        org.robolectric.RuntimeEnvironment.setFontScale(2f)
+        var state by androidx.compose.runtime.mutableStateOf(AppUpdateState())
+        var clicks = 0
+
+        compose.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(
+                dev.nagi.app.ui.components.LocalAppUpdate provides state,
+            ) {
+                dev.nagi.app.ui.theme.NagiTheme("dark") {
+                    dev.nagi.app.ui.library.AboutScreen(
+                        back = {},
+                        onCheckUpdate = { clicks++ },
+                    )
+                }
+            }
+        }
+
+        compose.onNodeWithText("检查更新").performClick()
+        compose.runOnIdle { assertEquals(1, clicks) }
+
+        compose.runOnIdle {
+            state = AppUpdateState(checking = true, manualStatus = UpdateCheckStatus.CHECKING)
+        }
+        compose.onNodeWithText("检查中…").assertIsDisplayed()
+        compose.onNodeWithText("正在检查 GitHub 最新版本…").assertIsDisplayed()
+
+        compose.runOnIdle {
+            state = AppUpdateState(checking = false, manualStatus = UpdateCheckStatus.UP_TO_DATE)
+        }
+        compose.onNodeWithText("当前已是最新版本").assertIsDisplayed()
+
+        compose.runOnIdle {
+            state = AppUpdateState(checking = false, manualStatus = UpdateCheckStatus.FAILED)
+        }
+        compose.onNodeWithText("检查更新失败，请检查网络后重试").assertIsDisplayed()
+        org.robolectric.RuntimeEnvironment.setFontScale(1f)
     }
 }

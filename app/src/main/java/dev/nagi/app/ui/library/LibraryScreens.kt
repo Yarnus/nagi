@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -28,6 +29,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -42,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.nagi.app.data.ReadingPreferences
+import dev.nagi.app.data.UpdateCheckStatus
 import dev.nagi.app.ui.components.AccountMenuButton
 import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
@@ -514,11 +517,19 @@ private enum class ExternalLinkTarget(val copyButtonText: String, val clipLabel:
     Release("复制发布页链接", "GitHub Releases"),
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AboutScreen(back: () -> Unit) {
+fun AboutScreen(
+    onCheckUpdate: () -> Unit = {},
+    onResetUpdateStatus: () -> Unit = {},
+    back: () -> Unit,
+) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
     val appUpdate = LocalAppUpdate.current
+    DisposableEffect(Unit) {
+        onDispose { onResetUpdateStatus() }
+    }
     var licenses by rememberSaveable { mutableStateOf(false) }
     var unavailableUri by rememberSaveable { mutableStateOf<String?>(null) }
     var unavailableTarget by rememberSaveable { mutableStateOf<ExternalLinkTarget?>(null) }
@@ -542,6 +553,9 @@ fun AboutScreen(back: () -> Unit) {
     }
     Column(Modifier.fillMaxSize()) {
         NagiHeader("关于与反馈", back = back)
+        if (appUpdate.checking) {
+            LoadingLine()
+        }
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -561,14 +575,50 @@ fun AboutScreen(back: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(Space.xs),
                 ) {
                     FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalArrangement = Arrangement.spacedBy(Space.xs),
                         itemVerticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("Nagi $version", style = typography.sectionTitle, color = colors.textPrimary)
-                        if (appUpdate.hasUpdate) {
-                            GoldTagBadge("新版本")
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                            verticalArrangement = Arrangement.spacedBy(Space.xs),
+                            itemVerticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Nagi $version", style = typography.sectionTitle, color = colors.textPrimary)
+                            if (appUpdate.hasUpdate) {
+                                GoldTagBadge("新版本")
+                            }
                         }
+                        CapsuleButton(
+                            text = if (appUpdate.checking) "检查中…" else "检查更新",
+                            onClick = onCheckUpdate,
+                            enabled = !appUpdate.checking,
+                            style = CapsuleStyle.Neutral,
+                        )
+                    }
+                    when (appUpdate.manualStatus) {
+                        UpdateCheckStatus.IDLE -> Unit
+                        UpdateCheckStatus.CHECKING -> Text(
+                            text = "正在检查 GitHub 最新版本…",
+                            style = typography.metadata,
+                            color = colors.textSecondary,
+                        )
+                        UpdateCheckStatus.UP_TO_DATE -> Text(
+                            text = "当前已是最新版本",
+                            style = typography.metadata,
+                            color = colors.textSecondary,
+                        )
+                        UpdateCheckStatus.UPDATE_AVAILABLE -> Text(
+                            text = "发现新版本 ${appUpdate.latestTag.orEmpty()}，可点击下方「查看最新版本」前往下载",
+                            style = typography.metadata,
+                            color = colors.goldText,
+                        )
+                        UpdateCheckStatus.FAILED -> Text(
+                            text = "检查更新失败，请检查网络后重试",
+                            style = typography.metadata,
+                            color = colors.destructive,
+                        )
                     }
                     Text(
                         text = "在 GitHub 提交问题或功能建议，需要登录 GitHub。将附带 App 版本、Android 版本和设备型号，请勿包含账号凭据或私信内容。",
