@@ -82,7 +82,6 @@ fun FavoritesScreen(
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
     val favorites by vm.favorites.collectAsStateWithLifecycle()
-    val forumFavorites by vm.forumFavorites.collectAsStateWithLifecycle()
     val directory by vm.forums.collectAsStateWithLifecycle()
     val cloudFavorites by vm.cloudFavoriteForums.collectAsStateWithLifecycle()
     val cloudBusyKeys by vm.cloudForumBusyKeys.collectAsStateWithLifecycle()
@@ -145,68 +144,6 @@ fun FavoritesScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(top = Space.xs, bottom = Space.md + safeBottomPadding()),
                         ) {
-                            if (forumFavorites.isNotEmpty()) {
-                                item(key = "forum-fav-header") {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = Space.lg, vertical = Space.sm),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(Space.xs),
-                                    ) {
-                                        Text("收藏版块", style = typography.sectionHeader, color = colors.textSecondary)
-                                        GoldTagBadge(text = "本地")
-                                    }
-                                }
-                                itemsIndexed(forumFavorites, key = { _, fav -> "forum:${fav.key}" }) { index, fav ->
-                                    SectionCardItem(CardGroupPosition.at(index, forumFavorites.size)) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable {
-                                                    onForum(
-                                                        Forum(
-                                                            id = fav.forumId,
-                                                            name = fav.name,
-                                                            description = fav.description,
-                                                            category = fav.category,
-                                                            group = fav.groupName,
-                                                            collectionId = fav.collectionId,
-                                                        ),
-                                                    )
-                                                }
-                                                .padding(horizontal = Space.lg, vertical = Space.md),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(Space.sm),
-                                        ) {
-                                            Column(Modifier.weight(1f)) {
-                                                Text(
-                                                    text = fav.name,
-                                                    style = typography.topicTitle,
-                                                    color = colors.textPrimary,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                )
-                                                if (fav.description.isNotBlank()) {
-                                                    Text(
-                                                        text = fav.description,
-                                                        style = typography.metadata,
-                                                        color = colors.textSecondary,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis,
-                                                    )
-                                                }
-                                            }
-                                            CapsuleButton(
-                                                text = "移除",
-                                                onClick = { vm.removeForumFavorite(fav.key) },
-                                                style = CapsuleStyle.Neutral,
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
                             if (favorites.isNotEmpty()) {
                                 item(key = "topic-fav-header") {
                                     Row(
@@ -246,9 +183,7 @@ fun FavoritesScreen(
                                         }
                                     }
                                 }
-                            }
-
-                            if (favorites.isEmpty() && forumFavorites.isEmpty()) {
+                            } else {
                                 item(key = "empty") {
                                     Notice("在阅读页选择“本地收藏”，即可在这里继续阅读")
                                 }

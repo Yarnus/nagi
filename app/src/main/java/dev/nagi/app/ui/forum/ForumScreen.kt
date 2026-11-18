@@ -53,7 +53,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.nagi.app.data.LocalForumFavorite
 import dev.nagi.app.ui.components.AccountMenuButton
 import dev.nagi.app.ui.components.CardGroupPosition
 import dev.nagi.app.ui.components.ChromeIconButton
@@ -75,8 +74,6 @@ import dev.nagi.app.viewmodel.LibraryViewModel
 import dev.nagi.app.viewmodel.ListState
 import dev.nagi.sdk.Forum
 
-private enum class DirectoryFilter { ALL, LOCAL, CLOUD }
-
 @Composable
 fun ForumScreen(
     vm: LibraryViewModel,
@@ -84,7 +81,6 @@ fun ForumScreen(
     onForum: (Forum) -> Unit,
 ) {
     val state by vm.forums.collectAsStateWithLifecycle()
-    val favorites by vm.forumFavorites.collectAsStateWithLifecycle()
     val cloudFavorites by vm.cloudFavoriteForums.collectAsStateWithLifecycle()
     val cloudBusyKeys by vm.cloudForumBusyKeys.collectAsStateWithLifecycle()
     val cloudUncertainKeys by vm.cloudForumUncertainKeys.collectAsStateWithLifecycle()
@@ -94,8 +90,6 @@ fun ForumScreen(
         refresh = vm::loadForums,
         onSelect = onSelect,
         onForum = onForum,
-        favoriteForums = favorites,
-        onToggleFavorite = vm::toggleForumFavorite,
         isSignedIn = vm.isSignedIn,
         cloudFavoriteForums = cloudFavorites,
         cloudBusyKeys = cloudBusyKeys,
@@ -113,8 +107,6 @@ internal fun ForumDirectory(
     refresh: () -> Unit,
     onSelect: (String) -> Unit,
     onForum: (Forum) -> Unit,
-    favoriteForums: List<LocalForumFavorite> = emptyList(),
-    onToggleFavorite: ((Forum) -> Unit)? = null,
     isSignedIn: Boolean = false,
     cloudFavoriteForums: ListState<Forum> = ListState(),
     cloudBusyKeys: Set<String> = emptySet(),
@@ -126,35 +118,17 @@ internal fun ForumDirectory(
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
     val openLogin = LocalOpenLogin.current
-    val favoriteKeys = remember(favoriteForums) { favoriteForums.map { it.key }.toSet() }
     val cloudKeys = remember(cloudFavoriteForums.items) { cloudFavoriteForums.items.map { it.key }.toSet() }
-    var filterMode by rememberSaveable { mutableStateOf(DirectoryFilter.ALL) }
-    val activeFilter = if (filterMode == DirectoryFilter.CLOUD && !isSignedIn) DirectoryFilter.ALL else filterMode
+    var onlyCloudFavorites by rememberSaveable { mutableStateOf(false) }
+    val activeCloudFilter = onlyCloudFavorites && isSignedIn
     var menuExpanded by remember { mutableStateOf(false) }
 
-    val favoriteResolvedForums = remember(favoriteForums, state.items) {
-        val byKey = state.items.associateBy { it.key }
-        favoriteForums.map { fav ->
-            byKey[fav.key] ?: Forum(
-                id = fav.forumId,
-                name = fav.name,
-                description = fav.description,
-                category = fav.category,
-                group = fav.groupName,
-                collectionId = fav.collectionId,
-            )
-        }
-    }
     val cloudResolvedForums = remember(cloudFavoriteForums.items, state.items) {
         cloudFavoriteForums.items.resolveCloudForumMetadata(state.items)
     }
 
-    val visibleItems = remember(state.items, activeFilter, favoriteKeys, cloudKeys, cloudResolvedForums) {
-        when (activeFilter) {
-            DirectoryFilter.ALL -> state.items
-            DirectoryFilter.LOCAL -> state.items.filter { it.key in favoriteKeys }
-            DirectoryFilter.CLOUD -> cloudResolvedForums
-        }
+    val visibleItems = remember(state.items, activeCloudFilter, cloudResolvedForums) {
+        if (activeCloudFilter) cloudResolvedForums else state.items
     }
     val grouped = remember(visibleItems) { visibleItems.groupBy { it.category to it.group } }
     val allGroupKeys = remember(grouped) { grouped.keys.map { "${it.first}\u0000${it.second}" } }
@@ -198,28 +172,18 @@ internal fun ForumDirectory(
                             expanded = menuExpanded,
                             onDismissRequest = { menuExpanded = false },
                         ) {
-                            FrostedDropdownItem(
-                                text = if (activeFilter == DirectoryFilter.LOCAL) "显示全部版块" else "只看本地收藏",
-                                supporting = "仅保存在此设备",
-                                leadingIcon = NagiIcons.Bookmark,
-                                selected = activeFilter == DirectoryFilter.LOCAL,
-                                onClick = {
-                                    menuExpanded = false
-                                    filterMode = if (activeFilter == DirectoryFilter.LOCAL) DirectoryFilter.ALL else DirectoryFilter.LOCAL
-                                },
-                            )
                             if (onToggleCloudFavorite != null) {
                                 FrostedDropdownItem(
-                                    text = if (activeFilter == DirectoryFilter.CLOUD) "显示全部版块" else "只看 NGA 收藏",
+                                    text = if (activeCloudFilter) "显示全部版块" else "只看 NGA 收藏",
                                     supporting = if (isSignedIn) "NGA 账号收藏版块" else "登录 NGA 后可用",
                                     leadingIcon = NagiIcons.Star,
-                                    selected = activeFilter == DirectoryFilter.CLOUD,
+                                    selected = activeCloudFilter,
                                     onClick = {
                                         menuExpanded = false
                                         if (!isSignedIn) {
                                             openLogin?.invoke()
                                         } else {
-                                            filterMode = if (activeFilter == DirectoryFilter.CLOUD) DirectoryFilter.ALL else DirectoryFilter.CLOUD
+                                            onlyCloudFavorites = !activeCloudFilter
                                         }
                                     },
                                 )
@@ -249,7 +213,7 @@ internal fun ForumDirectory(
                             )
                             FrostedDropdownItem(
                                 text = "管理收藏",
-                                supporting = "本地收藏与 NGA 收藏版块",
+                                supporting = "本地收藏话题与 NGA 收藏版块",
                                 leadingIcon = NagiIcons.Star,
                                 onClick = {
                                     menuExpanded = false
@@ -275,7 +239,7 @@ internal fun ForumDirectory(
             },
         ) { padding ->
             NagiPullToRefreshBox(
-                isRefreshing = (state.loading && state.items.isNotEmpty()) || (activeFilter == DirectoryFilter.CLOUD && cloudFavoriteForums.loading),
+                isRefreshing = (state.loading && state.items.isNotEmpty()) || (activeCloudFilter && cloudFavoriteForums.loading),
                 onRefresh = refreshAll,
                 topPadding = padding.calculateTopPadding(),
             ) {
@@ -302,21 +266,19 @@ internal fun ForumDirectory(
                                 text = brandText,
                                 style = typography.largeTitle,
                             )
-                            when (activeFilter) {
-                                DirectoryFilter.LOCAL -> GoldTagBadge(text = "只看本地收藏")
-                                DirectoryFilter.CLOUD -> GoldTagBadge(text = "只看 NGA 收藏")
-                                DirectoryFilter.ALL -> Unit
+                            if (activeCloudFilter) {
+                                GoldTagBadge(text = "只看 NGA 收藏")
                             }
                         }
                     }
 
-                    if ((state.loading && state.items.isEmpty()) || (activeFilter == DirectoryFilter.CLOUD && cloudFavoriteForums.loading && visibleItems.isEmpty())) {
+                    if ((state.loading && state.items.isEmpty()) || (activeCloudFilter && cloudFavoriteForums.loading && visibleItems.isEmpty())) {
                         item(key = "loading") { LoadingLine() }
                     }
-                    if (state.error != null && activeFilter != DirectoryFilter.CLOUD) {
+                    if (state.error != null && !activeCloudFilter) {
                         item(key = "error") { Notice(state.error, refresh) }
                     }
-                    if (activeFilter == DirectoryFilter.CLOUD && cloudFavoriteForums.error != null) {
+                    if (activeCloudFilter && cloudFavoriteForums.error != null) {
                         item(key = "cloud-error") {
                             InlineStatusBanner(cloudFavoriteForums.error, retry = onRefreshCloudFavorites)
                         }
@@ -327,7 +289,7 @@ internal fun ForumDirectory(
                         }
                     }
 
-                    if (activeFilter == DirectoryFilter.ALL && isSignedIn && cloudResolvedForums.isNotEmpty()) {
+                    if (!activeCloudFilter && isSignedIn && cloudResolvedForums.isNotEmpty()) {
                         val cloudFavKey = "__cloud_favorites__"
                         val cloudFavExpanded = cloudFavKey !in collapsed
                         item(key = "header:$cloudFavKey", contentType = "group-heading") {
@@ -352,13 +314,11 @@ internal fun ForumDirectory(
                                 ) {
                                     ForumDirectoryRow(
                                         forum = forum,
-                                        isLocalFavorite = forum.key in favoriteKeys,
                                         isCloudFavorite = true,
                                         isSignedIn = isSignedIn,
                                         isCloudBusy = forum.key in cloudBusyKeys,
                                         isCloudUncertain = forum.key in cloudUncertainKeys,
                                         onClick = { onForum(forum) },
-                                        onToggleLocalFavorite = onToggleFavorite?.let { toggle -> { toggle(forum) } },
                                         onToggleCloudFavorite = onToggleCloudFavorite?.let { toggle -> { toggle(forum) } },
                                         onOpenLogin = openLogin,
                                     )
@@ -370,56 +330,13 @@ internal fun ForumDirectory(
                         }
                     }
 
-                    if (activeFilter == DirectoryFilter.ALL && favoriteResolvedForums.isNotEmpty()) {
-                        val favKey = "__local_favorites__"
-                        val favExpanded = favKey !in collapsed
-                        item(key = "header:$favKey", contentType = "group-heading") {
-                            DirectoryGroupHeader(
-                                title = "收藏版块",
-                                badge = "本地收藏",
-                                expanded = favExpanded,
-                                onToggle = {
-                                    collapsed = if (favExpanded) collapsed + favKey else collapsed - favKey
-                                },
-                            )
-                        }
-                        if (favExpanded) {
-                            itemsIndexed(
-                                items = favoriteResolvedForums,
-                                key = { _, forum -> "fav:${forum.key}" },
-                                contentType = { _, _ -> "forum" },
-                            ) { index, forum ->
-                                SectionCardItem(
-                                    position = CardGroupPosition.at(index, favoriteResolvedForums.size),
-                                    dividerIndent = 58.dp,
-                                ) {
-                                    ForumDirectoryRow(
-                                        forum = forum,
-                                        isLocalFavorite = true,
-                                        isCloudFavorite = forum.key in cloudKeys,
-                                        isSignedIn = isSignedIn,
-                                        isCloudBusy = forum.key in cloudBusyKeys,
-                                        isCloudUncertain = forum.key in cloudUncertainKeys,
-                                        onClick = { onForum(forum) },
-                                        onToggleLocalFavorite = onToggleFavorite?.let { toggle -> { toggle(forum) } },
-                                        onToggleCloudFavorite = onToggleCloudFavorite?.let { toggle -> { toggle(forum) } },
-                                        onOpenLogin = openLogin,
-                                    )
-                                }
-                            }
-                        }
-                        item(key = "spacing:$favKey", contentType = "spacing") {
-                            Spacer(Modifier.height(Space.md))
-                        }
-                    }
-
                     grouped.forEach { (group, forums) ->
                         val key = "${group.first}\u0000${group.second}"
                         val title = listOf(group.first, group.second)
                             .filter { it.isNotBlank() }
                             .distinct()
                             .joinToString(" · ")
-                            .ifBlank { if (activeFilter == DirectoryFilter.CLOUD) "NGA 收藏版块" else "其他版块" }
+                            .ifBlank { if (activeCloudFilter) "NGA 收藏版块" else "其他版块" }
                         val expanded = key !in collapsed
                         item(key = "header:$key", contentType = "group-heading") {
                             DirectoryGroupHeader(
@@ -443,13 +360,11 @@ internal fun ForumDirectory(
                                 ) {
                                     ForumDirectoryRow(
                                         forum = forum,
-                                        isLocalFavorite = forum.key in favoriteKeys,
                                         isCloudFavorite = forum.key in cloudKeys,
                                         isSignedIn = isSignedIn,
                                         isCloudBusy = forum.key in cloudBusyKeys,
                                         isCloudUncertain = forum.key in cloudUncertainKeys,
                                         onClick = { onForum(forum) },
-                                        onToggleLocalFavorite = onToggleFavorite?.let { toggle -> { toggle(forum) } },
                                         onToggleCloudFavorite = onToggleCloudFavorite?.let { toggle -> { toggle(forum) } },
                                         onOpenLogin = openLogin,
                                     )
@@ -462,26 +377,16 @@ internal fun ForumDirectory(
                     }
 
                     if (visibleItems.isEmpty()) {
-                        when (activeFilter) {
-                            DirectoryFilter.LOCAL -> if (!state.loading && state.error == null && state.items.isNotEmpty()) {
-                                item(key = "empty") {
-                                    Notice("尚未添加本地收藏版块，长按任意版块可加入本地收藏") {
-                                        filterMode = DirectoryFilter.ALL
-                                    }
-                                }
-                            } else if (!state.loading && state.error == null) {
-                                item(key = "empty") { Notice("暂无版块", refresh) }
-                            }
-                            DirectoryFilter.CLOUD -> if (!cloudFavoriteForums.loading && cloudFavoriteForums.error == null) {
+                        if (activeCloudFilter) {
+                            if (!cloudFavoriteForums.loading && cloudFavoriteForums.error == null) {
                                 item(key = "empty") {
                                     Notice("暂无 NGA 收藏版块，长按任意版块可加入 NGA 收藏") {
-                                        filterMode = DirectoryFilter.ALL
+                                        onlyCloudFavorites = false
                                     }
                                 }
                             }
-                            DirectoryFilter.ALL -> if (!state.loading && state.error == null) {
-                                item(key = "empty") { Notice("暂无版块", refresh) }
-                            }
+                        } else if (!state.loading && state.error == null) {
+                            item(key = "empty") { Notice("暂无版块", refresh) }
                         }
                     }
                 }
@@ -580,29 +485,19 @@ internal fun ForumDirectoryIcon(iconUrl: String?, isFavorite: Boolean) {
 @Composable
 private fun ForumDirectoryRow(
     forum: Forum,
-    isLocalFavorite: Boolean,
     isCloudFavorite: Boolean,
     isSignedIn: Boolean,
     isCloudBusy: Boolean,
     isCloudUncertain: Boolean,
     onClick: () -> Unit,
-    onToggleLocalFavorite: (() -> Unit)?,
     onToggleCloudFavorite: (() -> Unit)?,
     onOpenLogin: (() -> Unit)?,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
     var actionMenuExpanded by remember { mutableStateOf(false) }
-    val hasActions = onToggleLocalFavorite != null || onToggleCloudFavorite != null
+    val hasActions = onToggleCloudFavorite != null
     val a11yActions = buildList {
-        if (onToggleLocalFavorite != null) {
-            add(
-                CustomAccessibilityAction(if (isLocalFavorite) "取消本地收藏版块" else "本地收藏版块") {
-                    onToggleLocalFavorite()
-                    true
-                },
-            )
-        }
         if (onToggleCloudFavorite != null && isSignedIn && !isCloudBusy && !isCloudUncertain) {
             add(
                 CustomAccessibilityAction(if (isCloudFavorite) "取消 NGA 收藏版块" else "收藏到 NGA 版块") {
@@ -634,7 +529,7 @@ private fun ForumDirectoryRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            ForumDirectoryIcon(forum.iconUrl, isLocalFavorite || isCloudFavorite)
+            ForumDirectoryIcon(forum.iconUrl, isCloudFavorite)
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -679,41 +574,27 @@ private fun ForumDirectoryRow(
                 tint = colors.textSecondary,
             )
         }
-        if (hasActions) {
+        if (onToggleCloudFavorite != null) {
             FrostedDropdownMenu(
                 expanded = actionMenuExpanded,
                 onDismissRequest = { actionMenuExpanded = false },
             ) {
-                if (onToggleLocalFavorite != null) {
-                    FrostedDropdownItem(
-                        text = if (isLocalFavorite) "取消本地收藏版块" else "本地收藏版块",
-                        supporting = "仅保存在此设备",
-                        leadingIcon = NagiIcons.Bookmark,
-                        selected = isLocalFavorite,
-                        onClick = {
-                            actionMenuExpanded = false
-                            onToggleLocalFavorite()
-                        },
-                    )
-                }
-                if (onToggleCloudFavorite != null) {
-                    FrostedDropdownItem(
-                        text = if (isCloudFavorite) "取消 NGA 收藏版块" else "收藏到 NGA 版块",
-                        supporting = when {
-                            !isSignedIn -> "登录 NGA 后可用"
-                            isCloudBusy -> "正在提交…"
-                            isCloudUncertain -> "结果未确认，请先刷新核对"
-                            else -> "同步至 NGA 账号"
-                        },
-                        leadingIcon = NagiIcons.Star,
-                        selected = isCloudFavorite,
-                        enabled = !isSignedIn || (!isCloudBusy && !isCloudUncertain),
-                        onClick = {
-                            actionMenuExpanded = false
-                            if (!isSignedIn) onOpenLogin?.invoke() else onToggleCloudFavorite()
-                        },
-                    )
-                }
+                FrostedDropdownItem(
+                    text = if (isCloudFavorite) "取消 NGA 收藏版块" else "收藏到 NGA 版块",
+                    supporting = when {
+                        !isSignedIn -> "登录 NGA 后可用"
+                        isCloudBusy -> "正在提交…"
+                        isCloudUncertain -> "结果未确认，请先刷新核对"
+                        else -> "同步至 NGA 账号"
+                    },
+                    leadingIcon = NagiIcons.Star,
+                    selected = isCloudFavorite,
+                    enabled = !isSignedIn || (!isCloudBusy && !isCloudUncertain),
+                    onClick = {
+                        actionMenuExpanded = false
+                        if (!isSignedIn) onOpenLogin?.invoke() else onToggleCloudFavorite()
+                    },
+                )
             }
         }
     }

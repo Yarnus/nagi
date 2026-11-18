@@ -144,8 +144,6 @@ fun NagiApp(
             AccountReadingScope(account.revision) {
                 val library: LibraryViewModel = hiltViewModel()
                 val directory by library.forums.collectAsStateWithLifecycle()
-                val forumFavorites by library.forumFavorites.collectAsStateWithLifecycle()
-                val favoriteForumKeys = remember(forumFavorites) { forumFavorites.map { it.key }.toSet() }
                 val cloudForumFavorites by library.cloudFavoriteForums.collectAsStateWithLifecycle()
                 val cloudFavoriteForumKeys = remember(cloudForumFavorites.items) { cloudForumFavorites.items.map { it.key }.toSet() }
                 val cloudForumBusyKeys by library.cloudForumBusyKeys.collectAsStateWithLifecycle()
@@ -236,8 +234,6 @@ fun NagiApp(
                                             )
                                         },
                                         directoryForums = directory.items,
-                                        favoriteForumKeys = favoriteForumKeys,
-                                        onToggleForumFavorite = library::toggleForumFavorite,
                                         isSignedIn = library.isSignedIn,
                                         cloudFavoriteForumKeys = cloudFavoriteForumKeys,
                                         cloudFavoriteBusyKeys = cloudForumBusyKeys,

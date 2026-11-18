@@ -8,7 +8,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import dev.nagi.app.data.AccountManager
-import dev.nagi.app.data.LocalForumFavorite
 import dev.nagi.app.data.PreferenceStore
 import dev.nagi.app.ui.components.LocalAccountIdentity
 import dev.nagi.app.ui.components.LocalOpenLogin
@@ -43,7 +42,6 @@ class CloudFavoriteForumsUiTest {
     )
 
     @Test fun forumDirectoryShowsCloudSectionAndLongPressMenuAndFilter() {
-        var toggledLocal: Forum? = null
         var toggledCloud: Forum? = null
         var loginOpened = false
         var signedIn by mutableStateOf(true)
@@ -58,8 +56,6 @@ class CloudFavoriteForumsUiTest {
                         refresh = {},
                         onSelect = {},
                         onForum = {},
-                        favoriteForums = listOf(LocalForumFavorite("forum:7", "7", null, "艾泽拉斯议事厅")),
-                        onToggleFavorite = { toggledLocal = it },
                         isSignedIn = signedIn,
                         cloudFavoriteForums = cloudState,
                         cloudUncertainKeys = uncertain,
@@ -69,9 +65,10 @@ class CloudFavoriteForumsUiTest {
             }
         }
 
-        // Cloud section appears above local favorites section
+        // Cloud section appears at top; local forum favorites section does not exist
         compose.onNodeWithText("NGA 收藏版块").assertIsDisplayed()
         compose.onNodeWithText("NGA").assertIsDisplayed()
+        compose.onNodeWithText("本地收藏").assertDoesNotExist()
 
         // Filter to NGA favorites only
         compose.onNodeWithContentDescription("版块选项").performClick()
@@ -85,9 +82,9 @@ class CloudFavoriteForumsUiTest {
         compose.onNodeWithText("显示全部版块").performClick()
         compose.onAllNodesWithText("艾泽拉斯议事厅").onFirst().assertIsDisplayed()
 
-        // Long press directory row opens dual favorite menu
+        // Long press directory row opens NGA cloud favorite menu
         compose.onAllNodesWithText("艾泽拉斯议事厅").onLast().performTouchInput { longClick() }
-        compose.onNodeWithText("取消本地收藏版块").assertIsDisplayed()
+        compose.onNodeWithText("本地收藏版块").assertDoesNotExist()
         compose.onNodeWithText("收藏到 NGA 版块").performClick()
         compose.runOnIdle { assertEquals("forum:7", toggledCloud?.key) }
 
@@ -95,8 +92,9 @@ class CloudFavoriteForumsUiTest {
         compose.runOnIdle { uncertain = setOf("forum:7") }
         compose.onAllNodesWithText("艾泽拉斯议事厅").onLast().performTouchInput { longClick() }
         compose.onNodeWithText("结果未确认，请先刷新核对").assertIsDisplayed()
-        compose.onNodeWithText("取消本地收藏版块").performClick()
-        compose.runOnIdle { assertEquals("forum:7", toggledLocal?.key) }
+        compose.onNodeWithText("收藏到 NGA 版块").performClick()
+        compose.runOnIdle { assertEquals("forum:7", toggledCloud?.key) }
+        compose.runOnIdle { toggledCloud = null }
 
         // Guest sees login prompt in long press menu
         compose.runOnIdle {
@@ -181,7 +179,7 @@ class CloudFavoriteForumsUiTest {
         RuntimeEnvironment.setFontScale(1f)
     }
 
-    @Test fun topicsScreenMenuUsesForumKeyForLocalAndCloudFavorites() {
+    @Test fun topicsScreenMenuUsesForumKeyForCloudFavorites() {
         val sessions = MemorySessionStore()
         val accounts = AccountManager(sessions, FakeBrowserCookies()).also { runBlocking { it.initialize() } }
         val vm = TopicsViewModel(FakeClient(), androidx.lifecycle.SavedStateHandle(), accounts)
@@ -201,8 +199,6 @@ class CloudFavoriteForumsUiTest {
                     onSearch = {},
                     vm = vm,
                     composer = composer,
-                    favoriteForumKeys = setOf("forum:7"),
-                    onToggleForumFavorite = {},
                     isSignedIn = true,
                     cloudFavoriteForumKeys = setOf("forum:7"),
                     onToggleCloudForumFavorite = { cloudToggled = it },
@@ -211,7 +207,7 @@ class CloudFavoriteForumsUiTest {
         }
 
         compose.onNodeWithContentDescription("更多选项").performClick()
-        compose.onNodeWithText("取消本地收藏版块").assertIsDisplayed()
+        compose.onNodeWithText("取消本地收藏版块").assertDoesNotExist()
         compose.onNodeWithText("取消 NGA 收藏版块").performClick()
         compose.runOnIdle { assertEquals("forum:7", cloudToggled?.key) }
     }

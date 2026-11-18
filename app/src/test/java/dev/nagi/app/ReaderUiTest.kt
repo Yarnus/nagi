@@ -54,7 +54,7 @@ class ReaderUiTest {
         var selected by mutableStateOf("forums")
         compose.setContent { NagiTheme { AccountMenuButton(onSelect = { selected = it }) } }
         compose.onNodeWithContentDescription("头像菜单").performClick()
-        compose.onNodeWithText("本地收藏 · NGA 收藏版块").assertExists()
+        compose.onNodeWithText("本地收藏话题 · NGA 收藏版块").assertExists()
         compose.onNodeWithText("收藏").performClick()
         compose.runOnIdle { org.junit.Assert.assertEquals("favorites", selected) }
     }

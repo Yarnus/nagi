@@ -60,7 +60,6 @@ class LibraryViewModel @Inject constructor(
     val isSignedIn: Boolean get() = owner.userId != null
     private val dao = daos.forUser(owner.userId)
     val favorites = dao.favorites().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val forumFavorites = dao.forumFavorites().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val history = dao.history().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private var loading: Job? = null
     private var cloudForumsLoading: Job? = null
@@ -191,24 +190,6 @@ class LibraryViewModel @Inject constructor(
             dao.clearHistory()
             if (clearUnfavoritedPositions) dao.clearUnfavoritedPositions()
         }
-    }
-    fun toggleForumFavorite(forum: Forum) = viewModelScope.launch {
-        accounts.withCurrentRevision(owner.revision) {
-            dao.toggleForumFavorite(
-                LocalForumFavorite(
-                    forumKey = forum.key,
-                    forumId = forum.id,
-                    collectionId = forum.collectionId,
-                    name = forum.name,
-                    description = forum.description,
-                    category = forum.category,
-                    groupName = forum.group,
-                ),
-            )
-        }
-    }
-    fun removeForumFavorite(key: String) = viewModelScope.launch {
-        accounts.withCurrentRevision(owner.revision) { dao.removeForumFavorite(key) }
     }
     fun font(size: Int) = viewModelScope.launch { prefs.font(size) }
     fun lineHeight(size: Int) = viewModelScope.launch { prefs.lineHeight(size) }

@@ -129,8 +129,6 @@ fun TopicsScreen(
     bottomBar: (@Composable () -> Unit)? = null,
     composer: ComposerViewModel = hiltViewModel(),
     directoryForums: List<Forum> = emptyList(),
-    favoriteForumKeys: Set<String> = emptySet(),
-    onToggleForumFavorite: ((Forum) -> Unit)? = null,
     isSignedIn: Boolean = false,
     cloudFavoriteForumKeys: Set<String> = emptySet(),
     cloudFavoriteBusyKeys: Set<String> = emptySet(),
@@ -241,7 +239,6 @@ fun TopicsScreen(
             activeTitle = resolved
         }
     }
-    val isCurrentForumFavorite = currentForumKey != null && currentForumKey in favoriteForumKeys
     val isCurrentCloudForumFavorite = currentForumKey != null && currentForumKey in cloudFavoriteForumKeys
     val isCurrentCloudBusy = currentForumKey != null && currentForumKey in cloudFavoriteBusyKeys
     val isCurrentCloudUncertain = currentForumKey != null && currentForumKey in cloudFavoriteUncertainKeys
@@ -399,37 +396,23 @@ fun TopicsScreen(
                                                 leadingIcon = NagiIcons.Subforums,
                                                 onClick = { moreExpanded = false; showingRelatedForums = true },
                                             )
-                                            if (currentForum != null && (onToggleForumFavorite != null || onToggleCloudForumFavorite != null)) {
-                                                if (onToggleForumFavorite != null) {
-                                                    FrostedDropdownItem(
-                                                        text = if (isCurrentForumFavorite) "取消本地收藏版块" else "收藏当前版块",
-                                                        supporting = "本地收藏 · 仅保存在此设备",
-                                                        leadingIcon = NagiIcons.Bookmark,
-                                                        selected = isCurrentForumFavorite,
-                                                        onClick = {
-                                                            moreExpanded = false
-                                                            onToggleForumFavorite(currentForum)
-                                                        },
-                                                    )
-                                                }
-                                                if (onToggleCloudForumFavorite != null) {
-                                                    FrostedDropdownItem(
-                                                        text = if (isCurrentCloudForumFavorite) "取消 NGA 收藏版块" else "收藏到 NGA 版块",
-                                                        supporting = when {
-                                                            !isSignedIn -> "登录 NGA 后可用"
-                                                            isCurrentCloudBusy -> "正在提交…"
-                                                            isCurrentCloudUncertain -> "结果未确认，请先刷新核对"
-                                                            else -> "同步至 NGA 账号"
-                                                        },
-                                                        leadingIcon = NagiIcons.Star,
-                                                        selected = isCurrentCloudForumFavorite,
-                                                        enabled = !isSignedIn || (!isCurrentCloudBusy && !isCurrentCloudUncertain),
-                                                        onClick = {
-                                                            moreExpanded = false
-                                                            if (!isSignedIn) openLogin?.invoke() else onToggleCloudForumFavorite(currentForum)
-                                                        },
-                                                    )
-                                                }
+                                            if (currentForum != null && onToggleCloudForumFavorite != null) {
+                                                FrostedDropdownItem(
+                                                    text = if (isCurrentCloudForumFavorite) "取消 NGA 收藏版块" else "收藏到 NGA 版块",
+                                                    supporting = when {
+                                                        !isSignedIn -> "登录 NGA 后可用"
+                                                        isCurrentCloudBusy -> "正在提交…"
+                                                        isCurrentCloudUncertain -> "结果未确认，请先刷新核对"
+                                                        else -> "同步至 NGA 账号"
+                                                    },
+                                                    leadingIcon = NagiIcons.Star,
+                                                    selected = isCurrentCloudForumFavorite,
+                                                    enabled = !isSignedIn || (!isCurrentCloudBusy && !isCurrentCloudUncertain),
+                                                    onClick = {
+                                                        moreExpanded = false
+                                                        if (!isSignedIn) openLogin?.invoke() else onToggleCloudForumFavorite(currentForum)
+                                                    },
+                                                )
                                                 HorizontalDivider(
                                                     modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.xs),
                                                     thickness = 1.dp,
@@ -545,8 +528,8 @@ fun TopicsScreen(
                                                 if (!activeCollection.isNullOrBlank()) {
                                                     GoldTagBadge(text = "主题合集")
                                                 }
-                                                if (isCurrentForumFavorite) {
-                                                    GoldTagBadge(text = "本地已收藏")
+                                                if (isCurrentCloudForumFavorite) {
+                                                    GoldTagBadge(text = "NGA 已收藏")
                                                 }
                                             }
                                         } else {
@@ -889,8 +872,6 @@ fun TopicsScreen(
         RelatedForumsSheet(
             currentForum = currentForum,
             directoryForums = directoryForums,
-            favoriteForumKeys = favoriteForumKeys,
-            onToggleFavorite = onToggleForumFavorite,
             onSelectForum = { targetForum ->
                 showingRelatedForums = false
                 if (targetForum.key != currentForumKey) {
@@ -929,8 +910,6 @@ fun TopicsScreen(
 private fun RelatedForumsSheet(
     currentForum: Forum?,
     directoryForums: List<Forum>,
-    favoriteForumKeys: Set<String>,
-    onToggleFavorite: ((Forum) -> Unit)?,
     onSelectForum: (Forum) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -969,7 +948,7 @@ private fun RelatedForumsSheet(
                     color = colors.textPrimary,
                 )
                 Text(
-                    text = "点按切换版块；右侧开关可将版块加入本地收藏（仅保存在此设备）",
+                    text = "点按切换同组版块或主题合集",
                     style = typography.metadata,
                     color = colors.textSecondary,
                 )
@@ -989,9 +968,7 @@ private fun RelatedForumsSheet(
                     RelatedForumRow(
                         forum = single,
                         isCurrent = true,
-                        isFavorite = single.key in favoriteForumKeys,
                         onClick = onDismiss,
-                        onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(single) } },
                     )
                 }
             } else {
@@ -1012,9 +989,7 @@ private fun RelatedForumsSheet(
                     RelatedForumRow(
                         forum = forum,
                         isCurrent = forum.key == currentForum?.key,
-                        isFavorite = forum.key in favoriteForumKeys,
                         onClick = { onSelectForum(forum) },
-                        onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(forum) } },
                     )
                 }
             }
@@ -1026,9 +1001,7 @@ private fun RelatedForumsSheet(
 private fun RelatedForumRow(
     forum: Forum,
     isCurrent: Boolean,
-    isFavorite: Boolean,
     onClick: () -> Unit,
-    onToggleFavorite: (() -> Unit)?,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
@@ -1073,20 +1046,12 @@ private fun RelatedForumRow(
                 )
             }
         }
-        if (onToggleFavorite != null) {
-            GoldSwitch(
-                checked = isFavorite,
-                onCheckedChange = { onToggleFavorite() },
-                contentDescription = "本地收藏 ${forum.name}",
-            )
-        } else {
-            Icon(
-                imageVector = NagiIcons.ChevronRight,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = colors.textSecondary,
-            )
-        }
+        Icon(
+            imageVector = NagiIcons.ChevronRight,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = colors.textSecondary,
+        )
     }
 }
 
