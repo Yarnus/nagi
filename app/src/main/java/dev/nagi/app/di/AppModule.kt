@@ -10,6 +10,7 @@ import dev.nagi.app.data.*
 import dev.nagi.sdk.NgaClient
 import dev.nagi.sdk.SessionStore
 import dev.nagi.sdk.createNgaClient
+import okhttp3.OkHttpClient
 import javax.inject.Singleton
 
 @Module
@@ -20,10 +21,15 @@ object AppModule {
         MessageWriteGuard(context.getSharedPreferences("message_write_guard", Context.MODE_PRIVATE))
     @Provides @Singleton fun browser(): BrowserCookies = AndroidBrowserCookies()
     @Provides @Singleton fun client(sessions: SessionStore): NgaClient = createNgaClient(sessions = sessions)
+    @Provides @Singleton fun httpClient(): OkHttpClient = OkHttpClient.Builder().retryOnConnectionFailure(true).build()
     @Provides @Singleton fun databases(@ApplicationContext context: Context): ReadingDaoProvider = AccountDatabases(context)
-    @Provides @Singleton fun releaseChecker(): ReleaseChecker = GitHubReleaseChecker()
-    @Provides @Singleton fun releaseDownloader(@ApplicationContext context: Context): dev.nagi.app.data.ReleaseDownloader =
-        dev.nagi.app.data.GitHubReleaseDownloader(context)
+    @Provides @Singleton fun releaseChecker(httpClient: OkHttpClient): ReleaseChecker =
+        GitHubReleaseChecker(httpClient = httpClient)
+    @Provides @Singleton fun releaseDownloader(
+        @ApplicationContext context: Context,
+        httpClient: OkHttpClient,
+    ): dev.nagi.app.data.ReleaseDownloader =
+        dev.nagi.app.data.GitHubReleaseDownloader(context, httpClient = httpClient)
     @Provides @Singleton fun updateCacheStore(@ApplicationContext context: Context): UpdateCacheStore =
         DataStoreUpdateCacheStore(context)
     @Provides @Singleton fun releaseUpdates(

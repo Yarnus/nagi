@@ -32,6 +32,11 @@ import dev.nagi.app.data.sha256Hex
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -78,6 +83,45 @@ class AppUpdateLogicTest {
     @Test fun checkerRejectsNonHttpsUrlWithoutThrowing() = runTest {
         val checker = GitHubReleaseChecker(url = "http://github.com/Yarnus/nagi/releases/latest")
         assertNull(checker.fetchLatestReleaseTag())
+    }
+
+    @Test fun checkerUsesProvidedOkHttpClientWithoutFollowingRedirectsAndFallsBackFromHead405() = runTest {
+        val methods = mutableListOf<String>()
+        var nextHeadCode = 302
+        var nextLocation = "https://github.com/Yarnus/nagi/releases/tag/v0.4.1"
+        val baseClient = OkHttpClient.Builder()
+            .followRedirects(true)
+            .addInterceptor { chain ->
+                val req = chain.request()
+                methods += req.method
+                val code = if (req.method == "HEAD") nextHeadCode else 302
+                val builder = Response.Builder()
+                    .request(req)
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(code)
+                    .message("Mock")
+                    .body(ByteArray(0).toResponseBody(null))
+                if (code in 300..399) {
+                    builder.header("Location", nextLocation)
+                }
+                builder.build()
+            }
+            .build()
+
+        val checker = GitHubReleaseChecker(httpClient = baseClient)
+        assertEquals("v0.4.1", checker.fetchLatestReleaseTag())
+        assertEquals(listOf("HEAD"), methods)
+
+        methods.clear()
+        nextHeadCode = 405
+        nextLocation = "https://github.com/Yarnus/nagi/releases/tag/v0.4.2"
+        assertEquals("v0.4.2", checker.fetchLatestReleaseTag())
+        assertEquals(listOf("HEAD", "GET"), methods)
+
+        methods.clear()
+        nextHeadCode = 200
+        assertNull(checker.fetchLatestReleaseTag())
+        assertEquals(listOf("HEAD"), methods)
     }
 
     @Test fun repositoryChecksOncePerDayCachesResultAndClearsAfterUpgrade() = runTest {
@@ -465,5 +509,74 @@ class AboutCheckUpdateUiTest {
         }
         compose.onNodeWithText("安装更新").assertIsDisplayed()
         org.robolectric.RuntimeEnvironment.setFontScale(1f)
+    }
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(application = android.app.Application::class, sdk = [35])
+class AppUpdateDownloaderOkHttpTest {
+    @Test fun downloaderUsesOkHttpFollowsTrustedRedirectAndRejectsUntrustedRedirectOrBadSha() = runTest {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val fakeApkBytes = "fake-apk-bytes".encodeToByteArray()
+        val expectedSha = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(fakeApkBytes)
+            .joinToString("") { "%02x".format(it) }
+        var apkRedirectTarget = "https://objects.githubusercontent.com/asset/nagi-v0.4.1-arm64-v8a.apk"
+        val requestedUrls = mutableListOf<String>()
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                val url = req.url.toString()
+                requestedUrls += url
+                when {
+                    url.endsWith("/SHA256SUMS") -> Response.Builder()
+                        .request(req)
+                        .protocol(Protocol.HTTP_1_1)
+                        .code(200)
+                        .message("OK")
+                        .body("$expectedSha  nagi-v0.4.1-arm64-v8a.apk\n".toResponseBody("text/plain".toMediaType()))
+                        .build()
+                    url.startsWith("https://github.com/Yarnus/nagi/releases/download/") -> Response.Builder()
+                        .request(req)
+                        .protocol(Protocol.HTTP_1_1)
+                        .code(302)
+                        .message("Found")
+                        .header("Location", apkRedirectTarget)
+                        .body(ByteArray(0).toResponseBody(null))
+                        .build()
+                    url == "https://objects.githubusercontent.com/asset/nagi-v0.4.1-arm64-v8a.apk" -> Response.Builder()
+                        .request(req)
+                        .protocol(Protocol.HTTP_1_1)
+                        .code(200)
+                        .message("OK")
+                        .body("wrong-bytes".toResponseBody("application/vnd.android.package-archive".toMediaType()))
+                        .build()
+                    else -> error("Unexpected URL: $url")
+                }
+            }
+            .build()
+
+        val downloader = dev.nagi.app.data.GitHubReleaseDownloader(
+            context = context,
+            supportedAbisProvider = { arrayOf("arm64-v8a") },
+            httpClient = client,
+        )
+
+        val badShaResult = downloader.downloadAndVerify("v0.4.1", onProgress = { _, _ -> })
+        assertTrue(badShaResult is ReleaseDownloadResult.Rejected)
+        assertEquals(
+            listOf(
+                "https://github.com/Yarnus/nagi/releases/download/v0.4.1/SHA256SUMS",
+                "https://github.com/Yarnus/nagi/releases/download/v0.4.1/nagi-v0.4.1-arm64-v8a.apk",
+                "https://objects.githubusercontent.com/asset/nagi-v0.4.1-arm64-v8a.apk",
+            ),
+            requestedUrls,
+        )
+
+        requestedUrls.clear()
+        apkRedirectTarget = "https://evil.example/nagi.apk"
+        val untrustedResult = downloader.downloadAndVerify("v0.4.1", onProgress = { _, _ -> })
+        assertTrue(untrustedResult is ReleaseDownloadResult.Failed)
+        assertFalse(requestedUrls.any { it.contains("evil.example") })
     }
 }

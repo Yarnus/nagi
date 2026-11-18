@@ -19,17 +19,28 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import okhttp3.CacheControl
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
 import java.io.File
 import java.io.FileOutputStream
-import java.net.HttpURLConnection
+import java.io.IOException
 import java.net.URI
-import java.net.URL
 import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 internal const val LATEST_RELEASE_URL = "https://github.com/Yarnus/nagi/releases/latest"
 internal const val RELEASE_DOWNLOAD_BASE_URL = "https://github.com/Yarnus/nagi/releases/download/"
@@ -224,30 +235,51 @@ class DataStoreUpdateCacheStore @Inject constructor(
     }
 }
 
+private fun defaultUpdateOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
+    .retryOnConnectionFailure(true)
+    .build()
+
+private suspend fun Call.awaitResponse(): Response = suspendCancellableCoroutine { continuation ->
+    continuation.invokeOnCancellation { cancel() }
+    enqueue(object : Callback {
+        override fun onFailure(call: Call, e: IOException) {
+            if (!continuation.isCancelled) continuation.resumeWithException(e)
+        }
+
+        override fun onResponse(call: Call, response: Response) {
+            continuation.resume(response) { _, _, _ -> response.close() }
+        }
+    })
+}
+
 /**
- * Checks the latest GitHub release silently via an unauthenticated HTTPS HEAD redirect
+ * Checks the latest GitHub release silently via an unauthenticated HTTPS redirect
  * without sending any NGA session or device metadata.
  */
 class GitHubReleaseChecker(
     private val url: String = LATEST_RELEASE_URL,
     private val userAgent: String = "Nagi/${BuildConfig.VERSION_NAME}",
     private val timeoutMillis: Int = 10_000,
+    httpClient: OkHttpClient = defaultUpdateOkHttpClient(),
 ) : ReleaseChecker {
+    private val client = httpClient.newBuilder()
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .connectTimeout(timeoutMillis.toLong(), TimeUnit.MILLISECONDS)
+        .readTimeout(timeoutMillis.toLong(), TimeUnit.MILLISECONDS)
+        .callTimeout(timeoutMillis.toLong(), TimeUnit.MILLISECONDS)
+        .build()
+
     override suspend fun fetchLatestReleaseTag(): String? = withContext(Dispatchers.IO) {
-        var connection: HttpURLConnection? = null
         try {
-            val target = URL(url)
-            require(target.protocol.equals("https", ignoreCase = true)) { "HTTPS required" }
-            connection = (target.openConnection() as HttpURLConnection).apply {
-                requestMethod = "HEAD"
-                instanceFollowRedirects = false
-                connectTimeout = timeoutMillis
-                readTimeout = timeoutMillis
-                useCaches = false
-                setRequestProperty("User-Agent", userAgent)
-            }
-            if (connection.responseCode in 300..399) {
-                parseReleaseTagFromLocation(connection.getHeaderField("Location"))
+            val target = url.toHttpUrlOrNull()
+            require(target != null && target.isHttps) { "HTTPS required" }
+            val (code, location) = checkRedirect("HEAD", target)
+            if (code in 300..399) {
+                parseReleaseTagFromLocation(location)
+            } else if (code == 405 || code == 501) {
+                val (getCode, getLocation) = checkRedirect("GET", target)
+                if (getCode in 300..399) parseReleaseTagFromLocation(getLocation) else null
             } else {
                 null
             }
@@ -255,8 +287,18 @@ class GitHubReleaseChecker(
             throw error
         } catch (_: Exception) {
             null
-        } finally {
-            connection?.disconnect()
+        }
+    }
+
+    private suspend fun checkRedirect(method: String, target: HttpUrl): Pair<Int, String?> {
+        val request = Request.Builder()
+            .url(target)
+            .method(method, null)
+            .cacheControl(CacheControl.FORCE_NETWORK)
+            .header("User-Agent", userAgent)
+            .build()
+        return client.newCall(request).awaitResponse().use { response ->
+            response.code to response.header("Location")
         }
     }
 }
@@ -272,7 +314,15 @@ class GitHubReleaseDownloader(
     private val connectTimeoutMillis: Int = 15_000,
     private val readTimeoutMillis: Int = 30_000,
     private val supportedAbisProvider: () -> Array<String> = { Build.SUPPORTED_ABIS },
+    httpClient: OkHttpClient = defaultUpdateOkHttpClient(),
 ) : ReleaseDownloader {
+    private val client = httpClient.newBuilder()
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .connectTimeout(connectTimeoutMillis.toLong(), TimeUnit.MILLISECONDS)
+        .readTimeout(readTimeoutMillis.toLong(), TimeUnit.MILLISECONDS)
+        .build()
+
     private val updatesDir: File
         get() = File(context.cacheDir, "updates")
 
@@ -347,42 +397,41 @@ class GitHubReleaseDownloader(
         }
     }
 
-    private suspend fun openTrustedConnection(initialUrl: String): HttpURLConnection {
+    private suspend fun openTrustedResponse(initialUrl: String): Response {
         var currentUrl = initialUrl
         for (hop in 0..MAX_DOWNLOAD_REDIRECTS) {
             currentCoroutineContext().ensureActive()
             require(isTrustedReleaseDownloadUrl(currentUrl)) { "Untrusted update download URL" }
-            val conn = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                instanceFollowRedirects = false
-                connectTimeout = connectTimeoutMillis
-                readTimeout = readTimeoutMillis
-                useCaches = false
-                setRequestProperty("User-Agent", userAgent)
-            }
-            val code = conn.responseCode
+            val request = Request.Builder()
+                .url(currentUrl)
+                .get()
+                .cacheControl(CacheControl.FORCE_NETWORK)
+                .header("User-Agent", userAgent)
+                .build()
+            val response = client.newCall(request).awaitResponse()
+            val code = response.code
             if (code in 300..399) {
-                val location = conn.getHeaderField("Location")
-                conn.disconnect()
+                val location = response.header("Location")
+                response.close()
                 if (location.isNullOrBlank()) throw IllegalStateException("Empty redirect location")
                 currentUrl = URI(currentUrl).resolve(location).toString()
                 continue
             }
             if (code !in 200..299) {
-                conn.disconnect()
+                response.close()
                 throw IllegalStateException("HTTP $code")
             }
-            return conn
+            return response
         }
         throw IllegalStateException("Too many redirects")
     }
 
-    private suspend fun fetchText(url: String, maxBytes: Int): String? {
-        val conn = openTrustedConnection(url)
-        return try {
-            val length = conn.contentLengthLong
+    private suspend fun fetchText(url: String, maxBytes: Int): String? =
+        openTrustedResponse(url).use { response ->
+            val body = response.body ?: throw IllegalStateException("Empty checksum response")
+            val length = body.contentLength()
             if (length > maxBytes) throw IllegalStateException("Checksum payload too large")
-            val bytes = conn.inputStream.use { input ->
+            val bytes = body.byteStream().use { input ->
                 val out = java.io.ByteArrayOutputStream()
                 val buf = ByteArray(4096)
                 var total = 0
@@ -397,25 +446,22 @@ class GitHubReleaseDownloader(
                 out.toByteArray()
             }
             bytes.toString(Charsets.UTF_8)
-        } finally {
-            conn.disconnect()
         }
-    }
 
     private suspend fun downloadFile(
         url: String,
         dest: File,
         onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
     ) {
-        val conn = openTrustedConnection(url)
-        try {
-            val totalBytes = conn.contentLengthLong.takeIf { it > 0L }
+        openTrustedResponse(url).use { response ->
+            val body = response.body ?: throw IllegalStateException("Empty download response")
+            val totalBytes = body.contentLength().takeIf { it > 0L }
             if (totalBytes != null && totalBytes > MAX_APK_BYTES) {
                 throw IllegalStateException("APK exceeds maximum size")
             }
             var downloaded = 0L
             onProgress(0L, totalBytes)
-            conn.inputStream.use { input ->
+            body.byteStream().use { input ->
                 FileOutputStream(dest).use { output ->
                     val buffer = ByteArray(16 * 1024)
                     var lastReported = 0L
@@ -437,8 +483,6 @@ class GitHubReleaseDownloader(
                 }
             }
             onProgress(downloaded, totalBytes)
-        } finally {
-            conn.disconnect()
         }
     }
 
