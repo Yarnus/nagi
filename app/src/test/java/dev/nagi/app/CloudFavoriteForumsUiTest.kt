@@ -141,9 +141,9 @@ class CloudFavoriteForumsUiTest {
         compose.onNodeWithText("NGA 收藏版块").performClick()
         compose.waitUntil(3000) {
             org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
-            compose.onAllNodesWithText("合集").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("Collection").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("合集").assertIsDisplayed()
+        compose.onNodeWithText("Collection").assertIsDisplayed()
         compose.onNodeWithText("非目录合集").assertIsDisplayed()
         compose.onAllNodesWithText("主题合集").assertCountEquals(2)
 
@@ -210,5 +210,34 @@ class CloudFavoriteForumsUiTest {
         compose.onNodeWithText("取消本地收藏版块").assertDoesNotExist()
         compose.onNodeWithText("取消 NGA 收藏版块").performClick()
         compose.runOnIdle { assertEquals("forum:7", cloudToggled?.key) }
+    }
+
+    @Test fun cloudFavoriteForumsAlignMatchedNameToDirectory() {
+        val cloudState = ListState(
+            items = listOf(
+                Forum("7", "艾泽拉斯议事厅 - Hall of Azeroth", "", "", description = "魔兽主讨论区"),
+                Forum("0", "非目录合集", "", "", collectionId = "888"),
+            ),
+        )
+        var clickedForum: Forum? = null
+
+        compose.setContent {
+            NagiTheme {
+                ForumDirectory(
+                    state = ListState(items = directory),
+                    refresh = {},
+                    onSelect = {},
+                    onForum = { clickedForum = it },
+                    isSignedIn = true,
+                    cloudFavoriteForums = cloudState,
+                )
+            }
+        }
+
+        compose.onNodeWithText("艾泽拉斯议事厅 - Hall of Azeroth").assertDoesNotExist()
+        compose.onNodeWithText("非目录合集").assertIsDisplayed()
+        compose.onAllNodesWithText("艾泽拉斯议事厅").assertCountEquals(2)
+        compose.onAllNodesWithText("艾泽拉斯议事厅").onFirst().performClick()
+        compose.runOnIdle { assertEquals("艾泽拉斯议事厅", clickedForum?.name) }
     }
 }

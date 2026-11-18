@@ -444,7 +444,7 @@ private fun DirectoryGroupHeader(
 }
 
 /**
- * Preserves the server-returned favorite forum name while filling directory icon and grouping metadata.
+ * Aligns matched cloud favorite forums with directory name, grouping, icon, and fallback description.
  */
 internal fun List<Forum>.resolveCloudForumMetadata(directory: List<Forum>): List<Forum> {
     if (isEmpty() || directory.isEmpty()) return this
@@ -452,6 +452,7 @@ internal fun List<Forum>.resolveCloudForumMetadata(directory: List<Forum>): List
     return map { cloud ->
         val matched = byKey[cloud.key] ?: return@map cloud
         cloud.copy(
+            name = matched.name.ifBlank { cloud.name },
             category = matched.category,
             group = matched.group,
             description = cloud.description.ifBlank { matched.description },
