@@ -87,6 +87,7 @@ import dev.nagi.app.ui.components.FrostedDropdownMenu
 import dev.nagi.app.ui.components.GoldSwitch
 import dev.nagi.app.ui.components.GoldTagBadge
 import dev.nagi.app.ui.components.InlineStatusBanner
+import dev.nagi.app.ui.components.LocalOpenLogin
 import dev.nagi.app.ui.components.NagiDialog
 import dev.nagi.app.ui.components.NagiFrostedSheet
 import dev.nagi.app.ui.components.NagiIcons
@@ -130,11 +131,19 @@ fun TopicsScreen(
     directoryForums: List<Forum> = emptyList(),
     favoriteForumKeys: Set<String> = emptySet(),
     onToggleForumFavorite: ((Forum) -> Unit)? = null,
+    isSignedIn: Boolean = false,
+    cloudFavoriteForumKeys: Set<String> = emptySet(),
+    cloudFavoriteBusyKeys: Set<String> = emptySet(),
+    cloudFavoriteUncertainKeys: Set<String> = emptySet(),
+    cloudFavoriteNotice: String? = null,
+    onToggleCloudForumFavorite: ((Forum) -> Unit)? = null,
+    onRefreshCloudFavorites: (() -> Unit)? = null,
     onSwitchForum: ((Forum) -> Unit)? = null,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
     val context = LocalContext.current
+    val openLogin = LocalOpenLogin.current
     val draft by composer.state.collectAsStateWithLifecycle()
     var composing by rememberSaveable { mutableStateOf(false) }
     var replacingDraft by remember { mutableStateOf(false) }
@@ -216,9 +225,6 @@ fun TopicsScreen(
         label = "topic chrome",
     )
 
-    val currentForumKey = remember(activeForumId, activeCollection) {
-        if (activeForumId != null) "${activeForumId}:${activeCollection.orEmpty()}" else null
-    }
     val currentForum = remember(directoryForums, activeForumId, activeCollection, activeTitle) {
         if (activeForumId == null) {
             null
@@ -227,6 +233,7 @@ fun TopicsScreen(
                 ?: Forum(id = activeForumId!!, name = activeTitle, category = "", group = "", collectionId = activeCollection)
         }
     }
+    val currentForumKey = currentForum?.key
     LaunchedEffect(currentForum?.name, activeForumId, activeCollection) {
         val resolved = currentForum?.name?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
         val placeholder = if (!activeCollection.isNullOrBlank()) "合集 $activeCollection" else "版块 $activeForumId"
@@ -235,6 +242,9 @@ fun TopicsScreen(
         }
     }
     val isCurrentForumFavorite = currentForumKey != null && currentForumKey in favoriteForumKeys
+    val isCurrentCloudForumFavorite = currentForumKey != null && currentForumKey in cloudFavoriteForumKeys
+    val isCurrentCloudBusy = currentForumKey != null && currentForumKey in cloudFavoriteBusyKeys
+    val isCurrentCloudUncertain = currentForumKey != null && currentForumKey in cloudFavoriteUncertainKeys
 
     val openComposer = {
         if (draft.content.isNotBlank() && draft.target != publishTarget) {
@@ -389,17 +399,37 @@ fun TopicsScreen(
                                                 leadingIcon = NagiIcons.Subforums,
                                                 onClick = { moreExpanded = false; showingRelatedForums = true },
                                             )
-                                            if (currentForum != null && onToggleForumFavorite != null) {
-                                                FrostedDropdownItem(
-                                                    text = if (isCurrentForumFavorite) "取消本地收藏版块" else "收藏当前版块",
-                                                    supporting = "本地收藏 · 仅保存在此设备",
-                                                    leadingIcon = NagiIcons.Bookmark,
-                                                    selected = isCurrentForumFavorite,
-                                                    onClick = {
-                                                        moreExpanded = false
-                                                        onToggleForumFavorite(currentForum)
-                                                    },
-                                                )
+                                            if (currentForum != null && (onToggleForumFavorite != null || onToggleCloudForumFavorite != null)) {
+                                                if (onToggleForumFavorite != null) {
+                                                    FrostedDropdownItem(
+                                                        text = if (isCurrentForumFavorite) "取消本地收藏版块" else "收藏当前版块",
+                                                        supporting = "本地收藏 · 仅保存在此设备",
+                                                        leadingIcon = NagiIcons.Bookmark,
+                                                        selected = isCurrentForumFavorite,
+                                                        onClick = {
+                                                            moreExpanded = false
+                                                            onToggleForumFavorite(currentForum)
+                                                        },
+                                                    )
+                                                }
+                                                if (onToggleCloudForumFavorite != null) {
+                                                    FrostedDropdownItem(
+                                                        text = if (isCurrentCloudForumFavorite) "取消 NGA 收藏版块" else "收藏到 NGA 版块",
+                                                        supporting = when {
+                                                            !isSignedIn -> "登录 NGA 后可用"
+                                                            isCurrentCloudBusy -> "正在提交…"
+                                                            isCurrentCloudUncertain -> "结果未确认，请先刷新核对"
+                                                            else -> "同步至 NGA 账号"
+                                                        },
+                                                        leadingIcon = NagiIcons.Star,
+                                                        selected = isCurrentCloudForumFavorite,
+                                                        enabled = !isSignedIn || (!isCurrentCloudBusy && !isCurrentCloudUncertain),
+                                                        onClick = {
+                                                            moreExpanded = false
+                                                            if (!isSignedIn) openLogin?.invoke() else onToggleCloudForumFavorite(currentForum)
+                                                        },
+                                                    )
+                                                }
                                                 HorizontalDivider(
                                                     modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.xs),
                                                     thickness = 1.dp,
@@ -564,6 +594,16 @@ fun TopicsScreen(
                                                 )
                                             }
                                         }
+                                    }
+                                }
+
+                                if (cloudFavoriteNotice != null) {
+                                    item(key = "cloud-favorite-notice", contentType = "banner") {
+                                        InlineStatusBanner(
+                                            message = cloudFavoriteNotice,
+                                            retry = onRefreshCloudFavorites,
+                                            horizontalPadding = gutter,
+                                        )
                                     }
                                 }
 

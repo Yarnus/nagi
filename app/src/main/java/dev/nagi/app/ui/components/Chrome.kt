@@ -316,10 +316,12 @@ fun FrostedDropdownItem(
     leadingIcon: ImageVector? = null,
     selected: Boolean = false,
     destructive: Boolean = false,
+    enabled: Boolean = true,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
     val labelColor = when {
+        !enabled -> colors.textMuted
         destructive -> colors.destructive
         selected -> colors.goldText
         else -> colors.textPrimary
@@ -336,7 +338,7 @@ fun FrostedDropdownItem(
                     Text(
                         text = supporting,
                         style = typography.metadata,
-                        color = colors.textSecondary,
+                        color = if (enabled) colors.textSecondary else colors.textMuted,
                     )
                 }
             }
@@ -346,7 +348,12 @@ fun FrostedDropdownItem(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = if (destructive) colors.destructive else if (selected) colors.goldText else colors.textSecondary,
+                    tint = when {
+                        !enabled -> colors.textMuted
+                        destructive -> colors.destructive
+                        selected -> colors.goldText
+                        else -> colors.textSecondary
+                    },
                     modifier = Modifier.size(18.dp),
                 )
             }
@@ -356,11 +363,12 @@ fun FrostedDropdownItem(
                 Icon(
                     imageVector = NagiIcons.Check,
                     contentDescription = null,
-                    tint = colors.goldText,
+                    tint = if (enabled) colors.goldText else colors.textMuted,
                     modifier = Modifier.size(18.dp),
                 )
             }
         } else null,
+        enabled = enabled,
         onClick = onClick,
         modifier = modifier.heightIn(min = 48.dp),
     )

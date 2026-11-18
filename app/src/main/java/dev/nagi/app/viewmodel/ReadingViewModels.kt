@@ -8,6 +8,8 @@ import dev.nagi.app.data.*
 import dev.nagi.sdk.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 fun userMessage(error: Throwable): String = when (error) {
@@ -44,13 +46,32 @@ class LibraryViewModel @Inject constructor(
 ) : ViewModel() {
     private val _forums = MutableStateFlow(ListState<Forum>())
     val forums = _forums.asStateFlow()
+    private val _cloudFavoriteForums = MutableStateFlow(ListState<Forum>())
+    val cloudFavoriteForums = _cloudFavoriteForums.asStateFlow()
+    private val _cloudForumBusyKeys = MutableStateFlow<Set<String>>(emptySet())
+    val cloudForumBusyKeys = _cloudForumBusyKeys.asStateFlow()
+    private val _cloudForumUncertainKeys = MutableStateFlow<Set<String>>(emptySet())
+    val cloudForumUncertainKeys = _cloudForumUncertainKeys.asStateFlow()
+    private val _cloudForumNotice = MutableStateFlow<String?>(null)
+    val cloudForumNotice = _cloudForumNotice.asStateFlow()
+    private val _cloudForumFeedback = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val cloudForumFeedback = _cloudForumFeedback.asSharedFlow()
     private val owner = accounts.state.value
+    val isSignedIn: Boolean get() = owner.userId != null
     private val dao = daos.forUser(owner.userId)
     val favorites = dao.favorites().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val forumFavorites = dao.forumFavorites().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val history = dao.history().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private var loading: Job? = null
-    init { loadForums() }
+    private var cloudForumsLoading: Job? = null
+    private val cloudForumWriteMutex = Mutex()
+    private fun currentOwner() = accounts.state.value.let {
+        it.ready && !it.busy && it.revision == owner.revision && it.userId == owner.userId
+    }
+    init {
+        loadForums()
+        if (owner.userId != null) loadCloudFavoriteForums()
+    }
     fun loadForums() {
         if (loading?.isActive == true) return
         loading = viewModelScope.launch {
@@ -64,6 +85,100 @@ class LibraryViewModel @Inject constructor(
             catch (error: CancellationException) { throw error }
             catch (error: Exception) { _forums.update { it.copy(loading = false, error = userMessage(error)) } }
         }
+    }
+    fun loadCloudFavoriteForums() {
+        if (owner.userId == null) {
+            _cloudFavoriteForums.value = ListState()
+            return
+        }
+        if (cloudForumsLoading?.isActive == true) return
+        cloudForumsLoading = viewModelScope.launch {
+            _cloudFavoriteForums.update { it.copy(loading = true, error = null) }
+            try {
+                if (sessions.snapshot().revision != owner.revision) throw CancellationException("Account changed")
+                val items = client.getFavoriteForums()
+                if (sessions.snapshot().revision != owner.revision) throw CancellationException("Account changed")
+                _cloudFavoriteForums.value = ListState(items)
+                _cloudForumUncertainKeys.value = emptySet()
+                _cloudForumNotice.value = null
+            }
+            catch (error: CancellationException) { throw error }
+            catch (error: Exception) {
+                _cloudFavoriteForums.update { it.copy(loading = false, error = userMessage(error)) }
+            }
+        }
+    }
+    fun setCloudForumFavorite(forum: Forum, favorite: Boolean) {
+        if (owner.userId == null) {
+            val msg = "请先登录 NGA 后再管理 NGA 收藏版块"
+            _cloudForumNotice.value = msg
+            _cloudForumFeedback.tryEmit(msg)
+            return
+        }
+        val key = forum.key
+        if (key in _cloudForumBusyKeys.value || key in _cloudForumUncertainKeys.value) return
+        val target = forum.collectionId ?: forum.id
+        if (target.toLongOrNull()?.let { it != 0L } != true) {
+            val msg = "当前版块标识无效，无法加入 NGA 收藏"
+            _cloudForumNotice.value = msg
+            _cloudForumFeedback.tryEmit(msg)
+            return
+        }
+        _cloudForumBusyKeys.update { it + key }
+        viewModelScope.launch {
+            try {
+                cloudForumWriteMutex.withLock {
+                    if (!currentOwner() || sessions.snapshot().revision != owner.revision) {
+                        throw CancellationException("Account changed")
+                    }
+                    val result = try {
+                        client.setForumFavorite(forum, favorite)
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        WriteResult.Unconfirmed()
+                    }
+                    if (!currentOwner() || sessions.snapshot().revision != owner.revision) {
+                        throw CancellationException("Account changed")
+                    }
+                    when (result) {
+                        is WriteResult.Confirmed -> {
+                            _cloudForumNotice.value = null
+                            _cloudForumFeedback.tryEmit(if (favorite) "已加入 NGA 收藏版块" else "已取消 NGA 收藏版块")
+                            cloudForumsLoading?.cancel()
+                            _cloudFavoriteForums.update { current ->
+                                val updated = if (favorite) {
+                                    if (current.items.any { it.key == key }) current.items else current.items + forum
+                                } else {
+                                    current.items.filterNot { it.key == key }
+                                }
+                                current.copy(items = updated, loading = false, error = null)
+                            }
+                        }
+                        is WriteResult.Rejected -> {
+                            val msg = writeFeedback(userMessage(result.reason), result)
+                            _cloudForumNotice.value = msg
+                            _cloudForumFeedback.tryEmit(userMessage(result.reason))
+                        }
+                        is WriteResult.Unconfirmed -> {
+                            _cloudForumUncertainKeys.update { it + key }
+                            val msg = writeFeedback("NGA 收藏结果未确认，请刷新核对后再操作", result)
+                            _cloudForumNotice.value = msg
+                            _cloudForumFeedback.tryEmit("NGA 收藏结果未确认，请刷新核对")
+                        }
+                    }
+                }
+            } finally {
+                _cloudForumBusyKeys.update { it - key }
+            }
+        }
+    }
+    fun toggleCloudForumFavorite(forum: Forum) {
+        val isCloudFavorite = _cloudFavoriteForums.value.items.any { it.key == forum.key }
+        setCloudForumFavorite(forum, !isCloudFavorite)
+    }
+    fun dismissCloudForumNotice() {
+        _cloudForumNotice.value = null
     }
     fun removeFavorite(id: String) = viewModelScope.launch {
         accounts.withCurrentRevision(owner.revision) { dao.removeFavorite(id) }

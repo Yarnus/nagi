@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.Surface
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.DisposableEffect
@@ -145,6 +146,17 @@ fun NagiApp(
                 val directory by library.forums.collectAsStateWithLifecycle()
                 val forumFavorites by library.forumFavorites.collectAsStateWithLifecycle()
                 val favoriteForumKeys = remember(forumFavorites) { forumFavorites.map { it.key }.toSet() }
+                val cloudForumFavorites by library.cloudFavoriteForums.collectAsStateWithLifecycle()
+                val cloudFavoriteForumKeys = remember(cloudForumFavorites.items) { cloudForumFavorites.items.map { it.key }.toSet() }
+                val cloudForumBusyKeys by library.cloudForumBusyKeys.collectAsStateWithLifecycle()
+                val cloudForumUncertainKeys by library.cloudForumUncertainKeys.collectAsStateWithLifecycle()
+                val cloudForumNotice by library.cloudForumNotice.collectAsStateWithLifecycle()
+                val appContext = LocalContext.current
+                LaunchedEffect(library) {
+                    library.cloudForumFeedback.collect { message ->
+                        android.widget.Toast.makeText(appContext, message, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
                 val nav = rememberNavController()
                 val expanded = width == WindowWidthSizeClass.Expanded
                 val popBackFrom: (androidx.navigation.NavBackStackEntry) -> Unit = { source ->
@@ -226,6 +238,13 @@ fun NagiApp(
                                         directoryForums = directory.items,
                                         favoriteForumKeys = favoriteForumKeys,
                                         onToggleForumFavorite = library::toggleForumFavorite,
+                                        isSignedIn = library.isSignedIn,
+                                        cloudFavoriteForumKeys = cloudFavoriteForumKeys,
+                                        cloudFavoriteBusyKeys = cloudForumBusyKeys,
+                                        cloudFavoriteUncertainKeys = cloudForumUncertainKeys,
+                                        cloudFavoriteNotice = cloudForumNotice,
+                                        onToggleCloudForumFavorite = library::toggleCloudForumFavorite,
+                                        onRefreshCloudFavorites = library::loadCloudFavoriteForums,
                                         onSwitchForum = { targetForum ->
                                             backStack.arguments?.apply {
                                                 putString("id", targetForum.id.ifBlank { "0" })

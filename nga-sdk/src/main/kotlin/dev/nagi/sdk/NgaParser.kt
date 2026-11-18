@@ -120,6 +120,34 @@ internal object NgaParser {
         }.distinctBy { it.key }
     }
 
+    /**
+     * `forum_favor2` returns `data[0]` as a keyed object (or array) of forum records. An empty string,
+     * empty object or empty array means no favorites; other shapes are protocol errors.
+     * Records without a usable `fid` / `stid` or name are skipped.
+     */
+    fun favoriteForums(raw: String): List<Forum> {
+        val root = root(raw)
+        if (!root.has("data") || root.isNull("data")) throw NgaException.Protocol(ProtocolReason.JSON_DATA_MISSING)
+        val entries = when (val data = root.get("data")) {
+            is JSONObject -> data.opt("0")
+            is JSONArray -> data.opt(0)
+            else -> throw NgaException.Protocol(ProtocolReason.JSON_RECORDS_SHAPE)
+        }
+        val records = when (entries) {
+            is String -> if (entries.isBlank()) return emptyList() else throw NgaException.Protocol(ProtocolReason.JSON_RECORDS_SHAPE)
+            is JSONObject, is JSONArray -> records(entries)
+            else -> throw NgaException.Protocol(ProtocolReason.JSON_RECORDS_SHAPE)
+        }
+        return records.mapNotNull { forum ->
+            val id = forum.optString("fid").trim().takeIf { it.toLongOrNull()?.let { value -> value != 0L } == true }
+            val collection = forum.optString("stid").trim().takeIf { it.toLongOrNull()?.let { value -> value > 0L } == true }
+            val name = plain(forum.optString("name")).trim()
+            if ((id == null && collection == null) || name.isBlank()) return@mapNotNull null
+            Forum(id.orEmpty(), name, "", "", collection,
+                description = if (forum.isNull("info")) "" else plain(forum.optString("info")))
+        }.distinctBy { it.key }
+    }
+
     private fun directoryIcons(metadata: JSONObject?, kind: String): Map<String, String> {
         metadata ?: return emptyMap()
         val prefix = metadata.optString("${kind}_px_l").toHttpUrlOrNull() ?: return emptyMap()

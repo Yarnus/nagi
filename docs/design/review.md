@@ -46,8 +46,11 @@
 | 版本检查与发布页 | 启动静默请求 `releases/latest` 重定向、不附带 NGA 凭据、失败静默、24 小时节流、已升级清除旧提示；发现新版本时头像菜单 / 设置入口 / 关于页展示金色胶囊提示且不占用未读红点；“查看最新版本”外部打开正确 Release 页面，无浏览器时可复制链接 |
 | 开源许可 | 无网络时可读取项目及第三方许可；长文本可滚动，关闭后返回关于页 |
 | 本地收藏与历史 | 版块 / 合集区分、目录和抽屉状态一致、账号隔离、Room 2→3 / 5→6 迁移保留数据；历史时间展示、筛选、单条移除与清空（含未收藏进度清理选项）；未收藏阅读进度自动淘汰与收藏进度保护 |
+| NGA 收藏版块 | 游客不发请求并可引导登录；已登录读取 `forum_favor2` 区分版块与合集、保留服务端名称并补全目录图标；版块目录顶部分区、长按双入口、过滤与主题列表更多菜单；收藏页双标签切换及位置保留、移除确认弹窗；写入确认后即时更新列表、拒绝保留原态、结果不明锁定至刷新核对 |
 
 ## 验证边界
+
+NGA 收藏版块（`forum_favor2` 读取与增删写入、版块目录顶部 `NGA 收藏版块` 分区与长按双入口菜单、主题列表菜单、`FavoritesScreen` 双标签与移除确认弹窗、结果不明锁定与刷新解锁）的本地 **模拟测试通过**：最终代码改动后运行 `./gradlew --no-daemon --max-workers=1 :nga-sdk:check :app:assembleDebug :app:lintDebug :app:testDebugUnitTest` 全部通过（SDK 214 项、应用 357 项单元测试 0 失败 0 跳过，lint 0 个错误、31 个警告、3 个提示）；`FavoriteForumsTest` 覆盖协议解析、空形状边界、登录凭据约束与写入结果策略，`LibraryViewModelTest` 覆盖游客拦截、刷新保留、保存成功即时更新、拒绝与结果不明锁定解锁，`CloudFavoriteForumsUiTest` 覆盖版块目录、主题列表、收藏页双标签与窄屏 2x 大字号交互。**真实 NGA 只读接口已手动验证**（在 `emulator-5554` 登录账号后核验 `forum_favor2` `action=get` 拉取及版块目录名称/图标展示）。**未验证：** 设备集成测试、真机、TalkBack 实机朗读，以及 `forum_favor2` 写入在完整回归中的自动化验证。
 
 主楼分享卡片（顶栏与主楼菜单入口、非首页按需读取、浅/深卡片切换、超长内容截断、隐藏私人标记与 PNG 导出分享）的本地 **模拟测试通过**：最终代码改动后运行 `./gradlew --no-daemon --max-workers=1 :nga-sdk:check :app:assembleDebug :app:lintDebug :app:testDebugUnitTest` 全部通过（SDK 207 项、应用 350 项单元测试 0 失败 0 跳过，lint 0 个错误、31 个警告、2 个提示）；`PostShareCardTest` 覆盖短/长文本与多图截断、顶栏与主楼菜单入口、隐藏本地私人用户标记、浅/深卡片切换、窄屏 2x 大字号弹窗可用性，以及真实 PNG 编码与 `FileProvider` `ACTION_SEND` 分享 Intent；`ReadingViewModelTest` 覆盖首页缓存复用、从第 3 页按需读取第 1 页主楼（不改变当前页）、失败重试及账号退出隔离。**集成测试通过**（API 36 `nagi-validation` 模拟器）：`PostShareCardDeviceTest` 与 `ReaderRenderingTest` 共 2 项插桩测试通过（验证真实 Android RenderThread 下 `GraphicsLayer` 录制导出 PNG 与 `ACTION_SEND` Intent），`app-arm64-v8a-debug.apk` 已安装并启动。**未验证：** 真机、TalkBack 实机朗读、跨 App 真实分享接收及远程图片真实加载渲染表现。
 

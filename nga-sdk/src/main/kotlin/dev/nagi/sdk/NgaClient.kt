@@ -60,6 +60,12 @@ interface NgaClient {
     suspend fun preparePublish(target: PublishTarget): PublishPreparation
     suspend fun setSubforumVisibility(parentForumId: String, filterId: String, visible: Boolean): WriteResult =
         throw UnsupportedOperationException("Subforum settings unavailable")
+    /** Account-scoped NGA forum favorites; requires login. Entries are not resolved against the directory. */
+    suspend fun getFavoriteForums(): List<Forum> =
+        throw UnsupportedOperationException("NGA favorite forums unavailable")
+    /** Adds or removes a forum or collection in the account's NGA forum favorites. */
+    suspend fun setForumFavorite(forum: Forum, favorite: Boolean): WriteResult =
+        throw UnsupportedOperationException("NGA favorite forums unavailable")
     suspend fun publish(request: PublishRequest): WriteResult
     /** Preparation failures throw before upload; upload outcomes never imply a usable receipt. */
     suspend fun uploadImage(target: PublishTarget, image: ImageUpload): ImageUploadResult =
@@ -479,6 +485,28 @@ internal class HttpNgaClient(
                 parse = { raw ->
                     NgaParser.writeErrorOrNull(raw)?.let { throw it }
                     WriteResult.Confirmed("子板块设置已更新")
+                })
+        }
+    }
+
+    override suspend fun getFavoriteForums(): List<Forum> = exchangeRead(
+        requireAuth = true,
+        request = { api, format ->
+            api.user(query("__lib" to "forum_favor2", "__act" to "forum_favor") + format, mapOf("action" to "get"))
+        },
+        parse = { raw, _ -> NgaParser.favoriteForums(raw) },
+    )
+
+    override suspend fun setForumFavorite(forum: Forum, favorite: Boolean): WriteResult {
+        val target = forum.collectionId ?: forum.id
+        require(target.toLongOrNull()?.let { it != 0L } == true)
+        return write { diagnostic ->
+            exchange(requireAuth = true, isWrite = true, recordDiagnostic = diagnostic,
+                request = { it.userWrite(query("__lib" to "forum_favor2", "__act" to "forum_favor"),
+                    mapOf("action" to if (favorite) "add" else "del", "fid" to target)).writeBody() },
+                parse = { raw ->
+                    NgaParser.writeErrorOrNull(raw)?.let { throw it }
+                    WriteResult.Confirmed(if (favorite) "已加入 NGA 收藏版块" else "已取消 NGA 收藏版块")
                 })
         }
     }

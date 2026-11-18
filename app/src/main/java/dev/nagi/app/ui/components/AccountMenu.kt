@@ -241,7 +241,7 @@ fun AccountMenuButton(onSelect: (String) -> Unit) {
             entry("通知", NagiIcons.Notification, "notifications", if (unread > 0) "$unread 条未读" else null)
             entry("短消息", NagiIcons.Message, "messages")
             divider()
-            entry("收藏话题", NagiIcons.Bookmark, "favorites", "本地收藏 · 仅保存在此设备")
+            entry("收藏", NagiIcons.Bookmark, "favorites", "本地收藏 · NGA 收藏版块")
             entry("浏览历史", NagiIcons.History, "history")
             divider()
             entry("设置", NagiIcons.Tuning, "settings")

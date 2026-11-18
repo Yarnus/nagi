@@ -131,6 +131,15 @@ ID、名称、描述、筛选 ID 和属性。`item` 条目按版块导航，其�
 不带选中 ID 参数。
 真实设置写入及跨客户端传播仍未验证。
 
+## NGA 收藏版块
+
+`getFavoriteForums()` 和 `setForumFavorite(forum, favorite)` 均需要已登录会话，
+向 `nuke.php` 发送经过身份验证的 POST，查询参数为 `__lib=forum_favor2`、`__act=forum_favor`：
+
+- 读取携带 `__output=8` 与表单 `action=get`，解析 `data[0]`（兼容对象、数组及 `""` / `{}` / `[]` 空响应）；按 `fid` / `stid` 提取版块或合集，保留 `name` 与 `info` 并按 `Forum.key` 去重。不解析目录图标，由应用层按需要与目录项对齐。
+- 写入在调用前校验 `collectionId ?: id` 为非零整数，使用禁止重放的写传输发送 `action=add` / `del` 与 `fid=<target>`，遵循通用写入结果策略；`Confirmed` 后由应用层直接更新内存列表（避免服务端或 CDN 短暂缓存回滚显示），`Unconfirmed` 时锁定对应版块写入直至主动刷新核对。
+- 真实 NGA 收藏版块的读取及写入行为尚未通过实机 / 真实服务端验证。
+
 ## 图片附件
 
 `uploadImage(target, image)` 支持发新帖、回复和引用。SDK 在同一会话修订号下先读取上传授权，

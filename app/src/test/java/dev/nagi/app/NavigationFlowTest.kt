@@ -99,8 +99,8 @@ class NavigationFlowTest {
         compose.onNodeWithText("本地收藏").performClick()
         compose.onNodeWithContentDescription("返回").performClick()
         compose.onNodeWithContentDescription("返回").performClick()
-        openAccountItem("收藏话题")
-        openRepeatedlyAndReturn("Topic", "本地收藏")
+        openAccountItem("收藏")
+        openRepeatedlyAndReturn("Topic", "仅保存在此设备，不同步 NGA")
     }
 
     @Test fun accountPageBackWorksDuringEnterTransition() {
@@ -137,7 +137,7 @@ class NavigationFlowTest {
         compose.onNodeWithContentDescription("刷新").assertDoesNotExist()
         compose.onNodeWithContentDescription("头像菜单")
             .assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp).performClick()
-        listOf("未登录", "登录 NGA", "通知", "短消息", "收藏话题", "浏览历史", "设置", "关于与反馈")
+        listOf("未登录", "登录 NGA", "通知", "短消息", "收藏", "浏览历史", "设置", "关于与反馈")
             .forEach { compose.onNodeWithText(it).assertExists() }
         compose.onNodeWithText("通知").performClick()
         compose.onNodeWithText("请先登录 NGA").assertIsDisplayed()
@@ -310,7 +310,7 @@ class NavigationFlowTest {
         compose.onNodeWithContentDescription("返回").performClick()
         compose.onNodeWithText("Title 1").assertIsDisplayed()
         compose.onNodeWithContentDescription("返回").performClick()
-        openAccountItem("收藏话题")
+        openAccountItem("收藏")
         compose.onNodeWithText("Topic").assertIsDisplayed()
         compose.onNodeWithText("Topic").performClick()
         compose.onNodeWithText("Post 0").assertIsDisplayed()
@@ -342,12 +342,12 @@ class NavigationFlowTest {
             }
         }
         compose.onNodeWithText("Forum").assertIsDisplayed()
-        openAccountItem("收藏话题")
+        openAccountItem("收藏")
         compose.onNodeWithText("Topic").assertDoesNotExist()
         openAccountItem("管理账号")
         compose.onNodeWithText("退出当前账号").performClick()
         compose.onNodeWithText("Forum").assertIsDisplayed()
-        openAccountItem("收藏话题")
+        openAccountItem("收藏")
         compose.onNodeWithText("Topic").assertIsDisplayed()
     }
     @Test fun settingsExposePackagedGplLicense() {
@@ -401,8 +401,8 @@ class NavigationFlowTest {
         compose.onNodeWithText("首页").assertDoesNotExist()
         compose.onNodeWithContentDescription("搜索").assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp).performClick()
         compose.onNodeWithContentDescription("取消搜索").performClick()
-        openAccountItem("收藏话题")
-        compose.onNodeWithText("本地收藏").assertIsDisplayed()
+        openAccountItem("收藏")
+        compose.onNodeWithText("仅保存在此设备，不同步 NGA").assertIsDisplayed()
         compose.onNodeWithContentDescription("返回").performClick()
         openAccountItem("设置")
         compose.onNodeWithText("正文字号", substring = true).assertIsDisplayed()
