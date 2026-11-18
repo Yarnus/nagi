@@ -43,14 +43,14 @@
 | 资料 | 匿名 / 缺失字段、签名展开、独立标签缓存、重建从第一页读取、自身 / 游客私信入口 |
 | 用户标记 | 资料页新增 / 修改 / 删除、24 字符及控制字符校验、匿名无入口；UID 关联、账号 / 游客隔离、Room 4→5 保留原数据、重启留存；中英文标记与昵称 / 楼主标签居中对齐，窄屏大字号不重叠，帖子及两种评论视图同步更新 |
 | GitHub 反馈 | 入口外部打开正确仓库的模板选择页；仅预填版本、Android 与设备信息，特殊字符编码正确；无浏览器时可复制链接或关闭重试；GitHub 登录前后、模板选择后的字段保留与必填校验需网页验收，不实际提交 Issue |
-| 版本检查与发布页 | 启动静默请求 `releases/latest` 重定向、不附带 NGA 凭据、失败静默、24 小时节流、已升级清除旧提示；发现新版本时头像菜单 / 设置入口 / 关于页展示金色胶囊提示且不占用未读红点；关于页“检查更新”按钮绕过节流立即检查并展示检查中 / 最新 / 有更新 / 失败状态；“查看最新版本”外部打开正确 Release 页面，无浏览器时可复制链接 |
+| 版本检查与发布页 | 启动静默请求 `releases/latest` 重定向、不附带 NGA 凭据、失败静默、24 小时节流、已升级清除旧提示；发现新版本时头像菜单 / 设置入口 / 关于页展示金色胶囊提示且不占用未读红点；关于页“检查更新”按钮绕过节流立即检查并展示检查中 / 最新 / 有更新 / 失败状态；存在新版本时支持主动按 ABI 下载 APK 并校验 `SHA256SUMS`、包名、版本号与签名一致性（含进度条、取消下载、`REQUEST_INSTALL_PACKAGES` 权限引导及返回自动刷新安装，及失败回退发布页）；“查看最新版本”外部打开正确 Release 页面，无浏览器时可复制链接 |
 | 开源许可 | 无网络时可读取项目及第三方许可；长文本可滚动，关闭后返回关于页 |
 | 本地收藏与历史 | 本地收藏话题账号隔离、Room 2→3 / 5→6 迁移保留数据；历史时间展示、筛选、单条移除与清空（含未收藏进度清理选项）；未收藏阅读进度自动淘汰与收藏进度保护 |
 | NGA 收藏版块 | 游客不发请求并可引导登录；已登录读取 `forum_favor2` 区分版块与合集、保留服务端名称并补全目录图标；版块目录顶部分区、长按菜单、过滤与主题列表更多菜单；收藏页双标签切换及位置保留、移除确认弹窗；写入确认后即时更新列表、拒绝保留原态、结果不明锁定至刷新核对 |
 
 ## 验证边界
 
-关于页手动“检查更新”按钮（绕过 24 小时节流立即检查 `releases/latest`、展示检查中 / 最新 / 有更新 / 失败提示与窄屏 2x 大字号渲染）的本地 **模拟测试通过**：最终代码改动后运行 `./gradlew --no-daemon --max-workers=1 :nga-sdk:check :app:assembleDebug :app:lintDebug :app:testDebugUnitTest` 全部通过（SDK 214 项、应用 359 项单元测试 0 失败 0 跳过，lint 0 个错误、31 个警告、3 个提示）；`AppUpdateLogicTest` 与 `AppUpdateFlowTest` / `AboutCheckUpdateUiTest` 覆盖节流绕过、失败保留已缓存新版本、离开页面状态重置及窄屏 2x 大字号。**未验证：** 设备集成测试、真机及真实 GitHub 网络下的 `checkNow()` 请求表现。
+关于页主动更新检测与应用内下载安装（手动“检查更新”按钮绕过 24 小时节流、按 ABI 选择 Release APK、受信任 GitHub HTTPS 重定向校验、`SHA256SUMS` 与签名/包信息一致性校验、下载/校验进度与取消、`REQUEST_INSTALL_PACKAGES` 权限刷新与窄屏 2x 大字号交互）的本地 **模拟测试通过**：最终代码改动后运行 `./gradlew --no-daemon --max-workers=1 :nga-sdk:check :app:assembleDebug :app:lintDebug :app:testDebugUnitTest` 全部通过（SDK 214 项、应用 361 项单元测试 0 失败 0 跳过，lint 0 个错误、33 个警告、3 个提示）；`AppUpdateLogicTest` 与 `AppUpdateFlowTest` / `AboutCheckUpdateUiTest` 覆盖 ABI 选择、`SHA256SUMS` 解析、受信任下载域名校验、下载状态流转、权限刷新、取消恢复、缓存清理与窄屏 2x 大字号各状态展示。**未验证：** 设备集成测试、真机、真实 GitHub Releases 网络/CDN 下载、`PackageManager` 同签名校验通过后的真实系统安装器调起及授权设置页返回体验。
 
 NGA 收藏版块（`forum_favor2` 读取与增删写入、版块目录顶部 `NGA 收藏版块` 分区与长按双入口菜单、主题列表菜单、`FavoritesScreen` 双标签与移除确认弹窗、结果不明锁定与刷新解锁）的本地 **模拟测试通过**：最终代码改动后运行 `./gradlew --no-daemon --max-workers=1 :nga-sdk:check :app:assembleDebug :app:lintDebug :app:testDebugUnitTest` 全部通过（SDK 214 项、应用 357 项单元测试 0 失败 0 跳过，lint 0 个错误、31 个警告、3 个提示）；`FavoriteForumsTest` 覆盖协议解析、空形状边界、登录凭据约束与写入结果策略，`LibraryViewModelTest` 覆盖游客拦截、刷新保留、保存成功即时更新、拒绝与结果不明锁定解锁，`CloudFavoriteForumsUiTest` 覆盖版块目录、主题列表、收藏页双标签与窄屏 2x 大字号交互。**真实 NGA 只读接口已手动验证**（在 `emulator-5554` 登录账号后核验 `forum_favor2` `action=get` 拉取及版块目录名称/图标展示）。**未验证：** 设备集成测试、真机、TalkBack 实机朗读，以及 `forum_favor2` 写入在完整回归中的自动化验证。
 

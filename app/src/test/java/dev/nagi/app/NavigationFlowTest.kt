@@ -33,6 +33,7 @@ import javax.inject.Singleton
 object FakeAppModule {
     var clientOverride: NgaClient? = null
     var releaseCheckerOverride: dev.nagi.app.data.ReleaseChecker? = null
+    var releaseDownloaderOverride: dev.nagi.app.data.ReleaseDownloader? = null
     @Provides @Singleton fun sessions(): SessionStore = MemorySessionStore()
     @Provides @Singleton fun browser(): BrowserCookies = FakeBrowserCookies()
     @Provides @Singleton fun client(): NgaClient = clientOverride ?: FakeClient()
@@ -40,12 +41,16 @@ object FakeAppModule {
     @Provides @Singleton fun messageWrites() = dev.nagi.app.data.MessageWriteGuard()
     @Provides @Singleton fun releaseChecker(): dev.nagi.app.data.ReleaseChecker =
         releaseCheckerOverride ?: dev.nagi.app.data.ReleaseChecker { null }
+    @Provides @Singleton fun releaseDownloader(): dev.nagi.app.data.ReleaseDownloader =
+        releaseDownloaderOverride ?: dev.nagi.app.data.NoOpReleaseDownloader
     @Provides @Singleton fun updateCacheStore(): dev.nagi.app.data.UpdateCacheStore =
         dev.nagi.app.data.InMemoryUpdateCacheStore()
     @Provides @Singleton fun releaseUpdates(
         checker: dev.nagi.app.data.ReleaseChecker,
         cacheStore: dev.nagi.app.data.UpdateCacheStore,
-    ): dev.nagi.app.data.ReleaseUpdateRepository = dev.nagi.app.data.ReleaseUpdateRepository(checker, cacheStore)
+        downloader: dev.nagi.app.data.ReleaseDownloader,
+    ): dev.nagi.app.data.ReleaseUpdateRepository =
+        dev.nagi.app.data.ReleaseUpdateRepository(checker, cacheStore, downloader = downloader)
 }
 
 @HiltAndroidTest
