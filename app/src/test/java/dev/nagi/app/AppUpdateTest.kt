@@ -15,22 +15,13 @@ import dev.nagi.app.data.AppUpdateState
 import dev.nagi.app.data.GitHubReleaseChecker
 import dev.nagi.app.data.InMemoryUpdateCacheStore
 import dev.nagi.app.data.ReleaseChecker
-import dev.nagi.app.data.ReleaseDownloadResult
-import dev.nagi.app.data.ReleaseDownloader
 import dev.nagi.app.data.ReleaseUpdateRepository
 import dev.nagi.app.data.UPDATE_CHECK_INTERVAL_MILLIS
 import dev.nagi.app.data.UpdateCheckCache
 import dev.nagi.app.data.UpdateCheckStatus
-import dev.nagi.app.data.UpdateDownloadState
 import dev.nagi.app.data.isNewerRelease
-import dev.nagi.app.data.isTrustedReleaseDownloadUrl
 import dev.nagi.app.data.parseReleaseTagFromLocation
 import dev.nagi.app.data.parseSemVer
-import dev.nagi.app.data.parseSha256Sums
-import dev.nagi.app.data.selectReleaseAbi
-import dev.nagi.app.data.sha256Hex
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -252,129 +243,6 @@ class AppUpdateLogicTest {
         repo.checkIfNeeded()
         assertFalse(repo.state.value.hasUpdate)
     }
-
-    @Test fun abiSelectionSha256SumsAndTrustedDownloadUrlValidation() {
-        assertEquals("arm64-v8a", selectReleaseAbi(arrayOf("arm64-v8a", "armeabi-v7a")))
-        assertEquals("x86_64", selectReleaseAbi(arrayOf("x86_64", "arm64-v8a")))
-        assertEquals("armeabi-v7a", selectReleaseAbi(arrayOf("mips", "armeabi-v7a")))
-        assertNull(selectReleaseAbi(arrayOf("mips", "riscv64")))
-
-        val validHash = "a".repeat(64)
-        val secondHash = "B".repeat(64)
-        val parsed = parseSha256Sums(
-            """
-            $validHash  ./nagi-v0.4.0-arm64-v8a.apk
-            $secondHash *dist/nagi-v0.4.0-x86_64.apk
-            short  nagi-v0.4.0-invalid.apk
-            """.trimIndent(),
-        )
-        assertEquals(validHash, parsed["nagi-v0.4.0-arm64-v8a.apk"])
-        assertEquals(secondHash.lowercase(), parsed["nagi-v0.4.0-x86_64.apk"])
-        assertNull(parsed["nagi-v0.4.0-invalid.apk"])
-
-        val temp = kotlin.io.path.createTempFile("nagi-hash-test", ".bin").toFile()
-        try {
-            temp.writeBytes("nagi".encodeToByteArray())
-            assertEquals("7037c5865b4629a983e7a3bb2fec71ac1bf504d99702fc433fe801b1a909d2b7", sha256Hex(temp))
-        } finally {
-            temp.delete()
-        }
-
-        assertTrue(isTrustedReleaseDownloadUrl("https://github.com/Yarnus/nagi/releases/download/v0.4.0/SHA256SUMS"))
-        assertTrue(isTrustedReleaseDownloadUrl("https://objects.githubusercontent.com/github-production-release-asset/123"))
-        assertTrue(isTrustedReleaseDownloadUrl("https://release-assets.githubusercontent.com/asset.apk"))
-        assertFalse(isTrustedReleaseDownloadUrl("http://github.com/Yarnus/nagi/releases"))
-        assertFalse(isTrustedReleaseDownloadUrl("https://user@github.com/Yarnus/nagi/releases"))
-        assertFalse(isTrustedReleaseDownloadUrl("https://github.com:8443/Yarnus/nagi/releases"))
-        assertFalse(isTrustedReleaseDownloadUrl("https://notgithub.com/asset.apk"))
-        assertFalse(isTrustedReleaseDownloadUrl("https://githubusercontent.com.evil.com/asset.apk"))
-    }
-
-    @Test fun downloadUpdateTransitionsPermissionRefreshCancelAndCleanup() = runTest {
-        var canInstall = false
-        var cleanupCalls = 0
-        var nextResult: ReleaseDownloadResult = ReleaseDownloadResult.Ready("/tmp/nagi-v0.4.0.apk")
-        val blocker = CompletableDeferred<Unit>()
-        var blockOnDownload = false
-        var observedVerifying = false
-        val fakeDownloader = object : ReleaseDownloader {
-            override suspend fun downloadAndVerify(
-                tag: String,
-                onProgress: (Long, Long?) -> Unit,
-                onVerifying: () -> Unit,
-            ): ReleaseDownloadResult {
-                onProgress(512L, 1024L)
-                if (blockOnDownload) {
-                    blocker.await()
-                }
-                onVerifying()
-                observedVerifying = true
-                return nextResult
-            }
-
-            override fun canInstallPackages(): Boolean = canInstall
-
-            override fun cleanupCachedUpdates() {
-                cleanupCalls++
-            }
-        }
-        var installedVersion = "0.3.0"
-        var remoteTag: String? = "v0.4.0"
-        val repo = ReleaseUpdateRepository(
-            checker = ReleaseChecker { remoteTag },
-            cacheStore = InMemoryUpdateCacheStore(),
-            currentVersion = { installedVersion },
-            nowMillis = { 10_000L },
-            downloader = fakeDownloader,
-        )
-
-        // Cannot download before update is known
-        assertNull(repo.downloadUpdate())
-
-        repo.checkNow()
-        assertTrue(repo.state.value.hasUpdate)
-
-        // Download ready with missing install permission -> ReadyToInstall(needsInstallPermission = true)
-        val firstReady = repo.downloadUpdate() as UpdateDownloadState.ReadyToInstall
-        assertTrue(observedVerifying)
-        assertEquals("v0.4.0", firstReady.tag)
-        assertEquals("/tmp/nagi-v0.4.0.apk", firstReady.apkPath)
-        assertTrue(firstReady.needsInstallPermission)
-
-        // Granting permission & refreshing clears needsInstallPermission
-        canInstall = true
-        repo.refreshInstallPermission()
-        val refreshed = repo.state.value.download as UpdateDownloadState.ReadyToInstall
-        assertFalse(refreshed.needsInstallPermission)
-
-        // Cancellation resets state to Idle
-        blockOnDownload = true
-        val started = CompletableDeferred<Unit>()
-        val job = launch {
-            started.complete(Unit)
-            repo.downloadUpdate()
-        }
-        started.await()
-        testScheduler.advanceUntilIdle()
-        assertTrue(repo.state.value.download is UpdateDownloadState.Downloading)
-        job.cancel()
-        job.join()
-        assertEquals(UpdateDownloadState.Idle, repo.state.value.download)
-
-        // Rejected/Failed download transitions to Failed with message
-        blockOnDownload = false
-        nextResult = ReleaseDownloadResult.Rejected("校验失败")
-        val failed = repo.downloadUpdate() as UpdateDownloadState.Failed
-        assertEquals("校验失败", failed.message)
-
-        // Upgraded version clears badge & cleans cached updates
-        installedVersion = "0.4.0"
-        remoteTag = "v0.4.0"
-        repo.checkNow()
-        assertFalse(repo.state.value.hasUpdate)
-        assertEquals(UpdateDownloadState.Idle, repo.state.value.download)
-        assertTrue(cleanupCalls >= 1)
-    }
 }
 
 @HiltAndroidTest
@@ -408,11 +276,7 @@ class AppUpdateFlowTest {
         compose.onNodeWithText("查看最新版本").assertIsDisplayed()
         compose.onNodeWithText("v99.0.0").assertIsDisplayed()
         compose.onNodeWithText("检查更新").performClick()
-        compose.onNodeWithText("发现新版本 v99.0.0，可直接下载或前往发布页查看").assertIsDisplayed()
-        compose.onNodeWithText("下载更新").performClick()
-        compose.onNodeWithText("暂不支持应用内下载，请前往发布页下载").assertIsDisplayed()
-        compose.onNodeWithText("重试下载").assertIsDisplayed()
-        compose.onNodeWithText("前往发布页").assertIsDisplayed()
+        compose.onNodeWithText("发现新版本 v99.0.0，请前往发布页下载").assertIsDisplayed()
     }
 }
 
@@ -464,119 +328,9 @@ class AboutCheckUpdateUiTest {
                 latestTag = "v99.0.0",
                 hasUpdate = true,
                 manualStatus = UpdateCheckStatus.UPDATE_AVAILABLE,
-                download = UpdateDownloadState.Idle,
             )
         }
-        compose.onNodeWithText("下载更新").assertIsDisplayed()
-
-        compose.runOnIdle {
-            state = AppUpdateState(
-                latestTag = "v99.0.0",
-                hasUpdate = true,
-                manualStatus = UpdateCheckStatus.UPDATE_AVAILABLE,
-                download = UpdateDownloadState.Downloading("v99.0.0", 512L * 1024L, 1024L * 1024L),
-            )
-        }
-        compose.onNodeWithText("取消下载").assertIsDisplayed()
-
-        compose.runOnIdle {
-            state = AppUpdateState(
-                latestTag = "v99.0.0",
-                hasUpdate = true,
-                manualStatus = UpdateCheckStatus.UPDATE_AVAILABLE,
-                download = UpdateDownloadState.Verifying("v99.0.0"),
-            )
-        }
-        compose.onNodeWithText("正在校验 v99.0.0 安装包…").assertIsDisplayed()
-
-        compose.runOnIdle {
-            state = AppUpdateState(
-                latestTag = "v99.0.0",
-                hasUpdate = true,
-                manualStatus = UpdateCheckStatus.UPDATE_AVAILABLE,
-                download = UpdateDownloadState.ReadyToInstall("v99.0.0", "/tmp/nagi.apk", needsInstallPermission = true),
-            )
-        }
-        compose.onNodeWithText("授权并安装").assertIsDisplayed()
-
-        compose.runOnIdle {
-            state = AppUpdateState(
-                latestTag = "v99.0.0",
-                hasUpdate = true,
-                manualStatus = UpdateCheckStatus.UPDATE_AVAILABLE,
-                download = UpdateDownloadState.ReadyToInstall("v99.0.0", "/tmp/nagi.apk", needsInstallPermission = false),
-            )
-        }
-        compose.onNodeWithText("安装更新").assertIsDisplayed()
+        compose.onNodeWithText("发现新版本 v99.0.0，请前往发布页下载").assertIsDisplayed()
         org.robolectric.RuntimeEnvironment.setFontScale(1f)
-    }
-}
-
-@RunWith(RobolectricTestRunner::class)
-@Config(application = android.app.Application::class, sdk = [35])
-class AppUpdateDownloaderOkHttpTest {
-    @Test fun downloaderUsesOkHttpFollowsTrustedRedirectAndRejectsUntrustedRedirectOrBadSha() = runTest {
-        val context = org.robolectric.RuntimeEnvironment.getApplication()
-        val fakeApkBytes = "fake-apk-bytes".encodeToByteArray()
-        val expectedSha = java.security.MessageDigest.getInstance("SHA-256")
-            .digest(fakeApkBytes)
-            .joinToString("") { "%02x".format(it) }
-        var apkRedirectTarget = "https://objects.githubusercontent.com/asset/nagi-v0.4.1-arm64-v8a.apk"
-        val requestedUrls = mutableListOf<String>()
-        val client = OkHttpClient.Builder()
-            .addInterceptor { chain ->
-                val req = chain.request()
-                val url = req.url.toString()
-                requestedUrls += url
-                when {
-                    url.endsWith("/SHA256SUMS") -> Response.Builder()
-                        .request(req)
-                        .protocol(Protocol.HTTP_1_1)
-                        .code(200)
-                        .message("OK")
-                        .body("$expectedSha  nagi-v0.4.1-arm64-v8a.apk\n".toResponseBody("text/plain".toMediaType()))
-                        .build()
-                    url.startsWith("https://github.com/Yarnus/nagi/releases/download/") -> Response.Builder()
-                        .request(req)
-                        .protocol(Protocol.HTTP_1_1)
-                        .code(302)
-                        .message("Found")
-                        .header("Location", apkRedirectTarget)
-                        .body(ByteArray(0).toResponseBody(null))
-                        .build()
-                    url == "https://objects.githubusercontent.com/asset/nagi-v0.4.1-arm64-v8a.apk" -> Response.Builder()
-                        .request(req)
-                        .protocol(Protocol.HTTP_1_1)
-                        .code(200)
-                        .message("OK")
-                        .body("wrong-bytes".toResponseBody("application/vnd.android.package-archive".toMediaType()))
-                        .build()
-                    else -> error("Unexpected URL: $url")
-                }
-            }
-            .build()
-
-        val downloader = dev.nagi.app.data.GitHubReleaseDownloader(
-            context = context,
-            supportedAbisProvider = { arrayOf("arm64-v8a") },
-            httpClient = client,
-        )
-
-        val badShaResult = downloader.downloadAndVerify("v0.4.1", onProgress = { _, _ -> })
-        assertTrue(badShaResult is ReleaseDownloadResult.Rejected)
-        assertEquals(
-            listOf(
-                "https://github.com/Yarnus/nagi/releases/download/v0.4.1/SHA256SUMS",
-                "https://github.com/Yarnus/nagi/releases/download/v0.4.1/nagi-v0.4.1-arm64-v8a.apk",
-                "https://objects.githubusercontent.com/asset/nagi-v0.4.1-arm64-v8a.apk",
-            ),
-            requestedUrls,
-        )
-
-        requestedUrls.clear()
-        apkRedirectTarget = "https://evil.example/nagi.apk"
-        val untrustedResult = downloader.downloadAndVerify("v0.4.1", onProgress = { _, _ -> })
-        assertTrue(untrustedResult is ReleaseDownloadResult.Failed)
-        assertFalse(requestedUrls.any { it.contains("evil.example") })
     }
 }

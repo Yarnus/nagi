@@ -662,20 +662,10 @@ internal fun PostShareCardSurface(
                     style = typography.metadata,
                     color = cardColors.textSecondary,
                 )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    NagiMonogram(
-                        color = cardColors.goldText,
-                        modifier = Modifier.size(11.dp),
-                    )
-                    Text(
-                        text = "Nagi 阅读器",
-                        style = typography.metadata.copy(fontWeight = FontWeight.SemiBold),
-                        color = cardColors.goldText,
-                    )
-                }
+                NagiMonogram(
+                    color = cardColors.goldText,
+                    modifier = Modifier.size(13.dp),
+                )
             }
         }
     }

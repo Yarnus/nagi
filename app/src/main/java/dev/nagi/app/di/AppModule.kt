@@ -25,16 +25,10 @@ object AppModule {
     @Provides @Singleton fun databases(@ApplicationContext context: Context): ReadingDaoProvider = AccountDatabases(context)
     @Provides @Singleton fun releaseChecker(httpClient: OkHttpClient): ReleaseChecker =
         GitHubReleaseChecker(httpClient = httpClient)
-    @Provides @Singleton fun releaseDownloader(
-        @ApplicationContext context: Context,
-        httpClient: OkHttpClient,
-    ): dev.nagi.app.data.ReleaseDownloader =
-        dev.nagi.app.data.GitHubReleaseDownloader(context, httpClient = httpClient)
     @Provides @Singleton fun updateCacheStore(@ApplicationContext context: Context): UpdateCacheStore =
         DataStoreUpdateCacheStore(context)
     @Provides @Singleton fun releaseUpdates(
         checker: ReleaseChecker,
         cacheStore: UpdateCacheStore,
-        downloader: dev.nagi.app.data.ReleaseDownloader,
-    ): ReleaseUpdateRepository = ReleaseUpdateRepository(checker, cacheStore, downloader = downloader)
+    ): ReleaseUpdateRepository = ReleaseUpdateRepository(checker, cacheStore)
 }

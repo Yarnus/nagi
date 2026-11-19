@@ -50,7 +50,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.data.UpdateCheckStatus
-import dev.nagi.app.data.UpdateDownloadState
 import dev.nagi.app.ui.components.AccountMenuButton
 import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
@@ -482,11 +481,6 @@ private enum class ExternalLinkTarget(val copyButtonText: String, val clipLabel:
 fun AboutScreen(
     onCheckUpdate: () -> Unit = {},
     onResetUpdateStatus: () -> Unit = {},
-    onDownloadUpdate: () -> Unit = {},
-    onCancelDownload: () -> Unit = {},
-    onRefreshInstallPermission: () -> Unit = {},
-    onInstallApk: (String) -> Boolean = { false },
-    onRequestInstallPermission: () -> Boolean = { false },
     back: () -> Unit,
 ) {
     val colors = NagiThemeTokens.colors
@@ -498,8 +492,6 @@ fun AboutScreen(
     var licenses by rememberSaveable { mutableStateOf(false) }
     var unavailableUri by rememberSaveable { mutableStateOf<String?>(null) }
     var unavailableTarget by rememberSaveable { mutableStateOf<ExternalLinkTarget?>(null) }
-    var installNotice by rememberSaveable { mutableStateOf<String?>(null) }
-    var pendingInstallAfterPermission by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val version = remember(context) {
         context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
@@ -508,30 +500,6 @@ fun AboutScreen(
         feedbackUri(version, Build.VERSION.RELEASE, "${Build.MANUFACTURER} ${Build.MODEL}")
     }
     val latestRelease = remember { latestReleaseUri() }
-    val downloadState = appUpdate.download
-    val currentReady = (downloadState as? UpdateDownloadState.ReadyToInstall)
-        ?.takeIf { appUpdate.hasUpdate && it.tag == appUpdate.latestTag }
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val observeInstallResume = currentReady != null
-    DisposableEffect(lifecycleOwner, observeInstallResume, onRefreshInstallPermission) {
-        if (!observeInstallResume) return@DisposableEffect onDispose { }
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                onRefreshInstallPermission()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-    LaunchedEffect(pendingInstallAfterPermission, currentReady?.needsInstallPermission, currentReady?.apkPath) {
-        val ready = currentReady ?: return@LaunchedEffect
-        if (pendingInstallAfterPermission && !ready.needsInstallPermission) {
-            pendingInstallAfterPermission = false
-            if (!onInstallApk(ready.apkPath)) {
-                installNotice = "无法调起系统安装程序，请前往发布页手动安装"
-            }
-        }
-    }
     fun openExternal(uri: Uri, target: ExternalLinkTarget) {
         try {
             context.startActivity(Intent(Intent.ACTION_VIEW, uri))
@@ -542,8 +510,6 @@ fun AboutScreen(
             unavailableTarget = target
         }
     }
-    val downloadActive = downloadState is UpdateDownloadState.Downloading ||
-        downloadState is UpdateDownloadState.Verifying
     Column(Modifier.fillMaxSize()) {
         NagiHeader("关于与反馈", back = back)
         if (appUpdate.checking) {
@@ -585,13 +551,9 @@ fun AboutScreen(
                         }
                         CapsuleButton(
                             text = if (appUpdate.checking) "检查中…" else "检查更新",
-                            onClick = {
-                                installNotice = null
-                                pendingInstallAfterPermission = false
-                                onCheckUpdate()
-                            },
+                            onClick = onCheckUpdate,
                             icon = NagiIcons.Refresh,
-                            enabled = !appUpdate.checking && !downloadActive,
+                            enabled = !appUpdate.checking,
                             style = CapsuleStyle.Neutral,
                         )
                     }
@@ -607,46 +569,15 @@ fun AboutScreen(
                             style = typography.metadata,
                             color = colors.textSecondary,
                         )
-                        UpdateCheckStatus.UPDATE_AVAILABLE -> if (downloadState is UpdateDownloadState.Idle) {
-                            Text(
-                                text = "发现新版本 ${appUpdate.latestTag.orEmpty()}，可直接下载或前往发布页查看",
-                                style = typography.metadata,
-                                color = colors.goldText,
-                            )
-                        }
+                        UpdateCheckStatus.UPDATE_AVAILABLE -> Text(
+                            text = "发现新版本 ${appUpdate.latestTag.orEmpty()}，请前往发布页下载",
+                            style = typography.metadata,
+                            color = colors.goldText,
+                        )
                         UpdateCheckStatus.FAILED -> Text(
                             text = "检查更新失败，请检查网络后重试",
                             style = typography.metadata,
                             color = colors.destructive,
-                        )
-                    }
-                    val latestTag = appUpdate.latestTag
-                    if (appUpdate.hasUpdate && !latestTag.isNullOrBlank()) {
-                        UpdateDownloadSection(
-                            latestTag = latestTag,
-                            download = downloadState,
-                            installNotice = installNotice,
-                            onDownload = {
-                                installNotice = null
-                                pendingInstallAfterPermission = false
-                                onDownloadUpdate()
-                            },
-                            onCancel = onCancelDownload,
-                            onInstall = { apkPath ->
-                                installNotice = null
-                                if (!onInstallApk(apkPath)) {
-                                    installNotice = "无法调起系统安装程序，请前往发布页手动安装"
-                                }
-                            },
-                            onRequestPermission = {
-                                installNotice = null
-                                if (onRequestInstallPermission()) {
-                                    pendingInstallAfterPermission = true
-                                } else {
-                                    installNotice = "无法打开系统安装权限设置"
-                                }
-                            },
-                            onOpenReleasePage = { openExternal(latestRelease, ExternalLinkTarget.Release) },
                         )
                     }
                     Text(
@@ -760,191 +691,5 @@ fun AboutScreen(
                 confirmStyle = CapsuleStyle.Neutral,
             )
         }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun UpdateDownloadSection(
-    latestTag: String,
-    download: UpdateDownloadState,
-    installNotice: String?,
-    onDownload: () -> Unit,
-    onCancel: () -> Unit,
-    onInstall: (String) -> Unit,
-    onRequestPermission: () -> Unit,
-    onOpenReleasePage: () -> Unit,
-) {
-    val colors = NagiThemeTokens.colors
-    val typography = NagiThemeTokens.typography
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = Space.xs),
-        verticalArrangement = Arrangement.spacedBy(Space.xs),
-    ) {
-        when (download) {
-            UpdateDownloadState.Idle -> {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(Space.sm),
-                    verticalArrangement = Arrangement.spacedBy(Space.xs),
-                ) {
-                    CapsuleButton(
-                        text = "下载更新",
-                        onClick = onDownload,
-                        icon = NagiIcons.Download,
-                        style = CapsuleStyle.SelectedGold,
-                    )
-                }
-            }
-            is UpdateDownloadState.Downloading -> {
-                Text(
-                    text = "正在下载 ${download.tag} · ${formatDownloadProgress(download.bytesDownloaded, download.totalBytes)}",
-                    style = typography.metadata,
-                    color = colors.textSecondary,
-                )
-                val total = download.totalBytes
-                if (total != null && total > 0L) {
-                    LinearProgressIndicator(
-                        progress = { (download.bytesDownloaded.toFloat() / total.toFloat()).coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth(),
-                        color = colors.goldAccent,
-                        trackColor = colors.cardBorder,
-                    )
-                } else {
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = colors.goldAccent,
-                        trackColor = colors.cardBorder,
-                    )
-                }
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(Space.sm),
-                    verticalArrangement = Arrangement.spacedBy(Space.xs),
-                ) {
-                    CapsuleButton(
-                        text = "取消下载",
-                        onClick = onCancel,
-                        icon = NagiIcons.Close,
-                        style = CapsuleStyle.Neutral,
-                    )
-                }
-            }
-            is UpdateDownloadState.Verifying -> {
-                Text(
-                    text = "正在校验 ${download.tag} 安装包…",
-                    style = typography.metadata,
-                    color = colors.textSecondary,
-                )
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = colors.goldAccent,
-                    trackColor = colors.cardBorder,
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(Space.sm),
-                    verticalArrangement = Arrangement.spacedBy(Space.xs),
-                ) {
-                    CapsuleButton(
-                        text = "取消下载",
-                        onClick = onCancel,
-                        icon = NagiIcons.Close,
-                        style = CapsuleStyle.Neutral,
-                    )
-                }
-            }
-            is UpdateDownloadState.ReadyToInstall -> {
-                if (download.tag != latestTag) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(Space.sm),
-                        verticalArrangement = Arrangement.spacedBy(Space.xs),
-                    ) {
-                        CapsuleButton(
-                            text = "下载更新",
-                            onClick = onDownload,
-                            icon = NagiIcons.Download,
-                            style = CapsuleStyle.SelectedGold,
-                        )
-                    }
-                } else {
-                    Text(
-                        text = if (download.needsInstallPermission) {
-                            "已完成 ${download.tag} 校验，需允许安装未知应用"
-                        } else {
-                            "已完成 ${download.tag} 校验，可立即安装"
-                        },
-                        style = typography.metadata,
-                        color = colors.goldText,
-                    )
-                    if (installNotice != null) {
-                        Text(
-                            text = installNotice,
-                            style = typography.metadata,
-                            color = colors.destructive,
-                        )
-                    }
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(Space.sm),
-                        verticalArrangement = Arrangement.spacedBy(Space.xs),
-                    ) {
-                        if (download.needsInstallPermission) {
-                            CapsuleButton(
-                                text = "授权并安装",
-                                onClick = onRequestPermission,
-                                icon = NagiIcons.Check,
-                                style = CapsuleStyle.SelectedGold,
-                            )
-                        } else {
-                            CapsuleButton(
-                                text = "安装更新",
-                                onClick = { onInstall(download.apkPath) },
-                                icon = NagiIcons.Check,
-                                style = CapsuleStyle.SelectedGold,
-                            )
-                        }
-                    }
-                }
-            }
-            is UpdateDownloadState.Failed -> {
-                Text(
-                    text = download.message,
-                    style = typography.metadata,
-                    color = colors.destructive,
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(Space.sm),
-                    verticalArrangement = Arrangement.spacedBy(Space.xs),
-                ) {
-                    CapsuleButton(
-                        text = "重试下载",
-                        onClick = onDownload,
-                        icon = NagiIcons.Refresh,
-                        style = CapsuleStyle.SelectedGold,
-                    )
-                    CapsuleButton(
-                        text = "前往发布页",
-                        onClick = onOpenReleasePage,
-                        icon = NagiIcons.Globe,
-                        style = CapsuleStyle.Neutral,
-                    )
-                }
-            }
-        }
-    }
-}
-
-private fun formatDownloadProgress(downloadedBytes: Long, totalBytes: Long?): String {
-    val downloaded = formatByteSize(downloadedBytes)
-    if (totalBytes == null || totalBytes <= 0L) return downloaded
-    val percent = ((downloadedBytes * 100L) / totalBytes).coerceIn(0L, 100L)
-    return "$downloaded / ${formatByteSize(totalBytes)} ($percent%)"
-}
-
-private fun formatByteSize(bytes: Long): String {
-    val clamped = bytes.coerceAtLeast(0L)
-    return when {
-        clamped >= 1024L * 1024L -> String.format(java.util.Locale.US, "%.1f MB", clamped / (1024.0 * 1024.0))
-        clamped >= 1024L -> "${clamped / 1024L} KB"
-        else -> "$clamped B"
     }
 }
