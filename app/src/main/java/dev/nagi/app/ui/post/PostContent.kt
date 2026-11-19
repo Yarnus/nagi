@@ -28,6 +28,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -56,14 +57,17 @@ import dev.nagi.sdk.MediaKind
 internal val LocalAllowHardwareImages = staticCompositionLocalOf { true }
 
 @Composable
-internal fun rememberPostImageModel(url: String): Any {
+internal fun rememberPostImageModel(url: String, retryKey: Int = 0): Any {
     val allowHardware = LocalAllowHardwareImages.current
-    if (allowHardware) return url
+    if (allowHardware && retryKey == 0) return url
     val context = LocalContext.current
-    return remember(context, url) {
+    return remember(context, url, allowHardware, retryKey) {
         ImageRequest.Builder(context)
             .data(url)
-            .allowHardware(false)
+            .apply {
+                if (!allowHardware) allowHardware(false)
+                if (retryKey > 0) setParameter("retry", retryKey)
+            }
             .build()
     }
 }
@@ -241,18 +245,84 @@ private fun RenderContentBlocks(
                     style = typography.postBody.copy(fontSize = preferences.fontSize.sp),
                 )
 
-                is ContentBlock.Image -> AsyncImage(
-                    model = rememberPostImageModel(block.url),
-                    contentDescription = "帖子图片，点击查看",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 120.dp, max = 420.dp)
-                        .clip(blockShape)
-                        .background(colors.insetContainer)
-                        .border(1.dp, colors.cardBorder, blockShape)
-                        .clickable { onImage(block.url) },
-                )
+                is ContentBlock.Image -> {
+                    var loaded by remember(block.url) { mutableStateOf(false) }
+                    var failed by remember(block.url) { mutableStateOf(false) }
+                    var isTall by remember(block.url) { mutableStateOf(false) }
+                    var attempt by remember(block.url) { mutableStateOf(0) }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(
+                                min = if (loaded && !failed) 0.dp else 120.dp,
+                                max = if (failed) 120.dp else 460.dp,
+                            )
+                            .clip(blockShape)
+                            .background(colors.insetContainer)
+                            .border(1.dp, colors.cardBorder, blockShape),
+                    ) {
+                        if (failed) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 120.dp)
+                                    .clickable(onClickLabel = "重试加载图片") {
+                                        failed = false
+                                        attempt++
+                                    }
+                                    .padding(horizontal = Space.md),
+                                horizontalArrangement = Arrangement.spacedBy(Space.xs, Alignment.CenterHorizontally),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    imageVector = NagiIcons.Refresh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = colors.textSecondary,
+                                )
+                                Text(
+                                    text = "图片加载失败，点击重试",
+                                    style = typography.metadata,
+                                    color = colors.textSecondary,
+                                )
+                            }
+                        } else {
+                            AsyncImage(
+                                model = rememberPostImageModel(block.url, attempt),
+                                contentDescription = "帖子图片，点击查看",
+                                contentScale = ContentScale.Crop,
+                                alignment = Alignment.TopCenter,
+                                onSuccess = { state ->
+                                    loaded = true
+                                    failed = false
+                                    val size = state.painter.intrinsicSize
+                                    isTall = size.width > 0f && size.height > size.width * 1.6f
+                                },
+                                onError = {
+                                    loaded = false
+                                    failed = true
+                                    isTall = false
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onImage(block.url) },
+                            )
+                            if (isTall) {
+                                Text(
+                                    text = "长图",
+                                    style = typography.tagBadge,
+                                    color = Color.White,
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .padding(Space.sm)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color.Black.copy(alpha = 0.62f))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                )
+                            }
+                        }
+                    }
+                }
 
                 is ContentBlock.Code -> FlatCard(
                     modifier = Modifier.fillMaxWidth(),

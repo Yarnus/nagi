@@ -24,6 +24,7 @@ object ContentParser {
     private val htmlCode = Regex("""<pre\b[^>]*>.*?</pre\s*>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
     private val smileTag = Regex("""\[s:([^\]]+)\]""", RegexOption.IGNORE_CASE)
     private val openingTag = Regex("""\[(img|noimg|album|quote|code|collapse|table|h|align|list|flash|attach|dice)(?:=([^\]]*))?\]""", RegexOption.IGNORE_CASE)
+    private val legacyTimestampRegex = Regex("""^[^/]*_([0-9a-fA-F]{8})[0-9a-fA-F]*\.[a-zA-Z0-9]+$""")
     private val inlineTag = Regex("""\[(/?)(b|i|u|del|color|size)(?:=([^\]]*))?\]""", RegexOption.IGNORE_CASE)
     private val positiveId = Regex("[1-9][0-9]*")
 
@@ -100,11 +101,20 @@ object ContentParser {
         }
 
         private fun legacyImage(raw: String): String {
-            val date = context.postDate.orEmpty()
-            val localDate = date.toLongOrNull()?.takeIf { it > 0 }?.let {
+            val trimmed = raw.trim()
+            val filenameEpoch = legacyTimestampRegex.matchEntire(trimmed)
+                ?.groupValues?.get(1)
+                ?.toLongOrNull(16)
+                ?.takeIf { it in 946684800L..4102444800L }
+            val localDate = filenameEpoch?.let {
                 runCatching { Instant.ofEpochSecond(it).atZone(ZoneId.of("Asia/Shanghai")).toLocalDate() }.getOrNull()
-            } ?: runCatching { LocalDateTime.parse(date, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm[:ss]")).toLocalDate() }.getOrNull()
-            return if (localDate == null) raw else "mon_${localDate.format(DateTimeFormatter.ofPattern("yyyyMM/dd"))}/${raw.trim()}"
+            } ?: run {
+                val date = context.postDate.orEmpty()
+                date.toLongOrNull()?.takeIf { it > 0 }?.let {
+                    runCatching { Instant.ofEpochSecond(it).atZone(ZoneId.of("Asia/Shanghai")).toLocalDate() }.getOrNull()
+                } ?: runCatching { LocalDateTime.parse(date, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm[:ss]")).toLocalDate() }.getOrNull()
+            }
+            return if (localDate == null) trimmed else "mon_${localDate.format(DateTimeFormatter.ofPattern("yyyyMM/dd"))}/$trimmed"
         }
 
         private fun quote(body: String, depth: Int): ContentBlock.Quote {

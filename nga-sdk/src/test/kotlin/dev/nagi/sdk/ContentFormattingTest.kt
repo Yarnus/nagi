@@ -52,6 +52,8 @@ class ContentFormattingTest {
         assertEquals("前\n后", (blocks.last() as ContentBlock.Text).value)
         val unsafe = ContentParser.parse("[flash]javascript:bad[/flash][attach]data:text/html,bad[/attach]")
         assertTrue(unsafe.none { it is ContentBlock.Media })
+        val legacyQuoted = ContentParser.parse("[noimg]-47218_5052bceb823da.png[/noimg]", context = ContentContext(postDate = "2023-02-17 12:00"))
+        assertEquals("https://img.nga.cn/attachments/mon_201209/14/-47218_5052bceb823da.png", (legacyQuoted.single() as ContentBlock.Image).url)
     }
 
     @Test fun diceIsDeterministicAndDoesNotInventPreviewResults() {
