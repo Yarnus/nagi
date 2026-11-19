@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,7 +24,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -41,7 +41,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
@@ -59,7 +66,6 @@ import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.EdgeAlignedMetaRow
-import dev.nagi.app.ui.components.FlatCard
 import dev.nagi.app.ui.components.GoldTagBadge
 import dev.nagi.app.ui.components.LocalOpenUser
 import dev.nagi.app.ui.components.NagiDialog
@@ -441,16 +447,104 @@ internal fun PostShareCardSurface(
         LocalPostReferences provides null,
         LocalOpenUser provides null,
     ) {
-        Box(
+        val canvasGradient = remember(darkCard, cardColors) {
+            if (darkCard) {
+                Brush.verticalGradient(listOf(cardColors.groupedCanvas, Color(0xFF13110E)))
+            } else {
+                Brush.verticalGradient(listOf(cardColors.groupedCanvas, Color(0xFFF3EFE8)))
+            }
+        }
+        val cardBorderBrush = remember(darkCard, cardColors) {
+            Brush.linearGradient(
+                listOf(
+                    cardColors.goldAccent.copy(alpha = if (darkCard) 0.50f else 0.55f),
+                    cardColors.cardBorder,
+                    cardColors.goldAccent.copy(alpha = if (darkCard) 0.25f else 0.30f),
+                ),
+            )
+        }
+
+        Column(
             modifier = modifier
-                .background(cardColors.groupedCanvas)
-                .padding(Space.md),
+                .background(canvasGradient)
+                .drawWithContent {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                cardColors.goldAccent.copy(alpha = if (darkCard) 0.10f else 0.14f),
+                                Color.Transparent,
+                            ),
+                            center = Offset(size.width * 0.15f, size.height * 0.08f),
+                            radius = size.maxDimension * 0.5f,
+                        ),
+                    )
+                    drawContent()
+                }
+                .padding(horizontal = Space.lg, vertical = 20.dp),
         ) {
-            FlatCard(
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Space.xs)
+                    .padding(bottom = 14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(Space.xs),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = cardColors.cardSurface,
+                        border = BorderStroke(1.dp, cardColors.goldBorder),
+                        shadowElevation = 0.dp,
+                        tonalElevation = 0.dp,
+                    ) {
+                        Box(
+                            modifier = Modifier.size(26.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            NagiMonogram(
+                                color = cardColors.goldAccent,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Nagi",
+                        style = typography.bodyText.copy(
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.3.sp,
+                        ),
+                        color = cardColors.textPrimary,
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = cardColors.goldContainer,
+                    border = BorderStroke(1.dp, cardColors.goldBorder),
+                    shadowElevation = 0.dp,
+                    tonalElevation = 0.dp,
+                ) {
+                    Text(
+                        text = "主楼摘录",
+                        style = typography.metadata.copy(fontWeight = FontWeight.Medium),
+                        color = cardColors.goldText,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+                    )
+                }
+            }
+
+            Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                containerColor = cardColors.cardSurface,
-                borderColor = cardColors.cardBorder,
+                color = cardColors.cardSurface,
+                border = BorderStroke(1.5.dp, cardBorderBrush),
+                shadowElevation = if (darkCard) 8.dp else 6.dp,
+                tonalElevation = 0.dp,
             ) {
                 Column(
                     modifier = Modifier
@@ -571,27 +665,69 @@ internal fun PostShareCardSurface(
                             )
                         }
                     }
+                }
+            }
 
-                    Spacer(Modifier.height(Space.xs))
-                    HorizontalDivider(thickness = 1.dp, color = cardColors.cardBorder)
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalArrangement = Arrangement.spacedBy(Space.xs),
-                    ) {
-                        Text(
-                            text = "NGA · tid $topicId",
-                            style = typography.metadata,
-                            color = cardColors.textSecondary,
-                        )
-                        Text(
-                            text = "Nagi",
-                            style = typography.metadata.copy(fontWeight = FontWeight.SemiBold),
-                            color = cardColors.goldText,
-                        )
-                    }
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Space.xs)
+                    .padding(top = 14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(Space.xs),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "NGA · tid $topicId",
+                    style = typography.metadata,
+                    color = cardColors.textSecondary,
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    NagiMonogram(
+                        color = cardColors.goldText,
+                        modifier = Modifier.size(11.dp),
+                    )
+                    Text(
+                        text = "Nagi 阅读器",
+                        style = typography.metadata.copy(fontWeight = FontWeight.SemiBold),
+                        color = cardColors.goldText,
+                    )
                 }
             }
         }
+    }
+}
+
+/** Minimal geometric N monogram matching ic_nagi.xml, tinted with the active card theme. */
+@Composable
+private fun NagiMonogram(
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(modifier = modifier) {
+        val strokeWidth = size.minDimension * 0.14f
+        val inset = strokeWidth / 2f + size.minDimension * 0.06f
+        val left = inset
+        val right = size.width - inset
+        val top = inset
+        val bottom = size.height - inset
+        val path = Path().apply {
+            moveTo(left, bottom)
+            lineTo(left, top)
+            lineTo(right, bottom)
+            lineTo(right, top)
+        }
+        drawPath(
+            path = path,
+            color = color,
+            style = Stroke(
+                width = strokeWidth,
+                cap = StrokeCap.Round,
+                join = StrokeJoin.Round,
+            ),
+        )
     }
 }
