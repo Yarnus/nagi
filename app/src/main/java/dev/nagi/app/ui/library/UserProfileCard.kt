@@ -79,7 +79,7 @@ internal fun UserProfileCard(state: UserProfileState, retry: () -> Unit, sendMes
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Space.md),
             ) {
-                AccountAvatar(AccountIdentity(user = user), Modifier.size(60.dp))
+                AccountAvatar(AccountIdentity(user = user), size = 60.dp)
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(3.dp),

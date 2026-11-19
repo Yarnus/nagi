@@ -165,7 +165,7 @@ fun OwnProfileScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Space.md),
                 ) {
-                    AccountAvatar(identity, Modifier.size(48.dp))
+                    AccountAvatar(identity, size = 48.dp)
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
                             text = identity.user?.name ?: "UID ${identity.userId.orEmpty()}",

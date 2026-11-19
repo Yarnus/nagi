@@ -19,9 +19,11 @@ import androidx.compose.ui.unit.sp
 import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
+import dev.nagi.app.ui.components.EdgeAlignedMetaRow
 import dev.nagi.app.ui.components.LoadingLine
+import dev.nagi.app.ui.components.NagiDialog
+import dev.nagi.app.ui.components.NagiIconAction
 import dev.nagi.app.ui.components.NagiIcons
-import dev.nagi.app.ui.components.NagiSheetHeader
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
 import dev.nagi.app.viewmodel.PostReferenceState
@@ -130,65 +132,77 @@ internal fun ReplyReferenceCard(quote: ContentBlock.Quote, preferences: ReadingP
             hasSnapshot -> "引用片段"
             else -> null
         }
-        ModalBottomSheet(
+        NagiDialog(
             onDismissRequest = { expanded = false },
-            containerColor = colors.cardSurface,
-            dragHandle = null,
-            shape = NagiThemeTokens.shapes.bottomSheet,
-            tonalElevation = 0.dp,
+            maxWidth = 560.dp,
+            modifier = Modifier.fillMaxHeight(0.70f),
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 760.dp)
-                    .padding(bottom = Space.md),
-                verticalArrangement = Arrangement.spacedBy(Space.sm),
-            ) {
-                NagiSheetHeader(
-                    title = heading,
-                    subtitle = subtitleText,
-                    closeDescription = "关闭引用原文",
-                    onClose = { expanded = false },
-                )
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = Space.lg),
-                    verticalArrangement = Arrangement.spacedBy(Space.sm),
-                ) {
-                    if (target != null && references != null) {
-                        CapsuleButton(
-                            text = "定位到原楼层",
-                            onClick = { expanded = false; references.locate(target) },
-                            icon = NagiIcons.Locate,
-                            style = CapsuleStyle.SelectedGold,
+            EdgeAlignedMetaRow(
+                verticalAlignment = Alignment.CenterVertically,
+                leading = {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = heading,
+                            style = typography.sectionTitle.copy(fontSize = 16.sp, lineHeight = 22.sp),
+                            color = colors.textPrimary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                    }
-                    if (result?.loading == true) LoadingLine()
-                    result?.error?.let { error ->
-                        Text(error, style = typography.bodyText, color = colors.textSecondary)
-                        if (references != null) {
-                            CapsuleButton(
-                                text = "重试加载原文",
-                                onClick = { references.request(target, true) },
-                                icon = NagiIcons.Refresh,
-                                style = CapsuleStyle.Neutral,
+                        if (subtitleText != null) {
+                            Text(
+                                text = subtitleText,
+                                style = typography.metadata,
+                                color = colors.textSecondary,
                             )
                         }
                     }
-                    val content = result?.post?.content ?: quote.children
-                    LazyColumn(
-                        Modifier.fillMaxWidth().weight(1f, fill = false),
-                        contentPadding = PaddingValues(vertical = Space.sm),
-                        verticalArrangement = Arrangement.spacedBy(Space.sm),
+                },
+                trailing = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Space.xs),
                     ) {
-                        items(content.withIndex().toList(), key = { it.index }) { (_, block) ->
-                            SelectionContainer { ContentBlocks(listOf(block), preferences, onImage) }
+                        if (target != null && references != null) {
+                            CapsuleButton(
+                                text = "定位到原楼层",
+                                onClick = { expanded = false; references.locate(target) },
+                                icon = NagiIcons.Locate,
+                                style = CapsuleStyle.SelectedGold,
+                            )
                         }
-                        if (content.isEmpty() && result?.loading != true && result?.error == null) {
-                            item { Text("暂无可显示的原文", color = colors.textSecondary) }
-                        }
+                        NagiIconAction(
+                            icon = NagiIcons.Close,
+                            description = "关闭引用原文",
+                            onClick = { expanded = false },
+                        )
                     }
+                },
+            )
+            if (result?.loading == true) LoadingLine()
+            result?.error?.let { error ->
+                Text(error, style = typography.bodyText, color = colors.textSecondary)
+                if (references != null) {
+                    CapsuleButton(
+                        text = "重试加载原文",
+                        onClick = { references.request(target, true) },
+                        icon = NagiIcons.Refresh,
+                        style = CapsuleStyle.Neutral,
+                    )
+                }
+            }
+            val content = result?.post?.content ?: quote.children
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentPadding = PaddingValues(vertical = Space.xs),
+                verticalArrangement = Arrangement.spacedBy(Space.sm),
+            ) {
+                items(content.withIndex().toList(), key = { it.index }) { (_, block) ->
+                    SelectionContainer { ContentBlocks(listOf(block), preferences, onImage) }
+                }
+                if (content.isEmpty() && result?.loading != true && result?.error == null) {
+                    item { Text("暂无可显示的原文", color = colors.textSecondary) }
                 }
             }
         }

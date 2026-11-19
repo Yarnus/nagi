@@ -37,10 +37,12 @@ import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.nagi.app.R
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -142,96 +144,104 @@ val DarkSemanticColors = NagiSemanticColors(
     switchActiveTrack = Color(0xFFD6BA8B),
 )
 
+// Subsetting keeps only Latin, digits, and common symbols so CJK falls back to the system sans-serif font.
+val NagiSansFontFamily = FontFamily(
+    Font(R.font.ibm_plex_sans_regular, FontWeight.Normal),
+    Font(R.font.ibm_plex_sans_medium, FontWeight.Medium),
+    Font(R.font.ibm_plex_sans_semibold, FontWeight.SemiBold),
+    Font(R.font.ibm_plex_sans_bold, FontWeight.Bold),
+)
+
 @Immutable
 data class NagiTypographyTokens(
     val largeTitle: TextStyle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = NagiSansFontFamily,
         fontSize = 28.sp,
         lineHeight = 34.sp,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 0.sp,
     ),
     val appBarTitle: TextStyle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = NagiSansFontFamily,
         fontSize = 16.sp,
         lineHeight = 22.sp,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 0.sp,
     ),
     val sectionTitle: TextStyle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = NagiSansFontFamily,
         fontSize = 18.sp,
         lineHeight = 24.sp,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 0.sp,
     ),
     val sectionHeader: TextStyle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = NagiSansFontFamily,
         fontSize = 13.sp,
         lineHeight = 18.sp,
         fontWeight = FontWeight.Medium,
         letterSpacing = 0.2.sp,
     ),
     val topicTitle: TextStyle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = NagiSansFontFamily,
         fontSize = 15.5.sp,
         lineHeight = 22.sp,
         fontWeight = FontWeight.Medium,
         letterSpacing = 0.sp,
     ),
     val cardTitle: TextStyle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = NagiSansFontFamily,
         fontSize = 15.sp,
         lineHeight = 21.sp,
         fontWeight = FontWeight.Medium,
         letterSpacing = 0.sp,
     ),
     val postBody: TextStyle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = NagiSansFontFamily,
         fontSize = 16.sp,
         lineHeight = 26.sp,
         fontWeight = FontWeight.Normal,
         letterSpacing = 0.sp,
     ),
     val bodyText: TextStyle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = NagiSansFontFamily,
         fontSize = 15.sp,
         lineHeight = 22.sp,
         fontWeight = FontWeight.Normal,
         letterSpacing = 0.sp,
     ),
     val tagBadge: TextStyle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = NagiSansFontFamily,
         fontSize = 11.sp,
         lineHeight = 14.sp,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 0.sp,
     ),
     val replyCount: TextStyle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontSize = 11.5.sp,
-        lineHeight = 15.sp,
+        fontFamily = NagiSansFontFamily,
+        fontSize = 12.5.sp,
+        lineHeight = 16.sp,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 0.sp,
         fontFeatureSettings = "tnum",
     ),
     val meta: TextStyle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
+        fontFamily = NagiSansFontFamily,
+        fontSize = 12.5.sp,
+        lineHeight = 17.sp,
         fontWeight = FontWeight.Normal,
         letterSpacing = 0.sp,
     ),
     val metaTabular: TextStyle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontSize = 12.5.sp,
-        lineHeight = 16.sp,
+        fontFamily = NagiSansFontFamily,
+        fontSize = 13.sp,
+        lineHeight = 18.sp,
         fontWeight = FontWeight.Normal,
         letterSpacing = 0.sp,
         fontFeatureSettings = "tnum",
     ),
     val capsuleButton: TextStyle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = NagiSansFontFamily,
         fontSize = 13.5.sp,
         lineHeight = 18.sp,
         fontWeight = FontWeight.Medium,
@@ -289,10 +299,17 @@ private val NagiMaterialShapes = Shapes(
 
 private val DefaultTypeTokens = NagiTypographyTokens()
 
+private val BaseMaterialTypography = Typography()
+
 private val NagiTypography = Typography(
+    displayLarge = BaseMaterialTypography.displayLarge.copy(fontFamily = NagiSansFontFamily),
+    displayMedium = BaseMaterialTypography.displayMedium.copy(fontFamily = NagiSansFontFamily),
+    displaySmall = BaseMaterialTypography.displaySmall.copy(fontFamily = NagiSansFontFamily),
+    headlineLarge = BaseMaterialTypography.headlineLarge.copy(fontFamily = NagiSansFontFamily),
     headlineMedium = DefaultTypeTokens.largeTitle,
+    headlineSmall = BaseMaterialTypography.headlineSmall.copy(fontFamily = NagiSansFontFamily),
     titleLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = NagiSansFontFamily,
         fontSize = 20.sp,
         lineHeight = 28.sp,
         fontWeight = FontWeight.SemiBold,
@@ -301,7 +318,7 @@ private val NagiTypography = Typography(
     titleMedium = DefaultTypeTokens.topicTitle,
     titleSmall = DefaultTypeTokens.cardTitle,
     bodyLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = NagiSansFontFamily,
         fontSize = 16.sp,
         lineHeight = 26.sp,
         fontWeight = FontWeight.Normal,
@@ -309,7 +326,7 @@ private val NagiTypography = Typography(
     ),
     bodyMedium = DefaultTypeTokens.bodyText,
     bodySmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = NagiSansFontFamily,
         fontSize = 13.sp,
         lineHeight = 19.sp,
         fontWeight = FontWeight.Normal,

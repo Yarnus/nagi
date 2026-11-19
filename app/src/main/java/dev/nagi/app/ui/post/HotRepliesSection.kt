@@ -46,6 +46,7 @@ import dev.nagi.app.ui.components.FlatCard
 import dev.nagi.app.ui.components.GoldTagBadge
 import dev.nagi.app.ui.components.LocalOpenUser
 import dev.nagi.app.ui.components.NagiIcons
+import dev.nagi.app.ui.components.UserAvatar
 import dev.nagi.app.ui.components.UserTagBadge
 import dev.nagi.app.ui.components.isPublicUserId
 import dev.nagi.app.ui.theme.NagiTheme
@@ -245,31 +246,12 @@ private fun HotReplyCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(Space.xs),
                     ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = colors.cardSurface,
-                            border = BorderStroke(1.dp, colors.cardBorder),
-                            shadowElevation = 0.dp,
-                            tonalElevation = 0.dp,
-                        ) {
-                            Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = NagiIcons.Person,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(13.dp),
-                                    tint = colors.textSecondary,
-                                )
-                                if (reply.avatar.isNotBlank()) {
-                                    AsyncImage(
-                                        model = reply.avatar,
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .clip(CircleShape),
-                                    )
-                                }
-                            }
-                        }
+                        UserAvatar(
+                            name = reply.author,
+                            avatarUrl = reply.avatar,
+                            uid = reply.authorId,
+                            size = 22.dp,
+                        )
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(Space.xs),
                             verticalArrangement = Arrangement.spacedBy(Space.xxs),

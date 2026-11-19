@@ -71,6 +71,7 @@ import dev.nagi.app.ui.components.LocalOpenUser
 import dev.nagi.app.ui.components.NagiDialog
 import dev.nagi.app.ui.components.NagiDialogActions
 import dev.nagi.app.ui.components.NagiIcons
+import dev.nagi.app.ui.components.UserAvatar
 import dev.nagi.app.ui.theme.DarkSemanticColors
 import dev.nagi.app.ui.theme.LightSemanticColors
 import dev.nagi.app.ui.theme.LocalNagiColors
@@ -553,31 +554,14 @@ internal fun PostShareCardSurface(
                         verticalAlignment = Alignment.Top,
                         leading = {
                             Row(verticalAlignment = Alignment.Top) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = cardColors.insetContainer,
-                                    border = BorderStroke(1.dp, cardColors.cardBorder),
-                                    shadowElevation = 0.dp,
-                                    tonalElevation = 0.dp,
-                                ) {
-                                    Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = NagiIcons.Person,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp),
-                                            tint = cardColors.textSecondary,
-                                        )
-                                        if (post.avatar.isNotBlank()) {
-                                            AsyncImage(
-                                                model = rememberPostImageModel(post.avatar),
-                                                contentDescription = null,
-                                                modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .clip(CircleShape),
-                                            )
-                                        }
-                                    }
-                                }
+                                UserAvatar(
+                                    name = post.author,
+                                    avatarUrl = post.avatar,
+                                    uid = post.authorId,
+                                    size = 32.dp,
+                                    colors = cardColors,
+                                    imageModel = rememberPostImageModel(post.avatar),
+                                )
                                 Column(
                                     modifier = Modifier
                                         .weight(1f)

@@ -34,7 +34,7 @@ Nagi 使用中性背景、金色强调和胶囊控件。内容卡片不使用阴
 
 ## 排版
 
-使用系统无衬线字体；中文默认字距为 0，计数、时间和楼层使用 `tnum` 等宽数字。
+拉丁字母、数字与常见符号使用内嵌子集化 IBM Plex Sans（400/500/600/700 字重），中文字符回退到系统无衬线字体；代码块使用等宽字体。中文默认字距为 0，计数、时间和楼层使用 `tnum` 等宽数字。
 
 | 样式 | 字号 / 行高 | 字重 |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ Nagi 使用中性背景、金色强调和胶囊控件。内容卡片不使用阴
 | 界面正文 | 15 / 22sp | 常规 |
 | 帖子正文 | 16 / 26sp | 常规，可由阅读偏好调整 |
 | 标签 | 11 / 14sp | 半粗 |
-| 回复数 | 11.5 / 15sp | 半粗 |
+| 回复数 | 12.5 / 16sp | 半粗 |
 
 正文链接使用 GoldText 与下划线，保留原生文本链接语义和换行，不只靠颜色区分。
 帖子显式指定的命名文字颜色保留色相，并按内容底色调整到至少 4.5:1 对比度；不覆盖链接色。
@@ -77,7 +77,7 @@ Nagi 使用中性背景、金色强调和胶囊控件。内容卡片不使用阴
   - 玻璃描边与阴影：`0.5dp` 发丝描边（浅色 8% 黑、深色 12% 白；自定义强调态如只看楼主金底胶囊保留对应边框）+ 上方 40% 高度内高光；仅悬浮控件使用淡环境阴影（y 6dp、模糊 20dp、浅色 9% 黑、深色 3% 黑），顶栏/底栏边缘保持 `0dp` 阴影。
   - 仅深色下开启极微弱噪点（`0.04`）抑制色带，浅色关闭。模糊仅作用于有界边缘与悬浮控件自身形状；帖子正文和列表项不应用实时模糊，滚动时状态在图层阶段读取不触发重组。
 - 点击反馈：全局 `LocalIndication` 使用无扩散波纹的瞬态微压高光（浅色 4.2% `#1F1A12`、深色 6.5% 白色），`LocalRippleConfiguration` 同步收敛。悬浮按钮、圆钮、停靠栏动作、`NagiIconAction` 与 `CapsuleButton` 统一使用 `nagiPressFeedback`（按压微缩 0.90x–0.985x + 视觉轮廓内柔和按压蒙层），不在外层 48dp 触控热区溢出灰圈或裁切阴影。
-- 弹窗与浮动提示：确认弹窗、详情弹窗、轻量选择/操作面板与下拉菜单统一复用共享 `NagiDialog` / `NagiConfirmDialog` / `NagiFrostedSheet` / `ForumScopePickerSheet` / `FrostedDropdownMenu`（基于 `FrostedSurface`，使用 `menu` 材质、`20dp` 圆角、发丝描边、顶部内高光与淡悬浮阴影，支持跨窗口实时模糊、柔和背景遮罩与静态回退）；下拉菜单条目与分隔线统一复用 `FrostedDropdownItem` 与 `FrostedDropdownDivider`；悬浮面板顶栏统一复用 `NagiSheetHeader`；磨砂列表面板内使用透明行配细分隔线，不嵌套不透明卡片。长阅读引用原文面板与编辑器抽屉保留实底容器（`CardSurface` / `GroupedCanvas`），不直接使用原生 Material `AlertDialog` 或未统一的 `Dialog`。
+- 弹窗与浮动提示：确认弹窗、详情弹窗、长阅读引用原文弹窗、轻量选择/操作面板与下拉菜单统一复用共享 `NagiDialog` / `NagiConfirmDialog` / `NagiFrostedSheet` / `ForumScopePickerSheet` / `FrostedDropdownMenu` 容器（基于 `FrostedSurface`，使用 `menu` 材质、`20dp` 圆角、发丝描边、顶部内高光与淡悬浮阴影，支持跨窗口实时模糊、柔和背景遮罩与静态回退）；下拉菜单条目与分隔线统一复用 `FrostedDropdownItem` 与 `FrostedDropdownDivider`；悬浮面板顶栏统一复用 `NagiSheetHeader`；磨砂列表面板内使用透明行配细分隔线，不嵌套不透明卡片。编辑器抽屉保留实底容器（`CardSurface` / `GroupedCanvas`），不直接使用原生 Material `AlertDialog` 或未统一的 `Dialog`。
   链接或上下文摘要放在 `InsetContainer`（`12dp` 圆角、无边框）内嵌区中；操作区使用等宽加宽的 `CapsuleButton` 撑满所在行（次操作 `Neutral`，常规确认 `SelectedGold`，警示操作 `Destructive`），窄屏或大字号下自动纵排。
 
 ## 列表与状态

@@ -69,49 +69,20 @@ fun UnreadBadge(count: Int, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun AccountAvatar(identity: AccountIdentity, modifier: Modifier = Modifier) {
-    val colors = NagiThemeTokens.colors
-    val typography = NagiThemeTokens.typography
-    Box(
-        modifier = modifier
-            .clip(CircleShape)
-            .background(colors.insetContainer),
-        contentAlignment = Alignment.Center,
-    ) {
-        @Composable
-        fun fallback() {
-            val initial = identity.user?.name?.firstOrNull()?.toString()
-            if (initial != null) {
-                Text(
-                    text = initial,
-                    style = typography.capsuleLabel,
-                    color = colors.goldText,
-                )
-            } else {
-                Icon(
-                    imageVector = NagiIcons.Person,
-                    contentDescription = null,
-                    tint = colors.textPrimary,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-        }
-        val avatar = identity.user?.avatar.orEmpty()
-        key(identity.revision, identity.userId) {
-            if (avatar.isBlank()) {
-                fallback()
-            } else {
-                SubcomposeAsyncImage(
-                    model = avatar,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                    loading = { fallback() },
-                    error = { fallback() },
-                )
-            }
-        }
-    }
+fun AccountAvatar(
+    identity: AccountIdentity,
+    modifier: Modifier = Modifier,
+    size: androidx.compose.ui.unit.Dp = 32.dp,
+) {
+    UserAvatar(
+        name = identity.user?.name,
+        avatarUrl = identity.user?.avatar,
+        uid = identity.userId,
+        size = size,
+        modifier = modifier,
+        revisionKey = identity.revision to identity.userId,
+        showBorder = false,
+    )
 }
 
 @Composable
@@ -151,7 +122,7 @@ fun AccountMenuButton(onSelect: (String) -> Unit) {
                     .frostedCapsuleBackdrop(colors.frostedChrome, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                AccountAvatar(identity, Modifier.size(28.dp))
+                AccountAvatar(identity, size = 28.dp)
             }
         }
         UnreadBadge(unread, Modifier.align(Alignment.TopEnd))
@@ -175,7 +146,7 @@ fun AccountMenuButton(onSelect: (String) -> Unit) {
                     badge = badge,
                     leadingIcon = if (useAvatar) null else icon,
                     leadingContent = if (useAvatar) {
-                        { AccountAvatar(identity, Modifier.size(24.dp)) }
+                        { AccountAvatar(identity, size = 24.dp) }
                     } else null,
                     onClick = {
                         expanded = false

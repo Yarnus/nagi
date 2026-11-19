@@ -111,6 +111,7 @@ import dev.nagi.app.ui.components.ProgressiveBlurScaffold
 import dev.nagi.app.ui.components.nagiPressFeedback
 import dev.nagi.app.ui.components.SectionCardItem
 import dev.nagi.app.ui.components.SegmentedCapsuleControl
+import dev.nagi.app.ui.components.UserAvatar
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
 import dev.nagi.app.ui.topic.formatTimeText
@@ -762,38 +763,19 @@ internal fun ReaderPost(
                     modifier = if (canOpenUser) Modifier
                         .clickable(onClickLabel = "查看 ${post.author} 的用户详情") { openUser?.invoke(post.authorId) }
                         .heightIn(min = 48.dp) else Modifier,
-                    verticalAlignment = if (hasAuthorStats) Alignment.CenterVertically else Alignment.Top,
+                    verticalAlignment = Alignment.Top,
                 ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = colors.insetContainer,
-                        border = BorderStroke(1.dp, colors.cardBorder),
-                        shadowElevation = 0.dp,
-                        tonalElevation = 0.dp,
-                    ) {
-                        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = NagiIcons.Person,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                                tint = colors.textSecondary,
-                            )
-                            if (post.avatar.isNotBlank()) {
-                                AsyncImage(
-                                    model = post.avatar,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(CircleShape),
-                                )
-                            }
-                        }
-                    }
+                    UserAvatar(
+                        name = post.author,
+                        avatarUrl = post.avatar,
+                        uid = post.authorId,
+                        size = 32.dp,
+                    )
                     Column(
                         modifier = Modifier
                             .weight(1f)
                             .padding(start = Space.md),
-                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(Space.xs),
@@ -802,7 +784,11 @@ internal fun ReaderPost(
                         ) {
                             Text(
                                 text = post.author,
-                                style = typography.bodyText.copy(fontWeight = FontWeight.Medium),
+                                style = typography.bodyText.copy(
+                                    fontWeight = FontWeight.Medium,
+                                    lineHeight = 19.sp,
+                                    platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
+                                ),
                                 color = colors.textPrimary,
                             )
                             if (isAuthor) {
@@ -822,7 +808,7 @@ internal fun ReaderPost(
             trailing = {
                 Column(
                     horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     if (post.date.isNotBlank()) {
                         Text(
@@ -1199,7 +1185,7 @@ private fun PageJumpSheet(
         maxWidth = 480.dp,
     ) {
         NagiSheetHeader(
-            title = if (canJumpFloor) "跳页 / 跳楼" else "跳页",
+            title = if (canJumpFloor) "快速跳转" else "跳转页码",
             onClose = dismiss,
         )
         Column(
@@ -1210,7 +1196,7 @@ private fun PageJumpSheet(
         ) {
             if (canJumpFloor) {
                 SegmentedCapsuleControl(
-                    options = listOf("跳页", "跳楼"),
+                    options = listOf("按页码", "按楼层"),
                     selectedIndex = if (floorMode) 1 else 0,
                     onSelect = { idx ->
                         byFloor = idx == 1
@@ -1227,7 +1213,7 @@ private fun PageJumpSheet(
                 textStyle = typography.body.copy(color = colors.textPrimary),
                 label = {
                     Text(
-                        text = if (floorMode) "楼层 (0–$maxFloor)" else if (limit > 0) "页码 (1–$limit)" else "页码",
+                        text = if (floorMode) "输入楼层（0–$maxFloor 楼）" else if (limit > 0) "输入页码（1–$limit 页）" else "输入页码",
                         style = typography.metadata,
                     )
                 },
@@ -1256,7 +1242,7 @@ private fun PageJumpSheet(
                 }
             }
             NagiDialogActions(
-                confirmLabel = "跳转",
+                confirmLabel = if (valid) (if (floorMode) "前往 #$value" else "前往第 $value 页") else "前往",
                 onConfirm = { submit() },
                 confirmEnabled = valid,
                 confirmStyle = CapsuleStyle.SolidGold,
@@ -1278,12 +1264,13 @@ internal fun PostAuthorMetaStats(
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
     val statStyle = typography.metadata.copy(
+        lineHeight = 16.sp,
         fontFeatureSettings = "tnum",
         platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
     )
     FlowRow(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(Space.md),
+        horizontalArrangement = Arrangement.spacedBy(Space.sm),
         verticalArrangement = Arrangement.spacedBy(Space.xxs),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1298,7 +1285,7 @@ internal fun PostAuthorMetaStats(
                 Icon(
                     imageVector = NagiIcons.Star,
                     contentDescription = null,
-                    modifier = Modifier.size(12.dp),
+                    modifier = Modifier.size(13.dp),
                     tint = colors.textMuted,
                 )
                 Text(
@@ -1319,7 +1306,7 @@ internal fun PostAuthorMetaStats(
                 Icon(
                     imageVector = NagiIcons.Message,
                     contentDescription = null,
-                    modifier = Modifier.size(12.dp),
+                    modifier = Modifier.size(13.dp),
                     tint = colors.textMuted,
                 )
                 Text(

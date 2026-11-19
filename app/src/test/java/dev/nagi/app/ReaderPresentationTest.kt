@@ -203,7 +203,7 @@ class ReaderPresentationTest {
         assertTrue(page.right <= menu.left)
         assertTrue(menu.right <= 320.dp)
         compose.onNodeWithText("1 / 2").performClick()
-        compose.onNodeWithText("跳转").assertExists()
+        compose.onNodeWithText("前往第 1 页").assertExists()
     }
 
     @Test fun restoredPostIndexSurvivesResizeAndActivityRecreation() {
@@ -266,10 +266,10 @@ class ReaderPresentationTest {
         compose.onAllNodes(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsActions.SetProgress)).assertCountEquals(0)
         for (invalid in listOf("", "0", "3")) {
             compose.onNode(hasSetTextAction()).performTextReplacement(invalid)
-            compose.onNodeWithText("跳转").assertIsNotEnabled()
+            compose.onNodeWithText("前往").assertIsNotEnabled()
         }
         compose.onNode(hasSetTextAction()).performTextReplacement("2")
-        compose.onNodeWithText("跳转").assertIsEnabled().performClick()
+        compose.onNodeWithText("前往第 2 页").assertIsEnabled().performClick()
         compose.waitForIdle()
         assertEquals(2 to null, fixture.requests.last())
         compose.onNodeWithText("2 / 2").assertIsDisplayed()
@@ -279,10 +279,10 @@ class ReaderPresentationTest {
         fixture.totalPages = 0
         showReader()
         compose.onNodeWithContentDescription("第 1 页").performClick()
-        compose.onNodeWithText("跳楼").assertDoesNotExist()
+        compose.onNodeWithText("按楼层").assertDoesNotExist()
         compose.onNodeWithText("末页").assertDoesNotExist()
         compose.onNode(hasSetTextAction()).performTextReplacement("2")
-        compose.onNodeWithText("跳转").performClick()
+        compose.onNodeWithText("前往第 2 页").performClick()
         compose.waitForIdle()
         assertEquals(2 to null, fixture.requests.last())
         compose.onNodeWithContentDescription("第 2 页").assertIsDisplayed()
@@ -291,9 +291,9 @@ class ReaderPresentationTest {
     @Test fun pageIndicatorOpensJumpSheetAndFloorJumpLoadsTheServerPage() {
         showReader()
         compose.onNodeWithText("1 / 2").assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp).performClick()
-        compose.onNodeWithText("跳楼").performClick()
+        compose.onNodeWithText("按楼层").performClick()
         compose.onNode(hasSetTextAction()).performTextReplacement("31")
-        compose.onNodeWithText("跳转").performClick()
+        compose.onNodeWithText("前往 #31").performClick()
         compose.waitForIdle()
         assertEquals(2 to null, fixture.requests.last())
         compose.onNodeWithText("#31").assertIsDisplayed()
@@ -328,7 +328,7 @@ class ReaderPresentationTest {
         showReader()
         compose.onNodeWithText("1 / 2").performClick()
         compose.onNode(hasSetTextAction()).performTextReplacement("2")
-        compose.onNodeWithText("跳转").performClick()
+        compose.onNodeWithText("前往第 2 页").performClick()
         compose.onNode(hasScrollToIndexAction()).performScrollToIndex(5)
         val body = compose.onNodeWithText("本页最后一层回复，不应被底部翻页控件遮挡。")
             .assertIsDisplayed().getUnclippedBoundsInRoot()
