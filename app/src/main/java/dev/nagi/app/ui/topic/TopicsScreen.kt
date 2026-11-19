@@ -82,6 +82,7 @@ import dev.nagi.app.ui.components.EdgeAlignedMetaRow
 import dev.nagi.app.ui.components.NeutralTagBadge
 import dev.nagi.app.ui.components.FlatCard
 import dev.nagi.app.ui.components.ForumScopePickerSheet
+import dev.nagi.app.ui.components.FrostedDropdownDivider
 import dev.nagi.app.ui.components.FrostedDropdownItem
 import dev.nagi.app.ui.components.FrostedDropdownMenu
 import dev.nagi.app.ui.components.GoldSwitch
@@ -89,9 +90,12 @@ import dev.nagi.app.ui.components.GoldTagBadge
 import dev.nagi.app.ui.components.InlineStatusBanner
 import dev.nagi.app.ui.components.LocalOpenLogin
 import dev.nagi.app.ui.components.NagiDialog
+import dev.nagi.app.ui.components.NagiDialogActions
 import dev.nagi.app.ui.components.NagiFrostedSheet
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.NagiPullToRefreshBox
+import dev.nagi.app.ui.components.NagiSearchTextField
+import dev.nagi.app.ui.components.NagiSheetHeader
 import dev.nagi.app.ui.components.Notice
 import dev.nagi.app.ui.components.ProgressiveBlurScaffold
 import dev.nagi.app.ui.components.ReplyCountPill
@@ -413,11 +417,7 @@ fun TopicsScreen(
                                                         if (!isSignedIn) openLogin?.invoke() else onToggleCloudForumFavorite(currentForum)
                                                     },
                                                 )
-                                                HorizontalDivider(
-                                                    modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.xs),
-                                                    thickness = 1.dp,
-                                                    color = colors.cardBorder,
-                                                )
+                                                FrostedDropdownDivider()
                                             }
                                             FrostedDropdownItem(
                                                 text = "按最新发布排序",
@@ -451,11 +451,7 @@ fun TopicsScreen(
                                                     },
                                                 )
                                             }
-                                            HorizontalDivider(
-                                                modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.xs),
-                                                thickness = 1.dp,
-                                                color = colors.cardBorder,
-                                            )
+                                            FrostedDropdownDivider()
                                             val forumUrl = if (!activeCollection.isNullOrBlank()) {
                                                 "https://bbs.nga.cn/thread.php?stid=$activeCollection"
                                             } else {
@@ -693,6 +689,7 @@ fun TopicsScreen(
                                                             loadingMore = false
                                                             vm.changeSort(TopicSort.NEWEST)
                                                         },
+                                                        icon = NagiIcons.Sort,
                                                         style = CapsuleStyle.Neutral,
                                                     )
                                                 }
@@ -752,13 +749,11 @@ fun TopicsScreen(
                 Text("活跃 ${formatTime(topic.lastActiveAt)}", style = typography.metadata, color = colors.textSecondary)
             }
             Text("${topic.replies} 条回复", style = typography.metadata, color = colors.goldText)
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                CapsuleButton(
-                    text = "关闭",
-                    onClick = { details = null },
-                    style = CapsuleStyle.Neutral,
-                )
-            }
+            NagiDialogActions(
+                confirmLabel = "关闭",
+                onConfirm = { details = null },
+                confirmStyle = CapsuleStyle.Neutral,
+            )
         }
     }
 
@@ -768,27 +763,11 @@ fun TopicsScreen(
             onDismissRequest = { showingSubforums = false },
             maxHeight = 520.dp,
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = Space.lg, end = Space.sm, top = Space.md, bottom = Space.sm),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("子板块筛选", style = typography.sectionTitle, color = colors.textPrimary)
-                    Text(
-                        "开关设置当前 NGA 账号的帖子显示范围，与本地收藏无关；点按名称进入子板块。",
-                        style = typography.metadata,
-                        color = colors.textSecondary,
-                    )
-                }
-                ChromeIconButton(
-                    icon = NagiIcons.Close,
-                    description = "关闭面板",
-                    onClick = { showingSubforums = false },
-                )
-            }
+            NagiSheetHeader(
+                title = "子板块筛选",
+                subtitle = "开关设置当前 NGA 账号的帖子显示范围，与本地收藏无关；点按名称进入子板块。",
+                onClose = { showingSubforums = false },
+            )
             HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
             LazyColumn(
                 modifier = Modifier.fillMaxWidth(),
@@ -861,7 +840,11 @@ fun TopicsScreen(
                             .fillMaxWidth()
                             .padding(horizontal = Space.lg, vertical = Space.sm),
                     ) {
-                        CapsuleButton(text = "刷新核对", onClick = { vm.load(true) })
+                        CapsuleButton(
+                            text = "刷新核对",
+                            onClick = { vm.load(true) },
+                            icon = NagiIcons.Refresh,
+                        )
                     }
                 }
             }
@@ -934,31 +917,11 @@ private fun RelatedForumsSheet(
         onDismissRequest = onDismiss,
         maxHeight = 520.dp,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = Space.lg, end = Space.sm, top = Space.md, bottom = Space.sm),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = "同组版块与主题合集",
-                    style = typography.sectionTitle,
-                    color = colors.textPrimary,
-                )
-                Text(
-                    text = "点按切换同组版块或主题合集",
-                    style = typography.metadata,
-                    color = colors.textSecondary,
-                )
-            }
-            ChromeIconButton(
-                icon = NagiIcons.Close,
-                description = "关闭面板",
-                onClick = onDismiss,
-            )
-        }
+        NagiSheetHeader(
+            title = "同组版块与主题合集",
+            subtitle = "点按切换同组版块或主题合集",
+            onClose = onDismiss,
+        )
         HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
 
         if (related.isEmpty()) {
@@ -1103,13 +1066,12 @@ private fun SearchControls(
     onChooseScope: () -> Unit,
     onSubmit: () -> Unit,
 ) {
-    val colors = NagiThemeTokens.colors
-    val typography = NagiThemeTokens.typography
     Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
         CapsuleButton(
             text = scope?.let { "搜索范围：${it.name}（切换）" } ?: "选择搜索版块",
             onClick = onChooseScope,
             icon = NagiIcons.Forums,
+            trailingIcon = NagiIcons.ChevronDown,
             style = if (scope != null) CapsuleStyle.SelectedGold else CapsuleStyle.Neutral,
         )
 
@@ -1118,45 +1080,18 @@ private fun SearchControls(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Space.sm),
         ) {
-            OutlinedTextField(
+            NagiSearchTextField(
                 value = query,
                 onValueChange = onQueryChange,
+                placeholder = "搜索主题",
+                clearDescription = "清空搜索词",
+                onSubmit = onSubmit,
                 modifier = Modifier.weight(1f),
-                singleLine = true,
-                shape = CircleShape,
-                placeholder = { Text("搜索主题", style = typography.body, color = colors.textSecondary) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = NagiIcons.Search,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = colors.textSecondary,
-                    )
-                },
-                trailingIcon = if (query.isNotEmpty()) {
-                    {
-                        IconButton(onClick = { onQueryChange("") }) {
-                            Icon(
-                                imageVector = NagiIcons.ClearCircle,
-                                contentDescription = "清空搜索词",
-                                modifier = Modifier.size(18.dp),
-                                tint = colors.textSecondary,
-                            )
-                        }
-                    }
-                } else null,
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedContainerColor = colors.cardSurface,
-                    focusedContainerColor = colors.cardSurface,
-                    unfocusedBorderColor = colors.cardBorder,
-                    focusedBorderColor = colors.goldAccent,
-                ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
             )
             CapsuleButton(
                 text = "搜索",
                 onClick = onSubmit,
+                icon = NagiIcons.Search,
                 enabled = query.isNotBlank() && scope != null,
                 style = CapsuleStyle.SolidGold,
             )

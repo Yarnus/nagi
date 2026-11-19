@@ -127,6 +127,7 @@ internal fun ReplyPopup(
                             CapsuleButton(
                                 text = if (session.expandedContext) "收起引用" else "查看完整引用",
                                 onClick = expandContext,
+                                icon = if (session.expandedContext) NagiIcons.ChevronUp else NagiIcons.ChevronDown,
                                 style = CapsuleStyle.Neutral,
                             )
                         }
@@ -161,6 +162,7 @@ internal fun ReplyPopup(
                                 CapsuleButton(
                                     text = "重新准备",
                                     onClick = retry,
+                                    icon = NagiIcons.Refresh,
                                     style = CapsuleStyle.Destructive,
                                 )
                             }
@@ -191,6 +193,7 @@ internal fun ReplyPopup(
                             CapsuleButton(
                                 text = "复制内容",
                                 onClick = { clipboard.setText(AnnotatedString(session.content)) },
+                                icon = NagiIcons.Copy,
                                 style = CapsuleStyle.Neutral,
                             )
                         }
@@ -244,12 +247,14 @@ internal fun ReplyPopup(
                             CapsuleButton(
                                 text = "加粗",
                                 onClick = { edit(boldSelection(session.input)) },
+                                icon = NagiIcons.Bold,
                                 enabled = !session.preview && editable,
                                 style = CapsuleStyle.Neutral,
                             )
                             CapsuleButton(
                                 text = if (session.preview) "编辑" else "预览",
                                 onClick = preview,
+                                icon = if (session.preview) NagiIcons.Compose else NagiIcons.Eye,
                                 style = if (session.preview) CapsuleStyle.SelectedGold else CapsuleStyle.Neutral,
                             )
                         }
@@ -257,6 +262,7 @@ internal fun ReplyPopup(
                     CapsuleButton(
                         text = if (session.phase == ComposePhase.Submitting) "发送中…" else "发送",
                         onClick = send,
+                        icon = NagiIcons.Send,
                         enabled = session.canSend,
                         style = CapsuleStyle.SolidGold,
                     )

@@ -43,6 +43,7 @@ import dev.nagi.app.data.isAllowedLoginNavigation
 import dev.nagi.app.data.isTrustedLoginUrl
 import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
+import dev.nagi.app.ui.components.ChromeIconButton
 import dev.nagi.app.ui.components.LoadingLine
 import dev.nagi.app.ui.components.NagiHeader
 import dev.nagi.app.ui.components.NagiIcons
@@ -69,16 +70,15 @@ fun LoginScreen(back: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
     ) {
         NagiHeader("登录 NGA", "请先在nga内嵌网页完成登陆", back = back) {
-            CapsuleButton(
-                text = "刷新",
+            ChromeIconButton(
+                icon = NagiIcons.Refresh,
+                description = "刷新",
                 onClick = {
                     webError = false
                     loading = true
                     webView?.reload()
                 },
-                icon = NagiIcons.Refresh,
                 enabled = state.ready,
-                style = CapsuleStyle.Neutral,
             )
         }
         if (loading || state.checking || !state.ready) LoadingLine()
@@ -170,24 +170,16 @@ fun LoginScreen(back: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
                     .padding(horizontal = Space.lg, vertical = Space.md),
                 verticalArrangement = Arrangement.spacedBy(Space.sm),
             ) {
-                Button(
+                CapsuleButton(
+                    text = if (state.checking) "正在保存安全凭证…" else "我已完成网页登录，保存登录状态",
                     onClick = { vm.finish(webView?.url ?: currentUrl) },
+                    icon = NagiIcons.Check,
                     enabled = state.ready && !state.checking,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp),
-                    shape = CircleShape,
-                    elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = colors.goldSolidFill,
-                        contentColor = colors.goldSolidText,
-                    ),
-                ) {
-                    Text(
-                        text = if (state.checking) "正在保存安全凭证…" else "我已完成网页登录，保存登录状态",
-                        style = typography.capsuleLabel,
-                    )
-                }
+                    modifier = Modifier.fillMaxWidth(),
+                    style = CapsuleStyle.SolidGold,
+                    visualHeight = 44.dp,
+                    fillWidth = true,
+                )
                 state.error?.let {
                     Text(it, color = colors.destructive, style = typography.metadata)
                 }

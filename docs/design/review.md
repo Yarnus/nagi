@@ -50,6 +50,8 @@
 
 ## 验证边界
 
+UI/UX 组件规范化与逐页交互一致性优化（新增 `NagiIconAction`、`NagiSearchTextField`、`NagiSheetHeader`、`FrostedDropdownDivider` 与 16 枚 1.6dp 单线矢量图标；统一设置页、收藏/历史页、编辑器、阅读器、搜索框、图片浏览层及贴条/表情面板的图标、按钮、工具栏、菜单和按压反馈）的本地 **模拟测试通过**：最终代码改动后运行 `./gradlew --no-daemon --max-workers=1 :nga-sdk:check :app:assembleDebug :app:lintDebug :app:testDebugUnitTest` 全部通过（SDK 214 项、应用 362 项单元测试 0 失败 0 跳过，lint 0 个错误）；`UiDesignContractTest` 及各页面 UI 回归测试覆盖 48dp 热区、无障碍语义与窄屏 2x 大字号布局。**未验证：** 本次变更的设备集成测试、真机及 TalkBack 实机朗读。
+
 关于页主动更新检测与应用内下载安装（手动“检查更新”按钮绕过 24 小时节流、按 ABI 选择 Release APK、受信任 GitHub HTTPS 重定向校验、`SHA256SUMS` 与签名/包信息一致性校验、下载/校验进度与取消、`REQUEST_INSTALL_PACKAGES` 权限刷新与窄屏 2x 大字号交互）的本地 **模拟测试通过**：最终代码改动后运行 `./gradlew --no-daemon --max-workers=1 :nga-sdk:check :app:assembleDebug :app:lintDebug :app:testDebugUnitTest` 全部通过（SDK 214 项、应用 361 项单元测试 0 失败 0 跳过，lint 0 个错误、33 个警告、3 个提示）；`AppUpdateLogicTest` 与 `AppUpdateFlowTest` / `AboutCheckUpdateUiTest` 覆盖 ABI 选择、`SHA256SUMS` 解析、受信任下载域名校验、下载状态流转、权限刷新、取消恢复、缓存清理与窄屏 2x 大字号各状态展示。**未验证：** 设备集成测试、真机、真实 GitHub Releases 网络/CDN 下载、`PackageManager` 同签名校验通过后的真实系统安装器调起及授权设置页返回体验。
 
 NGA 收藏版块（`forum_favor2` 读取与增删写入、版块目录顶部 `NGA 收藏版块` 分区与长按双入口菜单、主题列表菜单、`FavoritesScreen` 双标签与移除确认弹窗、结果不明锁定与刷新解锁）的本地 **模拟测试通过**：最终代码改动后运行 `./gradlew --no-daemon --max-workers=1 :nga-sdk:check :app:assembleDebug :app:lintDebug :app:testDebugUnitTest` 全部通过（SDK 214 项、应用 357 项单元测试 0 失败 0 跳过，lint 0 个错误、31 个警告、3 个提示）；`FavoriteForumsTest` 覆盖协议解析、空形状边界、登录凭据约束与写入结果策略，`LibraryViewModelTest` 覆盖游客拦截、刷新保留、保存成功即时更新、拒绝与结果不明锁定解锁，`CloudFavoriteForumsUiTest` 覆盖版块目录、主题列表、收藏页双标签与窄屏 2x 大字号交互。**真实 NGA 只读接口已手动验证**（在 `emulator-5554` 登录账号后核验 `forum_favor2` `action=get` 拉取及版块目录名称/图标展示）。**未验证：** 设备集成测试、真机、TalkBack 实机朗读，以及 `forum_favor2` 写入在完整回归中的自动化验证。

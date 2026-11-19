@@ -44,6 +44,7 @@ import androidx.compose.ui.window.DialogProperties
 import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
+import dev.nagi.app.ui.components.ChromeIconButton
 import dev.nagi.app.ui.components.FlatCard
 import dev.nagi.app.ui.components.GoldTagBadge
 import dev.nagi.app.ui.components.LoadingLine
@@ -141,31 +142,12 @@ internal fun ComposerScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Space.sm),
             ) {
-                IconButton(
+                ChromeIconButton(
+                    icon = if (state.privateMessage) NagiIcons.Back else NagiIcons.Close,
+                    description = "关闭$label",
                     onClick = dismiss,
                     enabled = state.phase != ComposePhase.Submitting && !state.images.uploading,
-                    modifier = Modifier.size(48.dp),
-                ) {
-                    Surface(
-                        modifier = Modifier.size(42.dp),
-                        shape = CircleShape,
-                        color = if (state.privateMessage) colors.frostedChrome else colors.destructiveContainer,
-                        border = BorderStroke(1.dp, if (state.privateMessage) colors.cardBorder else colors.destructive.copy(alpha = 0.25f)),
-                        shadowElevation = 0.dp,
-                        tonalElevation = 0.dp,
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = if (state.privateMessage) NagiIcons.Back else NagiIcons.Trash,
-                                contentDescription = "关闭$label",
-                                modifier = Modifier.size(18.dp),
-                                tint = (if (state.privateMessage) colors.textPrimary else colors.destructive).copy(
-                                    alpha = if (state.phase != ComposePhase.Submitting) 1f else 0.4f,
-                                ),
-                            )
-                        }
-                    }
-                }
+                )
                 Text(
                     text = label,
                     modifier = Modifier.weight(1f),
@@ -178,6 +160,7 @@ internal fun ComposerScreen(
                         if (state.phase == ComposePhase.Submitting) "保存中…" else "保存修改"
                     } else if (state.phase == ComposePhase.Submitting) "发送中…" else "发送",
                     onClick = send,
+                    icon = if (state.target?.action == PublishAction.MODIFY) NagiIcons.Check else NagiIcons.Send,
                     enabled = state.canSend,
                     style = CapsuleStyle.SolidGold,
                 )
@@ -228,6 +211,7 @@ internal fun ComposerScreen(
                         ComposerNoticeCard(
                             message = state.error,
                             actionLabel = "重试",
+                            actionIcon = NagiIcons.Refresh,
                             onAction = retry,
                             tone = ComposerNoticeTone.Error,
                         )
@@ -238,6 +222,7 @@ internal fun ComposerScreen(
                     ComposerNoticeCard(
                         message = state.error ?: "暂未收到提交确认，可${if (state.privateMessage) "查看会话" else "查看帖子"}核对，请勿重复发送。",
                         actionLabel = "复制内容",
+                        actionIcon = NagiIcons.Copy,
                         onAction = { clipboard.setText(AnnotatedString(state.content)) },
                         tone = ComposerNoticeTone.Neutral,
                     )
@@ -246,6 +231,7 @@ internal fun ComposerScreen(
                     ComposerNoticeCard(
                         message = if (state.target?.action == PublishAction.MODIFY) "修改已确认" else "发布成功",
                         actionLabel = "完成",
+                        actionIcon = NagiIcons.Check,
                         onAction = close,
                         tone = ComposerNoticeTone.Success,
                     )
@@ -293,24 +279,28 @@ internal fun ComposerScreen(
                         CapsuleButton(
                             text = "加粗",
                             onClick = { update(boldSelection(field)) },
+                            icon = NagiIcons.Bold,
                             enabled = editable,
                             style = CapsuleStyle.Neutral,
                         )
                         CapsuleButton(
                             text = "引用",
                             onClick = { update(wrapBbcodeSelection(field, "[quote]", "[/quote]")) },
+                            icon = NagiIcons.Quote,
                             enabled = editable,
                             style = CapsuleStyle.Neutral,
                         )
                         CapsuleButton(
                             text = "折叠",
                             onClick = { update(wrapBbcodeSelection(field, "[collapse]", "[/collapse]")) },
+                            icon = NagiIcons.Collapse,
                             enabled = editable,
                             style = CapsuleStyle.Neutral,
                         )
                         CapsuleButton(
                             text = "代码",
                             onClick = { update(wrapBbcodeSelection(field, "[code]", "[/code]")) },
+                            icon = NagiIcons.Code,
                             enabled = editable,
                             style = CapsuleStyle.Neutral,
                         )
@@ -406,6 +396,7 @@ private fun ComposerNoticeCard(
     actionLabel: String,
     onAction: () -> Unit,
     tone: ComposerNoticeTone,
+    actionIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
@@ -443,6 +434,7 @@ private fun ComposerNoticeCard(
             CapsuleButton(
                 text = actionLabel,
                 onClick = onAction,
+                icon = actionIcon,
                 style = when (tone) {
                     ComposerNoticeTone.Neutral -> CapsuleStyle.Neutral
                     ComposerNoticeTone.Error -> CapsuleStyle.Destructive

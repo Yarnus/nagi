@@ -18,7 +18,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.ui.components.CapsuleButton
+import dev.nagi.app.ui.components.CapsuleStyle
+import dev.nagi.app.ui.components.LoadingLine
 import dev.nagi.app.ui.components.NagiIcons
+import dev.nagi.app.ui.components.NagiSheetHeader
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
 import dev.nagi.app.viewmodel.PostReferenceState
@@ -122,34 +125,69 @@ internal fun ReplyReferenceCard(quote: ContentBlock.Quote, preferences: ReadingP
         }
     }
     if (expanded) {
-        ModalBottomSheet(onDismissRequest = { expanded = false }, containerColor = colors.cardSurface) {
-            Column(Modifier.fillMaxWidth().widthIn(max = 760.dp).padding(horizontal = Space.lg)) {
-                Text(heading, style = typography.sectionTitle, color = colors.textPrimary)
-                if (target != null && references != null) {
-                    CapsuleButton("定位到原楼层", onClick = { expanded = false; references.locate(target) })
-                }
-                when {
-                    result?.post != null -> Text("完整原帖", style = typography.metadata, color = colors.textSecondary)
-                    hasSnapshot -> Text("引用片段", style = typography.metadata, color = colors.textSecondary)
-                }
-                if (result?.loading == true) LinearProgressIndicator(Modifier.fillMaxWidth())
-                result?.error?.let { error ->
-                    Text(error, style = typography.bodyText, color = colors.textSecondary)
-                    if (target != null && references != null) {
-                        CapsuleButton("重试加载原文", onClick = { references.request(target, true) })
-                    }
-                }
-                val content = result?.post?.content ?: quote.children
-                LazyColumn(
-                    Modifier.fillMaxWidth().weight(1f, fill = false),
-                    contentPadding = PaddingValues(vertical = Space.md),
+        val subtitleText = when {
+            result?.post != null -> "完整原帖"
+            hasSnapshot -> "引用片段"
+            else -> null
+        }
+        ModalBottomSheet(
+            onDismissRequest = { expanded = false },
+            containerColor = colors.cardSurface,
+            dragHandle = null,
+            shape = NagiThemeTokens.shapes.bottomSheet,
+            tonalElevation = 0.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 760.dp)
+                    .padding(bottom = Space.md),
+                verticalArrangement = Arrangement.spacedBy(Space.sm),
+            ) {
+                NagiSheetHeader(
+                    title = heading,
+                    subtitle = subtitleText,
+                    closeDescription = "关闭引用原文",
+                    onClose = { expanded = false },
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Space.lg),
                     verticalArrangement = Arrangement.spacedBy(Space.sm),
                 ) {
-                    items(content.withIndex().toList(), key = { it.index }) { (_, block) ->
-                        SelectionContainer { ContentBlocks(listOf(block), preferences, onImage) }
+                    if (target != null && references != null) {
+                        CapsuleButton(
+                            text = "定位到原楼层",
+                            onClick = { expanded = false; references.locate(target) },
+                            icon = NagiIcons.Locate,
+                            style = CapsuleStyle.SelectedGold,
+                        )
                     }
-                    if (content.isEmpty() && result?.loading != true && result?.error == null) {
-                        item { Text("暂无可显示的原文", color = colors.textSecondary) }
+                    if (result?.loading == true) LoadingLine()
+                    result?.error?.let { error ->
+                        Text(error, style = typography.bodyText, color = colors.textSecondary)
+                        if (references != null) {
+                            CapsuleButton(
+                                text = "重试加载原文",
+                                onClick = { references.request(target, true) },
+                                icon = NagiIcons.Refresh,
+                                style = CapsuleStyle.Neutral,
+                            )
+                        }
+                    }
+                    val content = result?.post?.content ?: quote.children
+                    LazyColumn(
+                        Modifier.fillMaxWidth().weight(1f, fill = false),
+                        contentPadding = PaddingValues(vertical = Space.sm),
+                        verticalArrangement = Arrangement.spacedBy(Space.sm),
+                    ) {
+                        items(content.withIndex().toList(), key = { it.index }) { (_, block) ->
+                            SelectionContainer { ContentBlocks(listOf(block), preferences, onImage) }
+                        }
+                        if (content.isEmpty() && result?.loading != true && result?.error == null) {
+                            item { Text("暂无可显示的原文", color = colors.textSecondary) }
+                        }
                     }
                 }
             }

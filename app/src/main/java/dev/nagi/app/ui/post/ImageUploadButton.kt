@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.LocalContext
 import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.LocalAccountIdentity
+import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.sdk.ImageUpload
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -50,6 +51,7 @@ internal fun ImageUploadButton(
     }
     CapsuleButton(
         text = if (busy) "上传中…" else "图片",
+        icon = NagiIcons.Image,
         enabled = enabled && !busy,
         style = CapsuleStyle.Neutral,
         onClick = { launchedFor = scope; launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },

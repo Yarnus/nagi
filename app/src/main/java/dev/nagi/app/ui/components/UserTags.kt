@@ -49,9 +49,15 @@ internal fun UserTagEditor(userId: String) {
     var editing by rememberSaveable(userId, state.revision) { mutableStateOf(false) }
     var draft by rememberSaveable(userId, state.revision) { mutableStateOf("") }
     var attempted by remember(userId, state.revision) { mutableStateOf(false) }
-    CapsuleButton(if (tag.isEmpty()) "添加标记" else "编辑标记", {
-        draft = tag; attempted = false; editing = true
-    }, enabled = !state.saving, style = CapsuleStyle.Neutral)
+    CapsuleButton(
+        text = if (tag.isEmpty()) "添加标记" else "编辑标记",
+        onClick = {
+            draft = tag; attempted = false; editing = true
+        },
+        icon = NagiIcons.Tag,
+        enabled = !state.saving,
+        style = CapsuleStyle.Neutral,
+    )
     if (editing) {
         val valid = validUserTag(draft.trim())
         NagiDialog(onDismissRequest = { if (!state.saving) editing = false }) {
@@ -66,31 +72,32 @@ internal fun UserTagEditor(userId: String) {
             )
             if (!valid) Text("最多 24 个字符，不能包含换行或控制字符", color = NagiThemeTokens.colors.destructive)
             if (attempted) state.error?.let { Text(it, color = NagiThemeTokens.colors.destructive) }
-            if (tag.isNotEmpty()) CapsuleButton(
-                "删除标记",
-                {
-                    attempted = true
-                    access.save(userId, "") { editing = false }
-                },
-                enabled = !state.saving,
-                style = CapsuleStyle.Destructive,
-            )
-            FlowRow(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Space.sm, Alignment.End),
-                verticalArrangement = Arrangement.spacedBy(Space.xs),
-            ) {
-                CapsuleButton("取消", { editing = false }, enabled = !state.saving, style = CapsuleStyle.Neutral)
+            if (tag.isNotEmpty()) {
                 CapsuleButton(
-                    if (state.saving) "保存中…" else "保存",
-                    {
+                    text = "删除标记",
+                    onClick = {
                         attempted = true
-                        access.save(userId, draft) { editing = false }
+                        access.save(userId, "") { editing = false }
                     },
-                    enabled = valid && draft.trim() != tag && !state.saving,
-                    style = CapsuleStyle.SelectedGold,
+                    icon = NagiIcons.Trash,
+                    enabled = !state.saving,
+                    style = CapsuleStyle.Destructive,
+                    fillWidth = true,
                 )
             }
+            NagiDialogActions(
+                confirmLabel = if (state.saving) "保存中…" else "保存",
+                onConfirm = {
+                    attempted = true
+                    access.save(userId, draft) { editing = false }
+                },
+                confirmEnabled = valid && draft.trim() != tag && !state.saving,
+                confirmStyle = CapsuleStyle.SelectedGold,
+                dismissLabel = "取消",
+                onDismiss = { editing = false },
+                dismissEnabled = !state.saving,
+                dismissStyle = CapsuleStyle.Neutral,
+            )
         }
     }
 }

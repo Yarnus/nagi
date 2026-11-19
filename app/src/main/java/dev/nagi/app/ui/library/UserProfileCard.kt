@@ -69,7 +69,14 @@ internal fun UserProfileCard(state: UserProfileState, retry: () -> Unit, sendMes
                 Text(signature, style = typography.body, color = colors.textSecondary,
                     maxLines = if (expanded) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis,
                     onTextLayout = { if (!expanded) overflow = it.hasVisualOverflow })
-                if (expanded || overflow) CapsuleButton(if (expanded) "收起签名" else "展开签名", { expanded = !expanded }, style = CapsuleStyle.Neutral)
+                if (expanded || overflow) {
+                    CapsuleButton(
+                        text = if (expanded) "收起签名" else "展开签名",
+                        onClick = { expanded = !expanded },
+                        icon = if (expanded) NagiIcons.ChevronUp else NagiIcons.ChevronDown,
+                        style = CapsuleStyle.Neutral,
+                    )
+                }
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                 UserTagEditor(user.id)

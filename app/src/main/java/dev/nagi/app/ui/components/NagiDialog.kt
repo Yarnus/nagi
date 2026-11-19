@@ -202,56 +202,22 @@ fun ForumScopePickerSheet(
         onDismissRequest = onDismissRequest,
         maxHeight = 560.dp,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = Space.lg, end = Space.sm, top = Space.md, bottom = Space.xs),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text("选择搜索版块", style = typography.sectionTitle, color = colors.textPrimary)
-            ChromeIconButton(
-                icon = NagiIcons.Close,
-                description = "关闭面板",
-                onClick = onDismissRequest,
-            )
-        }
-        OutlinedTextField(
+        NagiSheetHeader(
+            title = "选择搜索版块",
+            onClose = onDismissRequest,
+        )
+        NagiSearchTextField(
             value = filter,
             onValueChange = { filter = it },
+            placeholder = "筛选版块",
+            clearDescription = "清空筛选",
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = Space.lg, vertical = Space.sm),
-            singleLine = true,
-            shape = CircleShape,
-            textStyle = typography.body.copy(color = colors.textPrimary),
-            placeholder = { Text("筛选版块", style = typography.body, color = colors.textSecondary) },
-            leadingIcon = {
-                Icon(
-                    imageVector = NagiIcons.Search,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = colors.textSecondary,
-                )
-            },
-            trailingIcon = if (filter.isNotEmpty()) {
-                {
-                    IconButton(onClick = { filter = "" }) {
-                        Icon(
-                            imageVector = NagiIcons.ClearCircle,
-                            contentDescription = "清空筛选",
-                            modifier = Modifier.size(18.dp),
-                            tint = colors.textSecondary,
-                        )
-                    }
-                }
-            } else null,
-            colors = OutlinedTextFieldDefaults.colors(
-                unfocusedContainerColor = colors.insetContainer.copy(alpha = if (colors.isDark) 0.72f else 0.78f),
-                focusedContainerColor = colors.insetContainer.copy(alpha = if (colors.isDark) 0.85f else 0.90f),
-                unfocusedBorderColor = colors.cardBorder.copy(alpha = 0.75f),
-                focusedBorderColor = colors.goldAccent,
-            ),
+            containerColor = colors.insetContainer.copy(alpha = if (colors.isDark) 0.72f else 0.78f),
+            focusedContainerColor = colors.insetContainer.copy(alpha = if (colors.isDark) 0.85f else 0.90f),
+            borderColor = colors.cardBorder.copy(alpha = 0.75f),
+            focusedBorderColor = colors.goldAccent,
         )
         HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
         LazyColumn(

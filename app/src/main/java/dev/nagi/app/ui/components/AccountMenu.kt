@@ -168,58 +168,19 @@ fun AccountMenuButton(onSelect: (String) -> Unit) {
                 supporting: String? = null,
                 badge: String? = null,
             ) {
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(Space.sm),
-                                verticalArrangement = Arrangement.spacedBy(Space.xs),
-                                itemVerticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = label,
-                                    style = typography.body,
-                                    color = colors.textPrimary,
-                                )
-                                if (badge != null) {
-                                    GoldTagBadge(badge)
-                                }
-                            }
-                            if (supporting != null) {
-                                Text(
-                                    text = supporting,
-                                    style = typography.metadata,
-                                    color = colors.textSecondary,
-                                )
-                            }
-                        }
-                    },
-                    leadingIcon = {
-                        if (route == "profile" || label == "未登录") {
-                            AccountAvatar(identity, Modifier.size(24.dp))
-                        } else {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = null,
-                                tint = colors.textSecondary,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    },
+                val useAvatar = route == "profile" || label == "未登录"
+                FrostedDropdownItem(
+                    text = label,
+                    supporting = supporting,
+                    badge = badge,
+                    leadingIcon = if (useAvatar) null else icon,
+                    leadingContent = if (useAvatar) {
+                        { AccountAvatar(identity, Modifier.size(24.dp)) }
+                    } else null,
                     onClick = {
                         expanded = false
                         onSelect(route)
                     },
-                    modifier = Modifier.heightIn(min = 48.dp),
-                )
-            }
-
-            @Composable
-            fun divider() {
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.xs),
-                    thickness = 1.dp,
-                    color = colors.cardBorder,
                 )
             }
 
@@ -231,19 +192,19 @@ fun AccountMenuButton(onSelect: (String) -> Unit) {
             )
             entry(
                 label = if (identity.userId == null) "登录 NGA" else "管理账号",
-                icon = NagiIcons.Person,
+                icon = if (identity.userId == null) NagiIcons.Person else NagiIcons.Users,
                 route = if (identity.userId == null) "login" else "accounts",
             )
             if (identity.userId == null) {
-                entry("管理账号", NagiIcons.Person, "accounts")
+                entry("管理账号", NagiIcons.Users, "accounts")
             }
-            divider()
+            FrostedDropdownDivider()
             entry("通知", NagiIcons.Notification, "notifications", if (unread > 0) "$unread 条未读" else null)
             entry("短消息", NagiIcons.Message, "messages")
-            divider()
+            FrostedDropdownDivider()
             entry("收藏", NagiIcons.Bookmark, "favorites", "本地收藏话题 · NGA 收藏版块")
             entry("浏览历史", NagiIcons.History, "history")
-            divider()
+            FrostedDropdownDivider()
             entry("设置", NagiIcons.Tuning, "settings")
             entry("关于与反馈", NagiIcons.Info, "about", badge = if (appUpdate.hasUpdate) "新版本" else null)
         }

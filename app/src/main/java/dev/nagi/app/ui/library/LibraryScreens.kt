@@ -62,7 +62,9 @@ import dev.nagi.app.ui.components.InlineStatusBanner
 import dev.nagi.app.ui.components.LoadingLine
 import dev.nagi.app.ui.components.LocalAppUpdate
 import dev.nagi.app.ui.components.NagiConfirmDialog
+import dev.nagi.app.ui.components.NagiDialogActions
 import dev.nagi.app.ui.components.NagiHeader
+import dev.nagi.app.ui.components.NagiIconAction
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.NagiPullToRefreshBox
 import dev.nagi.app.ui.components.Notice
@@ -169,22 +171,25 @@ fun FavoritesScreen(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .clickable { onRead(favorite.topicId) }
-                                                .padding(horizontal = Space.lg, vertical = Space.md),
+                                                .padding(start = Space.lg, end = Space.sm, top = Space.sm, bottom = Space.sm),
                                             verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                                            horizontalArrangement = Arrangement.spacedBy(Space.xs),
                                         ) {
                                             Text(
                                                 text = favorite.title,
-                                                modifier = Modifier.weight(1f),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .padding(vertical = Space.xs),
                                                 style = typography.topicTitle,
                                                 color = colors.textPrimary,
                                                 maxLines = 2,
                                                 overflow = TextOverflow.Ellipsis,
                                             )
-                                            CapsuleButton(
-                                                text = "移除",
+                                            NagiIconAction(
+                                                icon = NagiIcons.Trash,
+                                                description = "移除",
                                                 onClick = { vm.removeFavorite(favorite.topicId) },
-                                                style = CapsuleStyle.Neutral,
+                                                tint = colors.textSecondary,
                                             )
                                         }
                                     }
@@ -207,6 +212,7 @@ fun FavoritesScreen(
                             CapsuleButton(
                                 text = "登录 NGA",
                                 onClick = { onSelect("login") },
+                                icon = NagiIcons.Person,
                                 style = CapsuleStyle.SelectedGold,
                             )
                         }
@@ -268,13 +274,15 @@ fun FavoritesScreen(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .clickable { onForum(forum) }
-                                                    .padding(horizontal = Space.lg, vertical = Space.md),
+                                                    .padding(start = Space.lg, end = Space.sm, top = Space.sm, bottom = Space.sm),
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.spacedBy(Space.sm),
                                             ) {
                                                 ForumDirectoryIcon(forum.iconUrl, isFavorite = true)
                                                 Column(
-                                                    modifier = Modifier.weight(1f),
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .padding(vertical = Space.xs),
                                                     verticalArrangement = Arrangement.spacedBy(2.dp),
                                                 ) {
                                                     Text(
@@ -297,11 +305,12 @@ fun FavoritesScreen(
                                                         GoldTagBadge(text = "主题合集")
                                                     }
                                                 }
-                                                CapsuleButton(
-                                                    text = if (isBusy) "移除中" else "移除",
+                                                NagiIconAction(
+                                                    icon = NagiIcons.Trash,
+                                                    description = if (isBusy) "移除中" else "移除",
                                                     enabled = !isBusy && !isUncertain,
                                                     onClick = { confirmRemoveCloudForum = forum },
-                                                    style = CapsuleStyle.Neutral,
+                                                    tint = colors.textSecondary,
                                                 )
                                             }
                                         }
@@ -368,58 +377,24 @@ fun SettingsScreen(
                 )
             }
             item(key = "font-size") {
-                SectionCardItem(CardGroupPosition.First) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = Space.lg, vertical = Space.md),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text("正文字号", style = typography.topicTitle, color = colors.textPrimary)
-                            Text("${preferences.fontSize} sp", style = typography.metadata, color = colors.textSecondary)
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(Space.xs)) {
-                            CapsuleButton(
-                                text = "减小字号",
-                                onClick = { vm.font(preferences.fontSize - 1) },
-                                style = CapsuleStyle.Neutral,
-                            )
-                            CapsuleButton(
-                                text = "增大字号",
-                                onClick = { vm.font(preferences.fontSize + 1) },
-                                style = CapsuleStyle.Neutral,
-                            )
-                        }
-                    }
-                }
-                SectionCardItem(CardGroupPosition.Last) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = Space.lg, vertical = Space.md),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text("正文行高", style = typography.topicTitle, color = colors.textPrimary)
-                            Text("${preferences.lineHeight} sp", style = typography.metadata, color = colors.textSecondary)
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(Space.xs)) {
-                            CapsuleButton(
-                                text = "紧凑",
-                                onClick = { vm.lineHeight(preferences.lineHeight - 2) },
-                                style = CapsuleStyle.Neutral,
-                            )
-                            CapsuleButton(
-                                text = "宽松",
-                                onClick = { vm.lineHeight(preferences.lineHeight + 2) },
-                                style = CapsuleStyle.Neutral,
-                            )
-                        }
-                    }
-                }
+                SettingStepperRow(
+                    position = CardGroupPosition.First,
+                    title = "正文字号",
+                    valueLabel = "${preferences.fontSize} sp",
+                    decreaseDescription = "减小字号",
+                    onDecrease = { vm.font(preferences.fontSize - 1) },
+                    increaseDescription = "增大字号",
+                    onIncrease = { vm.font(preferences.fontSize + 1) },
+                )
+                SettingStepperRow(
+                    position = CardGroupPosition.Last,
+                    title = "正文行高",
+                    valueLabel = "${preferences.lineHeight} sp",
+                    decreaseDescription = "紧凑",
+                    onDecrease = { vm.lineHeight(preferences.lineHeight - 2) },
+                    increaseDescription = "宽松",
+                    onIncrease = { vm.lineHeight(preferences.lineHeight + 2) },
+                )
             }
             item(key = "about-entry") {
                 SectionCardItem(CardGroupPosition.Single) {
@@ -448,6 +423,53 @@ fun SettingsScreen(
                         Icon(NagiIcons.ChevronRight, null, Modifier.size(18.dp), tint = colors.textSecondary)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingStepperRow(
+    position: CardGroupPosition,
+    title: String,
+    valueLabel: String,
+    decreaseDescription: String,
+    onDecrease: () -> Unit,
+    increaseDescription: String,
+    onIncrease: () -> Unit,
+) {
+    val colors = NagiThemeTokens.colors
+    val typography = NagiThemeTokens.typography
+    SectionCardItem(position) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = Space.lg, end = Space.sm, top = Space.sm, bottom = Space.sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(Modifier.weight(1f).padding(vertical = Space.xs)) {
+                Text(title, style = typography.topicTitle, color = colors.textPrimary)
+                Text(valueLabel, style = typography.metadata, color = colors.textSecondary)
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Space.xs),
+            ) {
+                ChromeIconButton(
+                    icon = NagiIcons.Minus,
+                    description = decreaseDescription,
+                    onClick = onDecrease,
+                    visualSize = 38.dp,
+                    iconSize = 18.dp,
+                )
+                ChromeIconButton(
+                    icon = NagiIcons.Plus,
+                    description = increaseDescription,
+                    onClick = onIncrease,
+                    visualSize = 38.dp,
+                    iconSize = 18.dp,
+                )
             }
         }
     }
@@ -571,6 +593,7 @@ fun AboutScreen(
                                 pendingInstallAfterPermission = false
                                 onCheckUpdate()
                             },
+                            icon = NagiIcons.Refresh,
                             enabled = !appUpdate.checking && !downloadActive,
                             style = CapsuleStyle.Neutral,
                         )
@@ -734,13 +757,11 @@ fun AboutScreen(
                 style = typography.body,
                 color = colors.textSecondary,
             )
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                CapsuleButton(
-                    text = "关闭",
-                    onClick = { licenses = false },
-                    style = CapsuleStyle.Neutral,
-                )
-            }
+            NagiDialogActions(
+                confirmLabel = "关闭",
+                onConfirm = { licenses = false },
+                confirmStyle = CapsuleStyle.Neutral,
+            )
         }
     }
 }
@@ -774,6 +795,7 @@ private fun UpdateDownloadSection(
                     CapsuleButton(
                         text = "下载更新",
                         onClick = onDownload,
+                        icon = NagiIcons.Download,
                         style = CapsuleStyle.SelectedGold,
                     )
                 }
@@ -806,6 +828,7 @@ private fun UpdateDownloadSection(
                     CapsuleButton(
                         text = "取消下载",
                         onClick = onCancel,
+                        icon = NagiIcons.Close,
                         style = CapsuleStyle.Neutral,
                     )
                 }
@@ -828,6 +851,7 @@ private fun UpdateDownloadSection(
                     CapsuleButton(
                         text = "取消下载",
                         onClick = onCancel,
+                        icon = NagiIcons.Close,
                         style = CapsuleStyle.Neutral,
                     )
                 }
@@ -841,6 +865,7 @@ private fun UpdateDownloadSection(
                         CapsuleButton(
                             text = "下载更新",
                             onClick = onDownload,
+                            icon = NagiIcons.Download,
                             style = CapsuleStyle.SelectedGold,
                         )
                     }
@@ -869,12 +894,14 @@ private fun UpdateDownloadSection(
                             CapsuleButton(
                                 text = "授权并安装",
                                 onClick = onRequestPermission,
+                                icon = NagiIcons.Check,
                                 style = CapsuleStyle.SelectedGold,
                             )
                         } else {
                             CapsuleButton(
                                 text = "安装更新",
                                 onClick = { onInstall(download.apkPath) },
+                                icon = NagiIcons.Check,
                                 style = CapsuleStyle.SelectedGold,
                             )
                         }
@@ -894,11 +921,13 @@ private fun UpdateDownloadSection(
                     CapsuleButton(
                         text = "重试下载",
                         onClick = onDownload,
+                        icon = NagiIcons.Refresh,
                         style = CapsuleStyle.SelectedGold,
                     )
                     CapsuleButton(
                         text = "前往发布页",
                         onClick = onOpenReleasePage,
+                        icon = NagiIcons.Globe,
                         style = CapsuleStyle.Neutral,
                     )
                 }

@@ -23,6 +23,10 @@ import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.GoldSwitch
+import dev.nagi.app.ui.components.NagiIconAction
+import dev.nagi.app.ui.components.NagiIcons
+import dev.nagi.app.ui.components.NagiSearchTextField
+import dev.nagi.app.ui.components.NagiSheetHeader
 import dev.nagi.app.ui.components.SegmentedCapsuleControl
 import dev.nagi.app.ui.post.ReaderPost
 import dev.nagi.app.ui.theme.NagiTheme
@@ -300,6 +304,57 @@ class UiDesignContractTest {
         ))
         assertEquals("回复[s:a2:doge]", preview.text)
         assertEquals(listOf(dev.nagi.sdk.InlineSmile(2, 11, smile)), preview.smiles)
+    }
+
+    @Test fun nagiIconActionSearchFieldAndSheetHeaderExpose48dpTouchTargetsAndSemantics() {
+        var iconClicks = 0
+        var closeClicks = 0
+        var query by mutableStateOf("测试关键词")
+        compose.setContent {
+            NagiTheme {
+                Column(Modifier.fillMaxWidth()) {
+                    NagiSheetHeader(
+                        title = "测试面板",
+                        subtitle = "副标题说明",
+                        closeDescription = "关闭面板",
+                        onClose = { closeClicks++ },
+                    )
+                    NagiSearchTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = "搜索内容",
+                        clearDescription = "清除搜索词",
+                    )
+                    NagiIconAction(
+                        icon = NagiIcons.Trash,
+                        description = "移除条目",
+                        selected = true,
+                        state = "已选中",
+                        onClick = { iconClicks++ },
+                    )
+                }
+            }
+        }
+        compose.onNodeWithText("测试面板").assertIsDisplayed()
+        compose.onNodeWithText("副标题说明").assertIsDisplayed()
+        compose.onNodeWithContentDescription("关闭面板")
+            .assertWidthIsAtLeast(48.dp)
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        compose.onNodeWithContentDescription("清除搜索词")
+            .assertWidthIsAtLeast(48.dp)
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        compose.onNodeWithContentDescription("移除条目")
+            .assertWidthIsAtLeast(48.dp)
+            .assertHeightIsAtLeast(48.dp)
+            .assertIsSelected()
+            .performClick()
+        compose.runOnIdle {
+            assertEquals(1, closeClicks)
+            assertEquals("", query)
+            assertEquals(1, iconClicks)
+        }
     }
 
     private fun assertNoTextOverflow(label: String) {

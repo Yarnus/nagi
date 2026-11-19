@@ -25,17 +25,20 @@ fun NotificationsScreen(
     val typography = NagiThemeTokens.typography
     Column(Modifier.fillMaxSize()) {
         NagiHeader("通知", state.unreadCount?.let { "$it 条未读" } ?: "社区通知", back = back) {
+            if (state.userId != null && state.items.any { it.unread }) {
+                CapsuleButton(
+                    text = "全部已读",
+                    onClick = markAllRead,
+                    icon = NagiIcons.Check,
+                    style = CapsuleStyle.Neutral,
+                )
+            }
             ChromeIconButton(NagiIcons.Refresh, "刷新通知", onClick = refresh)
         }
         Column(Modifier.weight(1f).fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 760.dp)) {
         if (state.userId == null) {
             Notice("请先登录 NGA", login)
         } else {
-            if (state.items.any { it.unread }) {
-                Box(Modifier.fillMaxWidth().padding(horizontal = Space.lg)) {
-                    CapsuleButton("全部已读", markAllRead, style = CapsuleStyle.Neutral)
-                }
-            }
             LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(top = Space.md, bottom = Space.md + safeBottomPadding())) {
                 if (state.loading) item { LoadingLine() }
                 state.error?.let { error -> item { Notice(error, refresh) } }

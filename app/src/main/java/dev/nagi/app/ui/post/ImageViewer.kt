@@ -69,6 +69,8 @@ import coil.compose.AsyncImagePainter
 import coil.request.ImageRequest
 import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
+import dev.nagi.app.ui.components.ChromeIconButton
+import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -321,10 +323,12 @@ internal fun ImageViewer(
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (currentReady) {
                         CapsuleButton(
                             text = "保存",
+                            icon = NagiIcons.Download,
                             enabled = !busyAction,
                             onClick = {
                                 if (busyAction) return@CapsuleButton
@@ -353,6 +357,7 @@ internal fun ImageViewer(
                         )
                         CapsuleButton(
                             text = "分享",
+                            icon = NagiIcons.Share,
                             enabled = !busyAction,
                             onClick = {
                                 if (busyAction) return@CapsuleButton
@@ -376,11 +381,16 @@ internal fun ImageViewer(
                         )
                         CapsuleButton(
                             text = "还原",
+                            icon = NagiIcons.Refresh,
                             onClick = { resetSignals[currentPage] = (resetSignals[currentPage] ?: 0) + 1 },
                             style = CapsuleStyle.Neutral,
                         )
                     }
-                    CapsuleButton("关闭", close, style = CapsuleStyle.Neutral)
+                    ChromeIconButton(
+                        icon = NagiIcons.Close,
+                        description = "关闭",
+                        onClick = close,
+                    )
                 }
             }
             HorizontalPager(
@@ -480,12 +490,27 @@ private fun ImageViewerPage(
             },
         )
         when (loadState) {
-            is AsyncImagePainter.State.Error -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("图片加载失败")
-                CapsuleButton("重试", { attempt++ }, style = CapsuleStyle.Neutral)
+            is AsyncImagePainter.State.Error -> Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "图片加载失败",
+                    style = NagiThemeTokens.typography.body,
+                    color = NagiThemeTokens.colors.textSecondary,
+                )
+                CapsuleButton(
+                    text = "重试",
+                    onClick = { attempt++ },
+                    icon = NagiIcons.Refresh,
+                    style = CapsuleStyle.Neutral,
+                )
             }
             is AsyncImagePainter.State.Success -> Unit
-            else -> CircularProgressIndicator()
+            else -> CircularProgressIndicator(
+                color = NagiThemeTokens.colors.goldAccent,
+                strokeWidth = 2.dp,
+            )
         }
     }
 }

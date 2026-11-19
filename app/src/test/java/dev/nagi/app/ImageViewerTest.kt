@@ -68,7 +68,7 @@ class ImageViewerTest {
         viewport.assert(SemanticsMatcher("pinch zoomed") {
             it.config[androidx.compose.ui.semantics.SemanticsProperties.StateDescription] != "缩放 100%"
         })
-        compose.onNodeWithText("关闭").performClick()
+        compose.onNodeWithContentDescription("关闭").performClick()
         viewport.assertDoesNotExist()
         compose.runOnIdle { open = true }
         viewport.assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "缩放 100%"))
@@ -93,7 +93,7 @@ class ImageViewerTest {
         compose.onNodeWithText("图片加载失败").assertExists()
         compose.onNodeWithText("重试").performClick()
         compose.onNodeWithText("还原").assertExists()
-        compose.onNodeWithText("关闭").performClick()
+        compose.onNodeWithContentDescription("关闭").performClick()
         compose.onNodeWithTag("image-viewport").assertDoesNotExist()
     }
 

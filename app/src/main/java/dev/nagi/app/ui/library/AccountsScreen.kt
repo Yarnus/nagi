@@ -112,6 +112,7 @@ fun AccountsScreen(
                     CapsuleButton(
                         text = if (account.userId == null) "登录 NGA" else "添加登录",
                         onClick = login,
+                        icon = if (account.userId == null) NagiIcons.Person else NagiIcons.Plus,
                         enabled = !account.busy,
                         style = CapsuleStyle.Neutral,
                     )
@@ -119,6 +120,7 @@ fun AccountsScreen(
                         CapsuleButton(
                             text = "退出当前账号",
                             onClick = vm::logout,
+                            icon = NagiIcons.Logout,
                             enabled = !account.busy,
                             style = CapsuleStyle.Destructive,
                         )

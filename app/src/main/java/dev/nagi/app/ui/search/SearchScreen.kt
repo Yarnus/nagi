@@ -48,6 +48,7 @@ import dev.nagi.app.ui.components.ChromeIconButton
 import dev.nagi.app.ui.components.ForumScopePickerSheet
 import dev.nagi.app.ui.components.LoadingLine
 import dev.nagi.app.ui.components.NagiIcons
+import dev.nagi.app.ui.components.NagiSearchTextField
 import dev.nagi.app.ui.components.Notice
 import dev.nagi.app.ui.components.ProgressiveBlurScaffold
 import dev.nagi.app.ui.components.SectionCardItem
@@ -114,61 +115,27 @@ fun SearchScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Space.sm),
             ) {
-                OutlinedTextField(
+                NagiSearchTextField(
                     value = state.query,
                     onValueChange = vm::editQuery,
+                    placeholder = if (scoped) "搜索当前版面" else "搜索",
+                    clearDescription = "清空搜索",
+                    onClear = {
+                        vm.editQuery("")
+                        focus.requestFocus()
+                        keyboard?.show()
+                    },
+                    onSubmit = {
+                        if (state.query.isNotBlank()) submit(state.mode ?: SearchMode.TOPICS)
+                    },
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 52.dp)
                         .focusRequester(focus),
-                    textStyle = typography.body.copy(color = colors.textPrimary),
-                    placeholder = {
-                        Text(
-                            text = if (scoped) "搜索当前版面" else "搜索",
-                            style = typography.body,
-                            color = colors.textSecondary,
-                        )
-                    },
-                    singleLine = true,
-                    shape = CircleShape,
-                    leadingIcon = {
-                        Icon(
-                            imageVector = NagiIcons.Search,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = colors.textSecondary,
-                        )
-                    },
-                    trailingIcon = if (state.query.isNotEmpty()) {
-                        {
-                            IconButton(
-                                onClick = {
-                                    vm.editQuery("")
-                                    focus.requestFocus()
-                                    keyboard?.show()
-                                },
-                            ) {
-                                Icon(
-                                    imageVector = NagiIcons.ClearCircle,
-                                    contentDescription = "清空搜索",
-                                    modifier = Modifier.size(18.dp),
-                                    tint = colors.textSecondary,
-                                )
-                            }
-                        }
-                    } else null,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(
-                        onSearch = {
-                            if (state.query.isNotBlank()) submit(state.mode ?: SearchMode.TOPICS)
-                        },
-                    ),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = colors.frostedChrome,
-                        unfocusedContainerColor = colors.frostedChrome,
-                        focusedBorderColor = colors.goldAccent,
-                        unfocusedBorderColor = colors.cardBorder,
-                    ),
+                    containerColor = colors.frostedChrome,
+                    focusedContainerColor = colors.frostedChrome,
+                    borderColor = colors.cardBorder,
+                    focusedBorderColor = colors.goldAccent,
                 )
                 ChromeIconButton(
                     icon = NagiIcons.Close,
@@ -203,6 +170,7 @@ fun SearchScreen(
                             text = "搜索范围：${state.forumName ?: "所有版块"}（切换）",
                             onClick = { choosingScope = true },
                             icon = NagiIcons.ForumStack,
+                            trailingIcon = NagiIcons.ChevronDown,
                             style = CapsuleStyle.SelectedGold,
                         )
                     }

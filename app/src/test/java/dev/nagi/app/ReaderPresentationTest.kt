@@ -166,7 +166,7 @@ class ReaderPresentationTest {
         compose.onNodeWithText("#0").assertExists()
         compose.onNodeWithContentDescription("帖子图片，点击查看").performScrollTo().performClick()
         compose.onNodeWithContentDescription("帖子图片").assertIsDisplayed()
-        compose.onNodeWithText("关闭").performClick()
+        compose.onNodeWithContentDescription("关闭").performClick()
         compose.onNode(hasScrollToIndexAction()).performScrollToIndex(1)
         compose.onNodeWithText("回复 测试楼主").assertIsDisplayed()
         compose.onNodeWithText("引用正文：保持中文阅读节奏。").assertIsDisplayed()

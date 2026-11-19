@@ -56,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.nagi.app.ui.components.AccountMenuButton
 import dev.nagi.app.ui.components.CardGroupPosition
 import dev.nagi.app.ui.components.ChromeIconButton
+import dev.nagi.app.ui.components.FrostedDropdownDivider
 import dev.nagi.app.ui.components.FrostedDropdownItem
 import dev.nagi.app.ui.components.FrostedDropdownMenu
 import dev.nagi.app.ui.components.GoldTagBadge
@@ -206,15 +207,11 @@ internal fun ForumDirectory(
                                     refreshAll()
                                 },
                             )
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.xs),
-                                thickness = 1.dp,
-                                color = colors.cardBorder,
-                            )
+                            FrostedDropdownDivider()
                             FrostedDropdownItem(
                                 text = "管理收藏",
                                 supporting = "本地收藏话题与 NGA 收藏版块",
-                                leadingIcon = NagiIcons.Star,
+                                leadingIcon = NagiIcons.Bookmark,
                                 onClick = {
                                     menuExpanded = false
                                     onSelect("favorites")

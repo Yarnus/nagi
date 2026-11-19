@@ -134,6 +134,72 @@ fun ChromeIconButton(
     }
 }
 
+/**
+ * Shared compact icon action with a guaranteed 48x48dp touch target, circular press scale/wash,
+ * and optional selected state semantics for inline row actions (e.g., post floor actions, list item removal).
+ */
+@Composable
+fun NagiIconAction(
+    icon: ImageVector,
+    description: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    selected: Boolean? = null,
+    state: String? = null,
+    iconSize: Dp = 18.dp,
+    visualSize: Dp = 36.dp,
+    tint: Color = NagiThemeTokens.colors.textSecondary,
+) {
+    val colors = NagiThemeTokens.colors
+    val interactionSource = remember { MutableInteractionSource() }
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .clickable(
+                enabled = enabled,
+                role = Role.Button,
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            )
+            .semantics {
+                contentDescription = description
+                if (selected != null) this.selected = selected
+                if (state != null) stateDescription = state
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(visualSize)
+                .nagiPressFeedback(
+                    interactionSource = interactionSource,
+                    enabled = enabled,
+                    pressedScale = 0.90f,
+                    shape = CircleShape,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (loading) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(iconSize),
+                    strokeWidth = 2.dp,
+                    color = colors.goldAccent,
+                )
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(iconSize),
+                    tint = tint.copy(alpha = if (enabled) 1f else 0.38f),
+                )
+            }
+        }
+    }
+}
+
 enum class CapsuleStyle {
     Neutral,
     FrostedGold,
@@ -174,6 +240,7 @@ fun CapsuleButton(
 
     Box(
         modifier = modifier
+            .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier)
             .sizeIn(minWidth = 48.dp, minHeight = minTouchHeight)
             .clickable(
                 enabled = enabled,

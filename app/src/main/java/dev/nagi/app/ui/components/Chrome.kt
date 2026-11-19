@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.rememberTransition
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,6 +36,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -47,11 +51,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
@@ -307,13 +315,16 @@ fun FrostedDropdownMenu(
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun FrostedDropdownItem(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     supporting: String? = null,
+    badge: String? = null,
     leadingIcon: ImageVector? = null,
+    leadingContent: (@Composable () -> Unit)? = null,
     selected: Boolean = false,
     destructive: Boolean = false,
     enabled: Boolean = true,
@@ -329,11 +340,26 @@ fun FrostedDropdownItem(
     DropdownMenuItem(
         text = {
             Column {
-                Text(
-                    text = text,
-                    style = typography.body,
-                    color = labelColor,
-                )
+                if (badge != null) {
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                        verticalArrangement = Arrangement.spacedBy(Space.xs),
+                        itemVerticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = text,
+                            style = typography.body,
+                            color = labelColor,
+                        )
+                        GoldTagBadge(badge)
+                    }
+                } else {
+                    Text(
+                        text = text,
+                        style = typography.body,
+                        color = labelColor,
+                    )
+                }
                 if (supporting != null) {
                     Text(
                         text = supporting,
@@ -343,7 +369,7 @@ fun FrostedDropdownItem(
                 }
             }
         },
-        leadingIcon = leadingIcon?.let { icon ->
+        leadingIcon = leadingContent ?: leadingIcon?.let { icon ->
             {
                 Icon(
                     imageVector = icon,
@@ -375,6 +401,72 @@ fun FrostedDropdownItem(
 }
 
 @Composable
+fun FrostedDropdownDivider(modifier: Modifier = Modifier) {
+    HorizontalDivider(
+        modifier = modifier.padding(horizontal = Space.lg, vertical = Space.xs),
+        thickness = 1.dp,
+        color = NagiThemeTokens.colors.cardBorder,
+    )
+}
+
+/**
+ * Shared header row for Nagi dialogs and floating frosted sheets.
+ */
+@Composable
+fun NagiSheetHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    closeDescription: String = "关闭面板",
+    onClose: (() -> Unit)? = null,
+    trailing: (@Composable RowScope.() -> Unit)? = null,
+) {
+    val colors = NagiThemeTokens.colors
+    val typography = NagiThemeTokens.typography
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(
+                start = Space.lg,
+                end = if (onClose != null && trailing == null) Space.sm else Space.lg,
+                top = Space.md,
+                bottom = Space.xs,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = typography.sectionTitle,
+                color = colors.textPrimary,
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = typography.metadata,
+                    color = colors.textSecondary,
+                )
+            }
+        }
+        if (trailing != null) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Space.xs),
+                content = trailing,
+            )
+        }
+        if (onClose != null) {
+            ChromeIconButton(
+                icon = NagiIcons.Close,
+                description = closeDescription,
+                onClick = onClose,
+            )
+        }
+    }
+}
+
+@Composable
 fun Notice(message: String, retry: (() -> Unit)? = null) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
@@ -395,6 +487,7 @@ fun Notice(message: String, retry: (() -> Unit)? = null) {
             CapsuleButton(
                 text = "重试",
                 onClick = retry,
+                icon = NagiIcons.Refresh,
                 style = CapsuleStyle.Neutral,
             )
         }
@@ -442,12 +535,14 @@ fun InlineStatusBanner(
                 CapsuleButton(
                     text = "登录",
                     onClick = openLogin!!,
+                    icon = NagiIcons.Person,
                     style = CapsuleStyle.Neutral,
                 )
             } else if (retry != null) {
                 CapsuleButton(
                     text = "重试",
                     onClick = retry,
+                    icon = NagiIcons.Refresh,
                     style = CapsuleStyle.Neutral,
                 )
             }
@@ -463,6 +558,77 @@ fun LoadingLine() {
             .height(2.dp),
         color = NagiThemeTokens.colors.goldAccent,
         trackColor = Color.Transparent,
+    )
+}
+
+/**
+ * Shared Nagi capsule search/filter input field with a 48x48dp clear action and press feedback.
+ */
+@Composable
+fun NagiSearchTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    clearDescription: String = "清除输入",
+    onClear: () -> Unit = { onValueChange("") },
+    onSubmit: (() -> Unit)? = null,
+    imeAction: ImeAction = ImeAction.Search,
+    shape: Shape = CircleShape,
+    containerColor: Color = NagiThemeTokens.colors.cardSurface,
+    focusedContainerColor: Color = containerColor,
+    borderColor: Color = NagiThemeTokens.colors.cardBorder,
+    focusedBorderColor: Color = NagiThemeTokens.colors.goldAccent,
+) {
+    val colors = NagiThemeTokens.colors
+    val typography = NagiThemeTokens.typography
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        singleLine = true,
+        shape = shape,
+        textStyle = typography.body.copy(color = colors.textPrimary),
+        placeholder = {
+            Text(
+                text = placeholder,
+                style = typography.body,
+                color = colors.textSecondary,
+            )
+        },
+        leadingIcon = {
+            Icon(
+                imageVector = NagiIcons.Search,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = colors.textSecondary,
+            )
+        },
+        trailingIcon = if (value.isNotEmpty()) {
+            {
+                NagiIconAction(
+                    icon = NagiIcons.ClearCircle,
+                    description = clearDescription,
+                    onClick = onClear,
+                    iconSize = 18.dp,
+                    visualSize = 36.dp,
+                    tint = colors.textSecondary,
+                )
+            }
+        } else null,
+        keyboardOptions = KeyboardOptions(imeAction = imeAction),
+        keyboardActions = KeyboardActions(
+            onSearch = { onSubmit?.invoke() },
+            onDone = { onSubmit?.invoke() },
+            onGo = { onSubmit?.invoke() },
+        ),
+        colors = OutlinedTextFieldDefaults.colors(
+            unfocusedContainerColor = containerColor,
+            focusedContainerColor = focusedContainerColor,
+            unfocusedBorderColor = borderColor,
+            focusedBorderColor = focusedBorderColor,
+            cursorColor = colors.goldAccent,
+        ),
     )
 }
 

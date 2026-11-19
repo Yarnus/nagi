@@ -296,6 +296,7 @@ internal fun PostShareCardDialog(
                     text = if (cardDark) "深色卡片" else "浅色卡片",
                     onClick = { cardDark = !cardDark },
                     modifier = Modifier.testTag("share-card-theme-toggle"),
+                    icon = NagiIcons.Tuning,
                     style = CapsuleStyle.Neutral,
                     enabled = !exporting,
                     stateDescription = if (cardDark) "已选深色，点击切换为浅色" else "已选浅色，点击切换为深色",

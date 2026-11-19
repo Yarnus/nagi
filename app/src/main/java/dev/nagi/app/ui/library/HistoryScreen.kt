@@ -39,7 +39,9 @@ import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.CardGroupPosition
 import dev.nagi.app.ui.components.ChromeIconButton
 import dev.nagi.app.ui.components.NagiHeader
+import dev.nagi.app.ui.components.NagiIconAction
 import dev.nagi.app.ui.components.NagiIcons
+import dev.nagi.app.ui.components.NagiSearchTextField
 import dev.nagi.app.ui.components.Notice
 import dev.nagi.app.ui.components.SectionCardItem
 import dev.nagi.app.ui.components.safeBottomPadding
@@ -112,30 +114,14 @@ fun HistoryScreen(vm: LibraryViewModel, back: () -> Unit, read: (String) -> Unit
             }
         }
         if (history.isNotEmpty() || query.isNotEmpty()) {
-            OutlinedTextField(
+            NagiSearchTextField(
                 value = query,
                 onValueChange = { query = it },
+                placeholder = "筛选历史标题或主题 ID",
+                clearDescription = "清除筛选",
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = Space.lg, vertical = Space.sm),
-                singleLine = true,
-                shape = NagiThemeTokens.shapes.topicCard,
-                textStyle = typography.body.copy(color = colors.textPrimary),
-                placeholder = { Text("筛选历史标题或主题 ID", style = typography.body, color = colors.textSecondary) },
-                leadingIcon = { Icon(NagiIcons.Search, contentDescription = null, modifier = Modifier.size(18.dp), tint = colors.textSecondary) },
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = { query = "" }, modifier = Modifier.size(48.dp)) {
-                            Icon(NagiIcons.ClearCircle, contentDescription = "清除筛选", modifier = Modifier.size(18.dp), tint = colors.textSecondary)
-                        }
-                    }
-                },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = colors.cardSurface,
-                    unfocusedContainerColor = colors.cardSurface,
-                    focusedBorderColor = colors.goldAccent,
-                    unfocusedBorderColor = colors.cardBorder,
-                ),
             )
         }
         LazyColumn(contentPadding = PaddingValues(top = Space.lg, bottom = Space.lg + safeBottomPadding())) {
@@ -153,12 +139,14 @@ fun HistoryScreen(vm: LibraryViewModel, back: () -> Unit, read: (String) -> Unit
                                     },
                                 )
                             }
-                            .padding(horizontal = Space.lg, vertical = Space.md),
+                            .padding(start = Space.lg, end = Space.sm, top = Space.sm, bottom = Space.sm),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                        horizontalArrangement = Arrangement.spacedBy(Space.xs),
                     ) {
                         Column(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(vertical = Space.xs),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             Text(
@@ -174,10 +162,11 @@ fun HistoryScreen(vm: LibraryViewModel, back: () -> Unit, read: (String) -> Unit
                                 color = colors.textSecondary,
                             )
                         }
-                        CapsuleButton(
-                            text = "移除",
+                        NagiIconAction(
+                            icon = NagiIcons.Trash,
+                            description = "移除",
                             onClick = { vm.removeHistory(item.topicId) },
-                            style = CapsuleStyle.Neutral,
+                            tint = colors.textSecondary,
                         )
                     }
                 }

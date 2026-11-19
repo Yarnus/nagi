@@ -17,7 +17,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -44,6 +43,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import dev.nagi.app.data.ReadingPreferences
+import dev.nagi.app.ui.components.CapsuleButton
+import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.FlatCard
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.theme.NagiThemeTokens
@@ -218,16 +219,18 @@ private fun RenderContentBlocks(
                     }
                 }
 
-                is ContentBlock.Media -> OutlinedButton(
-                    onClick = { uriHandler.openUri(block.url) },
-                    modifier = Modifier.heightIn(min = 48.dp),
-                ) {
+                is ContentBlock.Media -> {
                     val label = when (block.kind) {
                         MediaKind.AUDIO -> "打开音频"
                         MediaKind.VIDEO -> "打开视频"
                         MediaKind.ATTACHMENT -> "打开附件"
                     }
-                    Text("$label：${block.url.substringBefore('?').substringAfterLast('/').ifBlank { block.url }}")
+                    CapsuleButton(
+                        text = "$label：${block.url.substringBefore('?').substringAfterLast('/').ifBlank { block.url }}",
+                        onClick = { uriHandler.openUri(block.url) },
+                        icon = NagiIcons.Link,
+                        style = CapsuleStyle.Neutral,
+                    )
                 }
 
                 is ContentBlock.Dice -> Text(

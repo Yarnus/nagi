@@ -61,7 +61,8 @@ Nagi 使用中性背景、金色强调和胶囊控件。内容卡片不使用阴
 - 卡片：零阴影、1dp 边框；分组圆角 20dp，主题卡片 16dp。
   正文引用摘要例外：使用 InsetContainer、12dp 圆角且无边框；整卡暴露按钮角色及查看原文操作。
 - 按钮、搜索条和分段控件：胶囊或圆形；每个独立操作热区至少 48×48dp。
-  圆形导航按钮默认视觉直径 42dp；分段标签等宽，大字号时可换行增高。
+  圆形导航按钮（`ChromeIconButton`）默认视觉直径 42dp；行内或列表项尾部紧凑图标操作（`NagiIconAction`）默认视觉直径 36dp、外层热区 48×48dp；分段标签等宽，大字号时可换行增高。
+  搜索与本地筛选输入框统一复用 `NagiSearchTextField`，使用胶囊外形与带 `nagiPressFeedback` 的 48dp 清空按钮。
 - 开关：平面白色滑块；浅色开启轨道 `#C09D73`、关闭 `#E5E7EB`，深色分别为
   `#D6BA8B`、`#2A2C33`。暴露开关角色及开关状态。
 - 用户文字标记：中性胶囊，复用标签字号，水平 8dp、垂直 2.5dp 内边距；与同列作者信息居中对齐。
@@ -75,8 +76,8 @@ Nagi 使用中性背景、金色强调和胶囊控件。内容卡片不使用阴
   - `fallback`（Android 31 以下、省电、关闭系统动画、禁用模糊或脱离 `HazeState` 容器时）：使用静态语义底色（`chrome` 98% `GroupedCanvas`、`capsule` 不透明白/`#1C1D22`、`menu` 96%）；
   - 玻璃描边与阴影：`0.5dp` 发丝描边（浅色 8% 黑、深色 12% 白；自定义强调态如只看楼主金底胶囊保留对应边框）+ 上方 40% 高度内高光；仅悬浮控件使用淡环境阴影（y 6dp、模糊 20dp、浅色 9% 黑、深色 3% 黑），顶栏/底栏边缘保持 `0dp` 阴影。
   - 仅深色下开启极微弱噪点（`0.04`）抑制色带，浅色关闭。模糊仅作用于有界边缘与悬浮控件自身形状；帖子正文和列表项不应用实时模糊，滚动时状态在图层阶段读取不触发重组。
-- 点击反馈：全局 `LocalIndication` 使用无扩散波纹的瞬态微压高光（浅色 4.2% `#1F1A12`、深色 6.5% 白色），`LocalRippleConfiguration` 同步收敛。悬浮按钮、圆钮、停靠栏动作与 `CapsuleButton` 统一使用 `nagiPressFeedback`（按压微缩 0.90x–0.985x + 视觉轮廓内柔和按压蒙层），不在外层 48dp 触控热区溢出灰圈或裁切阴影。
-- 弹窗与浮动提示：确认弹窗、详情弹窗、轻量选择/操作面板与下拉菜单统一复用共享 `NagiDialog` / `NagiConfirmDialog` / `NagiFrostedSheet` / `ForumScopePickerSheet` / `FrostedDropdownMenu`（基于 `FrostedSurface`，使用 `menu` 材质、`20dp` 圆角、发丝描边、顶部内高光与淡悬浮阴影，支持跨窗口实时模糊、柔和背景遮罩与静态回退）；磨砂列表面板内使用透明行配细分隔线，不嵌套不透明卡片。长阅读引用原文面板与编辑器抽屉保留实底容器（`CardSurface` / `GroupedCanvas`），不直接使用原生 Material `AlertDialog`。
+- 点击反馈：全局 `LocalIndication` 使用无扩散波纹的瞬态微压高光（浅色 4.2% `#1F1A12`、深色 6.5% 白色），`LocalRippleConfiguration` 同步收敛。悬浮按钮、圆钮、停靠栏动作、`NagiIconAction` 与 `CapsuleButton` 统一使用 `nagiPressFeedback`（按压微缩 0.90x–0.985x + 视觉轮廓内柔和按压蒙层），不在外层 48dp 触控热区溢出灰圈或裁切阴影。
+- 弹窗与浮动提示：确认弹窗、详情弹窗、轻量选择/操作面板与下拉菜单统一复用共享 `NagiDialog` / `NagiConfirmDialog` / `NagiFrostedSheet` / `ForumScopePickerSheet` / `FrostedDropdownMenu`（基于 `FrostedSurface`，使用 `menu` 材质、`20dp` 圆角、发丝描边、顶部内高光与淡悬浮阴影，支持跨窗口实时模糊、柔和背景遮罩与静态回退）；下拉菜单条目与分隔线统一复用 `FrostedDropdownItem` 与 `FrostedDropdownDivider`；悬浮面板顶栏统一复用 `NagiSheetHeader`；磨砂列表面板内使用透明行配细分隔线，不嵌套不透明卡片。长阅读引用原文面板与编辑器抽屉保留实底容器（`CardSurface` / `GroupedCanvas`），不直接使用原生 Material `AlertDialog` 或未统一的 `Dialog`。
   链接或上下文摘要放在 `InsetContainer`（`12dp` 圆角、无边框）内嵌区中；操作区使用等宽加宽的 `CapsuleButton` 撑满所在行（次操作 `Neutral`，常规确认 `SelectedGold`，警示操作 `Destructive`），窄屏或大字号下自动纵排。
 
 ## 列表与状态

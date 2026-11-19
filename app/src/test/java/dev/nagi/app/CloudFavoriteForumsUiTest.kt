@@ -148,7 +148,7 @@ class CloudFavoriteForumsUiTest {
         compose.onAllNodesWithText("主题合集").assertCountEquals(2)
 
         // Removal requires confirmation dialog
-        compose.onAllNodesWithText("移除").onLast().performClick()
+        compose.onAllNodesWithContentDescription("移除").onLast().performClick()
         compose.onNodeWithText("取消 NGA 收藏版块？").assertIsDisplayed()
         compose.onNode(hasText("移除") and hasAnyAncestor(isDialog())).performClick()
         compose.waitUntil(3000) {
