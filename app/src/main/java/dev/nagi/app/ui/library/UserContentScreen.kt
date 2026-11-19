@@ -61,7 +61,7 @@ fun UserContentScreen(
     val profile = profileVm.state.collectAsStateWithLifecycle().value
     val scrollStates = rememberSaveableStateHolder()
     Column(Modifier.fillMaxSize()) {
-        NagiHeader("用户详情", "UID ${vm.userId}", back = back) {
+        NagiHeader("用户详情", back = back) {
             ChromeIconButton(NagiIcons.Refresh, "刷新", onClick = { profileVm.refresh(); vm.refresh() })
         }
         Column(Modifier.weight(1f).fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 760.dp)) {
@@ -116,7 +116,7 @@ fun UserContentScreen(
                                 )
                             }
                             EdgeAlignedMetaRow(
-                                leading = { Text("查看主题 · 回复 ${reply.postId}", style = typography.metadata, color = colors.goldText) },
+                                leading = { Text("查看主题", style = typography.metadata, color = colors.goldText) },
                                 trailing = {
                                     if (reply.createdAt > 0) Text(formatTime(reply.createdAt), style = typography.metadata, color = colors.textSecondary)
                                 },
@@ -152,11 +152,13 @@ fun UserContentScreen(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 val ts = topic.createdAt.takeIf { it > 0 } ?: topic.lastActiveAt
-                                Text(
-                                    text = if (ts > 0) "${topic.replies} 条回复 · ${formatTime(ts)}" else "${topic.replies} 条回复",
-                                    style = typography.metadata,
-                                    color = colors.textSecondary,
-                                )
+                                if (ts > 0) {
+                                    Text(
+                                        text = formatTime(ts),
+                                        style = typography.metadata,
+                                        color = colors.textSecondary,
+                                    )
+                                }
                             }
                             ReplyCountPill(count = topic.replies)
                         }

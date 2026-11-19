@@ -65,6 +65,7 @@ import dev.nagi.app.ui.components.LoadingLine
 import dev.nagi.app.ui.components.LocalOpenLogin
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.NagiPullToRefreshBox
+import dev.nagi.app.ui.components.NeutralTagBadge
 import dev.nagi.app.ui.components.Notice
 import dev.nagi.app.ui.components.ProgressiveBlurScaffold
 import dev.nagi.app.ui.components.SearchCapsuleBar
@@ -561,7 +562,7 @@ private fun ForumDirectoryRow(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(Space.xs),
                     ) {
-                        GoldTagBadge(text = "主题合集")
+                        NeutralTagBadge(text = "主题合集")
                     }
                 }
             }

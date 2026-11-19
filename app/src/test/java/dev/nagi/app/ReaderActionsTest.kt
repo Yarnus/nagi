@@ -204,7 +204,8 @@ class ReaderActionsTest {
             }
         } }
         compose.onNodeWithText("108").assertExists()
-        compose.onAllNodesWithText("威望: 1.0  发帖: 560").onFirst().assertExists()
+        compose.onAllNodesWithContentDescription("威望 1.0").onFirst().assertExists()
+        compose.onAllNodesWithContentDescription("发帖 560").onFirst().assertExists()
         compose.onAllNodesWithText("级别:", substring = true).assertCountEquals(0)
         val up = compose.onNodeWithContentDescription("点赞第 5 楼")
         val down = compose.onNodeWithContentDescription("点踩第 5 楼")

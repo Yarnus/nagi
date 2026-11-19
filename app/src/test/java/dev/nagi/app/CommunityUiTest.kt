@@ -75,9 +75,9 @@ class CommunityUiTest {
                 }
             }
         }
-        compose.onNodeWithText("IP 属地：", substring = true).assertDoesNotExist()
-        compose.onNodeWithText("注册时间：", substring = true).assertDoesNotExist()
-        compose.onNodeWithText("发送短消息").assertDoesNotExist()
+        compose.onAllNodesWithContentDescription("IP 属地：", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("注册时间：", substring = true).assertCountEquals(0)
+        compose.onNodeWithContentDescription("发送短消息").assertDoesNotExist()
         compose.onNodeWithText("展开签名").performClick()
         compose.onNodeWithText("收起签名").performClick()
         compose.onNodeWithText("展开签名").assertIsDisplayed()
@@ -134,15 +134,15 @@ class CommunityUiTest {
                 }
             }
         }
-        compose.onNodeWithText("IP 属地：上海").assertIsDisplayed()
-        compose.onNodeWithText("注册时间：2001-09-09").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("IP 属地：上海").assertIsDisplayed()
+        compose.onNodeWithContentDescription("注册时间：2001-09-09").performScrollTo().assertIsDisplayed()
         val width = RuntimeEnvironment.getApplication().resources.configuration.screenWidthDp
         capture("profile-$width-$theme-$scale")
         if (width > 760) {
-            val card = compose.onNodeWithText("IP 属地：上海").fetchSemanticsNode().boundsInRoot
+            val card = compose.onNodeWithContentDescription("IP 属地：上海").fetchSemanticsNode().boundsInRoot
             assertTrue(card.left > 100f)
         }
-        compose.onNodeWithText("发送短消息").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("发送短消息").performScrollTo().performClick()
         compose.runOnIdle { assertEquals("这是名字很长的测试用户", target) }
         compose.onNodeWithText("回复").performScrollTo().performClick()
         compose.onNodeWithText("我的回复摘要").performScrollTo().assertIsDisplayed()

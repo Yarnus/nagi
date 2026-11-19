@@ -356,7 +356,7 @@ internal fun PostShareCardDialog(
             else -> {
                 if (pendingImages > 0) {
                     Text(
-                        text = "正在加载图片（剩余 $pendingImages 张）…",
+                        text = "正在准备图片…",
                         style = typography.metadata,
                         color = currentColors.textSecondary,
                     )
@@ -434,12 +434,7 @@ internal fun PostShareCardSurface(
 ) {
     val cardColors = if (darkCard) DarkSemanticColors else LightSemanticColors
     val typography = NagiThemeTokens.typography
-    val metaSegments = remember(post.authorReputation, post.authorPosts) {
-        buildList {
-            post.authorReputation?.takeIf { it.isNotBlank() }?.let { add("威望: $it") }
-            post.authorPosts?.let { add("发帖: $it") }
-        }
-    }
+    val hasAuthorStats = !post.authorReputation.isNullOrBlank() || post.authorPosts != null
 
     CompositionLocalProvider(
         LocalNagiColors provides cardColors,
@@ -522,19 +517,21 @@ internal fun PostShareCardSurface(
                         color = cardColors.textPrimary,
                     )
                 }
-                Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = cardColors.goldContainer,
-                    border = BorderStroke(1.dp, cardColors.goldBorder),
-                    shadowElevation = 0.dp,
-                    tonalElevation = 0.dp,
-                ) {
-                    Text(
-                        text = "主楼摘录",
-                        style = typography.metadata.copy(fontWeight = FontWeight.Medium),
-                        color = cardColors.goldText,
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
-                    )
+                if (content.truncated) {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = cardColors.goldContainer,
+                        border = BorderStroke(1.dp, cardColors.goldBorder),
+                        shadowElevation = 0.dp,
+                        tonalElevation = 0.dp,
+                    ) {
+                        Text(
+                            text = "已节选",
+                            style = typography.metadata.copy(fontWeight = FontWeight.Medium),
+                            color = cardColors.goldText,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+                        )
+                    }
                 }
             }
 
@@ -599,11 +596,10 @@ internal fun PostShareCardSurface(
                                         )
                                         GoldTagBadge(text = "楼主")
                                     }
-                                    if (metaSegments.isNotEmpty()) {
-                                        Text(
-                                            text = metaSegments.joinToString("  "),
-                                            style = typography.metadata,
-                                            color = cardColors.textSecondary,
+                                    if (hasAuthorStats) {
+                                        PostAuthorMetaStats(
+                                            reputation = post.authorReputation,
+                                            posts = post.authorPosts,
                                         )
                                     }
                                 }
@@ -659,7 +655,7 @@ internal fun PostShareCardSurface(
                                 .padding(horizontal = Space.md, vertical = Space.sm),
                         ) {
                             Text(
-                                text = "内容较长，已节选部分展示，完整内容请查看原帖",
+                                text = "内容已节选 · 完整内容请查看原帖",
                                 style = typography.metadata,
                                 color = cardColors.textSecondary,
                             )

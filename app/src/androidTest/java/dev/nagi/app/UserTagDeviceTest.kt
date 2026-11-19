@@ -68,19 +68,19 @@ class UserTagDeviceTest {
                 }
             }
         } }
-        compose.onNodeWithText("添加标记").performClick()
+        compose.onNodeWithContentDescription("添加标记").performClick()
         compose.onNode(hasSetTextAction()).performTextInput("攻略作者")
         compose.onNodeWithText("保存").performClick()
         compose.onNodeWithText("攻略作者").assertIsDisplayed()
-        compose.onNodeWithText("编辑标记").performClick()
+        compose.onNodeWithContentDescription("编辑标记").performClick()
         compose.onNode(hasSetTextAction()).performTextReplacement("x".repeat(25))
         compose.onNodeWithText("保存").assertIsNotEnabled()
         compose.onNode(hasSetTextAction()).performTextReplacement("朋友")
         compose.onNodeWithText("保存").performClick()
         compose.onNodeWithText("朋友").assertIsDisplayed()
-        compose.onNodeWithText("编辑标记").performClick()
+        compose.onNodeWithContentDescription("编辑标记").performClick()
         compose.onNodeWithText("删除标记").performClick()
         compose.onNodeWithText("朋友").assertDoesNotExist()
-        compose.onNodeWithText("添加标记").assertIsDisplayed()
+        compose.onNodeWithContentDescription("添加标记").assertIsDisplayed()
     }
 }

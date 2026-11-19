@@ -1,7 +1,11 @@
 package dev.nagi.app.ui.components
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.Alignment
 import androidx.compose.material3.Surface
@@ -9,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -37,7 +42,7 @@ internal fun UserTagBadge(userId: String) {
 }
 
 @Composable
-internal fun UserTagEditor(userId: String) {
+internal fun UserTagEditor(userId: String, iconOnly: Boolean = false) {
     if (!isPublicUserId(userId)) return
     val access = LocalUserTags.current
     val state = access.state
@@ -49,15 +54,60 @@ internal fun UserTagEditor(userId: String) {
     var editing by rememberSaveable(userId, state.revision) { mutableStateOf(false) }
     var draft by rememberSaveable(userId, state.revision) { mutableStateOf("") }
     var attempted by remember(userId, state.revision) { mutableStateOf(false) }
-    CapsuleButton(
-        text = if (tag.isEmpty()) "添加标记" else "编辑标记",
-        onClick = {
-            draft = tag; attempted = false; editing = true
-        },
-        icon = NagiIcons.Tag,
-        enabled = !state.saving,
-        style = CapsuleStyle.Neutral,
-    )
+    val actionLabel = if (tag.isEmpty()) "添加标记" else "编辑标记"
+    if (iconOnly) {
+        val colors = NagiThemeTokens.colors
+        val interactionSource = remember { MutableInteractionSource() }
+        Box(
+            modifier = Modifier
+                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                .clickable(
+                    enabled = !state.saving,
+                    role = Role.Button,
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClickLabel = actionLabel,
+                    onClick = { draft = tag; attempted = false; editing = true },
+                )
+                .semantics { contentDescription = actionLabel },
+            contentAlignment = Alignment.Center,
+        ) {
+            Surface(
+                modifier = Modifier
+                    .size(36.dp)
+                    .nagiPressFeedback(
+                        interactionSource = interactionSource,
+                        enabled = !state.saving,
+                        pressedScale = 0.92f,
+                        shape = CircleShape,
+                    ),
+                shape = CircleShape,
+                color = colors.insetContainer,
+                border = BorderStroke(1.dp, colors.cardBorder),
+                shadowElevation = 0.dp,
+                tonalElevation = 0.dp,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = NagiIcons.Tag,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = colors.textSecondary.copy(alpha = if (!state.saving) 1f else 0.38f),
+                    )
+                }
+            }
+        }
+    } else {
+        CapsuleButton(
+            text = actionLabel,
+            onClick = {
+                draft = tag; attempted = false; editing = true
+            },
+            icon = NagiIcons.Tag,
+            enabled = !state.saving,
+            style = CapsuleStyle.Neutral,
+        )
+    }
     if (editing) {
         val valid = validUserTag(draft.trim())
         NagiDialog(onDismissRequest = { if (!state.saving) editing = false }) {

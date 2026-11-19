@@ -183,7 +183,7 @@ class PostShareCardTest {
         compose.onNodeWithText("主楼卡片标题").assertIsDisplayed()
         compose.onNodeWithText("测试楼主").assertIsDisplayed()
         compose.onNodeWithText("私人备注").assertDoesNotExist()
-        compose.onNodeWithText("内容较长，已节选部分展示，完整内容请查看原帖").assertExists()
+        compose.onNodeWithText("内容已节选 · 完整内容请查看原帖").assertExists()
         compose.onNodeWithText("NGA · tid 47841712").assertExists()
 
         compose.onNodeWithTag("share-card-theme-toggle").performClick()

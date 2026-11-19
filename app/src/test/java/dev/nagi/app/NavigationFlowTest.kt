@@ -224,7 +224,7 @@ class NavigationFlowTest {
         compose.onNodeWithText("回复").performClick()
         compose.activityRule.scenario.recreate()
         compose.onNodeWithText("回复").assertIsSelected()
-        compose.onNodeWithText("发送短消息").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("发送短消息").performScrollTo().performClick()
         compose.onNodeWithText("新建私信").assertIsDisplayed()
         compose.onNode(hasSetTextAction() and hasText("User")).assertExists()
         compose.onNodeWithContentDescription("关闭新建私信").performClick()
@@ -382,8 +382,8 @@ class NavigationFlowTest {
         compose.onNodeWithText("所有用户").performClick()
         compose.onNode(hasText("Test User") and hasClickAction() and !hasSetTextAction()).performClick()
         compose.onNodeWithText("用户详情").assertIsDisplayed()
-        compose.onNodeWithText("发帖：1").assertIsDisplayed()
-        compose.onNodeWithText("发送短消息").assertIsDisplayed()
+        compose.onNodeWithContentDescription("发帖：1").assertIsDisplayed()
+        compose.onNodeWithContentDescription("发送短消息").assertIsDisplayed()
     }
     @Test fun searchResultsSurviveActivityRecreation() {
         compose.onNodeWithContentDescription("搜索").performClick()

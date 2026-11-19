@@ -1,10 +1,25 @@
 package dev.nagi.app.ui.library
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.nagi.app.ui.components.*
@@ -46,48 +61,193 @@ internal fun UserProfileCard(state: UserProfileState, retry: () -> Unit, sendMes
     val signature = remember(user.signature) { contentPreview(user.signature) }
     var expanded by rememberSaveable(user.id) { mutableStateOf(false) }
     var overflow by remember(user.id, signature) { mutableStateOf(false) }
-    FlatCard(Modifier.fillMaxWidth().padding(horizontal = Space.lg, vertical = Space.sm)) {
+    val registeredDate = remember(user.registeredAt) {
+        user.registeredAt?.let { timestamp ->
+            DateTimeFormatter.ofPattern("yyyy-MM-dd")
+                .withZone(ZoneId.systemDefault())
+                .format(Instant.ofEpochSecond(timestamp))
+        }
+    }
+    val statStyle = typography.metadata.copy(
+        fontFeatureSettings = "tnum",
+        platformStyle = PlatformTextStyle(includeFontPadding = false),
+    )
+    FlatCard(Modifier.fillMaxWidth().padding(horizontal = Space.lg, vertical = Space.xs)) {
         Column(Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.md)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(Space.lg)) {
-                AccountAvatar(AccountIdentity(user = user), Modifier.size(64.dp))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.xs), verticalArrangement = Arrangement.spacedBy(Space.xs),
-                        itemVerticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Space.md),
+            ) {
+                AccountAvatar(AccountIdentity(user = user), Modifier.size(60.dp))
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Space.xs),
+                        verticalArrangement = Arrangement.spacedBy(Space.xs),
+                        itemVerticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(user.name, style = typography.sectionTitle, color = colors.textPrimary)
                         UserTagBadge(user.id)
                     }
-                    Text("UID ${user.id}", style = typography.metadata, color = colors.textSecondary)
-                }
-            }
-            user.ipLocation?.let { Text("IP 属地：$it", style = typography.body, color = colors.textSecondary) }
-            user.registeredAt?.let { timestamp ->
-                val date = remember(timestamp) { DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneId.systemDefault()).format(Instant.ofEpochSecond(timestamp)) }
-                Text("注册时间：$date", style = typography.body, color = colors.textSecondary)
-            }
-            Text("发帖：${user.posts}", style = typography.metadata, color = colors.textSecondary)
-            if (signature.isNotBlank()) {
-                Text(signature, style = typography.body, color = colors.textSecondary,
-                    maxLines = if (expanded) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis,
-                    onTextLayout = { if (!expanded) overflow = it.hasVisualOverflow })
-                if (expanded || overflow) {
-                    CapsuleButton(
-                        text = if (expanded) "收起签名" else "展开签名",
-                        onClick = { expanded = !expanded },
-                        icon = if (expanded) NagiIcons.ChevronUp else NagiIcons.ChevronDown,
-                        style = CapsuleStyle.Neutral,
+                    Text(
+                        text = "UID ${user.id}",
+                        style = statStyle,
+                        color = colors.textSecondary,
                     )
+                    FlowRow(
+                        modifier = Modifier.padding(top = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                        verticalArrangement = Arrangement.spacedBy(Space.xxs),
+                        itemVerticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ProfileMetaStat(
+                            icon = NagiIcons.Message,
+                            value = user.posts.toString(),
+                            description = "发帖：${user.posts}",
+                            style = statStyle,
+                        )
+                        user.ipLocation?.let { loc ->
+                            ProfileMetaStat(
+                                icon = NagiIcons.Globe,
+                                value = loc,
+                                description = "IP 属地：$loc",
+                                style = statStyle,
+                            )
+                        }
+                        registeredDate?.let { date ->
+                            ProfileMetaStat(
+                                icon = NagiIcons.History,
+                                value = date,
+                                description = "注册时间：$date",
+                                style = statStyle,
+                            )
+                        }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    UserTagEditor(user.id, iconOnly = true)
+                    if (viewer.userId != user.id) {
+                        val msgInteraction = remember { MutableInteractionSource() }
+                        Box(
+                            modifier = Modifier
+                                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                .clickable(
+                                    role = Role.Button,
+                                    interactionSource = msgInteraction,
+                                    indication = null,
+                                    onClickLabel = "发送短消息",
+                                    onClick = { sendMessage(user.name) },
+                                )
+                                .semantics { contentDescription = "发送短消息" },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Surface(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .nagiPressFeedback(
+                                        interactionSource = msgInteraction,
+                                        enabled = true,
+                                        pressedScale = 0.92f,
+                                        shape = CircleShape,
+                                    ),
+                                shape = CircleShape,
+                                color = colors.goldContainer,
+                                border = BorderStroke(1.dp, colors.goldBorder),
+                                shadowElevation = 0.dp,
+                                tonalElevation = 0.dp,
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = NagiIcons.Message,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = colors.goldText,
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
-                UserTagEditor(user.id)
-                if (viewer.userId != user.id) CapsuleButton(
-                    text = "发送短消息",
-                    onClick = { sendMessage(user.name) },
-                    icon = NagiIcons.Message,
-                    style = CapsuleStyle.FrostedGold,
-                    visualHeight = 42.dp,
-                )
+            if (signature.isNotBlank()) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = colors.insetContainer,
+                    shadowElevation = 0.dp,
+                    tonalElevation = 0.dp,
+                ) {
+                    Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
+                                .background(colors.goldAccent),
+                        )
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = Space.md, vertical = Space.sm),
+                            verticalArrangement = Arrangement.spacedBy(Space.xs),
+                        ) {
+                            Text(
+                                text = "签名",
+                                style = typography.metadata.copy(fontWeight = FontWeight.SemiBold),
+                                color = colors.goldText,
+                            )
+                            Text(
+                                text = signature,
+                                style = typography.body,
+                                color = colors.textSecondary,
+                                maxLines = if (expanded) Int.MAX_VALUE else 3,
+                                overflow = TextOverflow.Ellipsis,
+                                onTextLayout = { if (!expanded) overflow = it.hasVisualOverflow },
+                            )
+                            if (expanded || overflow) {
+                                CapsuleButton(
+                                    text = if (expanded) "收起签名" else "展开签名",
+                                    onClick = { expanded = !expanded },
+                                    icon = if (expanded) NagiIcons.ChevronUp else NagiIcons.ChevronDown,
+                                    style = CapsuleStyle.Neutral,
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun ProfileMetaStat(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    value: String,
+    description: String,
+    style: androidx.compose.ui.text.TextStyle,
+) {
+    val colors = NagiThemeTokens.colors
+    Row(
+        modifier = Modifier.semantics(mergeDescendants = true) {
+            contentDescription = description
+        },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(12.dp),
+            tint = colors.textSecondary,
+        )
+        Text(
+            text = value,
+            style = style,
+            color = colors.textSecondary,
+        )
     }
 }

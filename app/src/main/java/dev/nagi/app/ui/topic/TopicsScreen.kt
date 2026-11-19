@@ -522,10 +522,7 @@ fun TopicsScreen(
                                                     vm.changeSort(next)
                                                 }
                                                 if (!activeCollection.isNullOrBlank()) {
-                                                    GoldTagBadge(text = "主题合集")
-                                                }
-                                                if (isCurrentCloudForumFavorite) {
-                                                    GoldTagBadge(text = "NGA 已收藏")
+                                                    NeutralTagBadge(text = "主题合集")
                                                 }
                                             }
                                         } else {
@@ -535,12 +532,6 @@ fun TopicsScreen(
                                                 onQueryChange = { query = it },
                                                 onChooseScope = { choosingForum = true },
                                                 onSubmit = submit,
-                                            )
-                                            Text(
-                                                text = "搜索结果",
-                                                style = typography.metadata,
-                                                color = colors.textSecondary,
-                                                modifier = Modifier.padding(top = Space.xs),
                                             )
                                         }
                                     }
@@ -993,7 +984,7 @@ private fun RelatedForumRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (forum.collectionId != null) {
-                    GoldTagBadge(text = "合集")
+                    NeutralTagBadge(text = "合集")
                 }
                 if (isCurrent) {
                     GoldTagBadge(text = "当前")

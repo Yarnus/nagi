@@ -192,7 +192,6 @@ class UiDesignContractTest {
 
     @Test fun readerHeaderRetainsAuthorAndMetadataOnNarrowLargeText() {
         val author = "名字很长的测试论坛用户"
-        val metadata = "威望: 1.0  发帖: 560"
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
@@ -209,7 +208,7 @@ class UiDesignContractTest {
             }
         }
         compose.onAllNodesWithText("级别:", substring = true).assertCountEquals(0)
-        for (label in listOf(author, metadata, "2025-05-26 17:27", "#0", "楼主")) {
+        for (label in listOf(author, "1.0", "560", "2025-05-26 17:27", "#0", "楼主")) {
             compose.onNodeWithText(label).assertIsDisplayed()
             assertNoTextOverflow(label)
         }
@@ -223,14 +222,17 @@ class UiDesignContractTest {
         compose.setContent { NagiTheme {
             ReaderPost(post, ReadingPreferences(), false, null, {})
         } }
-        compose.onNodeWithText("威望: 1.1  发帖: 749").assertIsDisplayed()
+        compose.onNodeWithContentDescription("威望 1.1").assertIsDisplayed()
+        compose.onNodeWithContentDescription("发帖 749").assertIsDisplayed()
         compose.runOnIdle { post = post.copy(authorReputation = null) }
-        compose.onNodeWithText("发帖: 749").assertIsDisplayed()
+        compose.onNodeWithContentDescription("威望 1.1").assertDoesNotExist()
+        compose.onNodeWithContentDescription("发帖 749").assertIsDisplayed()
         compose.runOnIdle { post = post.copy(authorReputation = "1.1", authorPosts = null) }
-        compose.onNodeWithText("威望: 1.1").assertIsDisplayed()
+        compose.onNodeWithContentDescription("威望 1.1").assertIsDisplayed()
+        compose.onNodeWithContentDescription("发帖 749").assertDoesNotExist()
         compose.runOnIdle { post = post.copy(authorReputation = "  ") }
-        compose.onAllNodesWithText("威望:", substring = true).assertCountEquals(0)
-        compose.onAllNodesWithText("发帖:", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("威望", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("发帖", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("级别:", substring = true).assertCountEquals(0)
         compose.onNodeWithText("正文").assertIsDisplayed()
     }

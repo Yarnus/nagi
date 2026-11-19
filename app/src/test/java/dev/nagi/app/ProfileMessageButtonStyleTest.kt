@@ -58,7 +58,7 @@ class ProfileMessageButtonStyleTest {
                 }
             }
         } }
-        val button = compose.onNodeWithText("发送短消息")
+        val button = compose.onNodeWithContentDescription("发送短消息")
             .assertIsDisplayed().assertHasClickAction()
             .assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp)
         val bounds = button.getUnclippedBoundsInRoot()
@@ -70,22 +70,17 @@ class ProfileMessageButtonStyleTest {
             val right = (bounds.right.value * density).roundToInt()
             val top = (bounds.top.value * density).roundToInt()
             val bottom = (bounds.bottom.value * density).roundToInt()
-            val split = left + (32 * density).roundToInt()
             var iconGold = 0
-            var textGold = 0
             var solidFill = 0
             for (y in top until bottom) for (x in left until right) {
                 val pixel = bitmap.getPixel(x, y)
-                if (pixel == foreground.toArgb()) {
-                    if (x < split) iconGold++ else textGold++
-                }
+                if (pixel == foreground.toArgb()) iconGold++
                 if (pixel == solid.toArgb()) solidFill++
             }
             File("build/ui-captures/community/profile-message-$theme-$scale.png").apply { parentFile!!.mkdirs() }
                 .outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
             assertEquals("Must not use the solid-gold button fill", 0, solidFill)
             assertTrue("Message icon must use GoldText", iconGold > 0)
-            assertTrue("Message label must use GoldText", textGold > 0)
             bitmap.recycle()
         }
         button.performClick()

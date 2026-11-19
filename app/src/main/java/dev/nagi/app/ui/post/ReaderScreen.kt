@@ -5,6 +5,9 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -556,16 +559,26 @@ internal fun ReaderTopBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ChromeIconButton(NagiIcons.Back, "返回", back)
-        Text(
-            text = if (showTitle) title else "阅读",
+        Box(
             modifier = Modifier
                 .weight(1f)
                 .padding(horizontal = Space.sm),
-            style = typography.appBarTitle,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = colors.textPrimary,
-        )
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showTitle && title.isNotBlank(),
+                enter = fadeIn(),
+                exit = fadeOut(),
+            ) {
+                Text(
+                    text = title,
+                    style = typography.appBarTitle,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = colors.textPrimary,
+                )
+            }
+        }
         if (page > 0) {
             val pageText = if (totalPages > 0) "$page / $totalPages" else "$page"
             val description = buildString {
@@ -733,12 +746,7 @@ internal fun ReaderPost(
     val openUser = dev.nagi.app.ui.components.LocalOpenUser.current
     val canOpenUser = openUser != null && dev.nagi.app.ui.components.isPublicUserId(post.authorId)
     val tint = if (highlighted) colors.goldContainer else Color.Transparent
-    val metaSegments = remember(post.authorReputation, post.authorPosts) {
-        buildList {
-            post.authorReputation?.takeIf { it.isNotBlank() }?.let { add("威望: $it") }
-            post.authorPosts?.let { add("发帖: $it") }
-        }
-    }
+    val hasAuthorStats = !post.authorReputation.isNullOrBlank() || post.authorPosts != null
     val displayScore = post.score + (ratingState?.scoreDelta ?: 0)
     Column(
         modifier = Modifier
@@ -754,7 +762,7 @@ internal fun ReaderPost(
                     modifier = if (canOpenUser) Modifier
                         .clickable(onClickLabel = "查看 ${post.author} 的用户详情") { openUser?.invoke(post.authorId) }
                         .heightIn(min = 48.dp) else Modifier,
-                    verticalAlignment = Alignment.Top,
+                    verticalAlignment = if (hasAuthorStats) Alignment.CenterVertically else Alignment.Top,
                 ) {
                     Surface(
                         shape = CircleShape,
@@ -802,11 +810,10 @@ internal fun ReaderPost(
                             }
                             UserTagBadge(post.authorId)
                         }
-                        if (metaSegments.isNotEmpty()) {
-                            Text(
-                                text = metaSegments.joinToString("  "),
-                                style = typography.metadata,
-                                color = colors.textSecondary,
+                        if (hasAuthorStats) {
+                            PostAuthorMetaStats(
+                                reputation = post.authorReputation,
+                                posts = post.authorPosts,
                             )
                         }
                     }
@@ -983,17 +990,17 @@ internal fun ReaderPost(
                                         pressedScale = 0.92f,
                                         shape = CircleShape,
                                     )
-                                    .padding(horizontal = 8.dp),
+                                    .padding(start = 12.dp, end = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
                             ) {
                                 if (pendingRating == PostRating.UP) {
-                                    CircularProgressIndicator(Modifier.size(17.dp), strokeWidth = 2.dp, color = colors.goldAccent)
+                                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = colors.goldAccent)
                                 } else {
                                     Icon(
                                         imageVector = NagiIcons.ThumbUp,
                                         contentDescription = null,
-                                        modifier = Modifier.size(17.dp),
+                                        modifier = Modifier.size(18.dp),
                                         tint = (if (upConfirmed) colors.goldText else colors.textSecondary)
                                             .copy(alpha = if (ratingEnabled) 1f else 0.38f),
                                     )
@@ -1002,6 +1009,8 @@ internal fun ReaderPost(
                                     text = displayScore.toString(),
                                     style = typography.metadata.copy(
                                         fontWeight = if (displayScore > 0 || upConfirmed) FontWeight.SemiBold else FontWeight.Normal,
+                                        fontFeatureSettings = "tnum",
+                                        platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
                                     ),
                                     color = (if (upConfirmed) colors.goldText else colors.textSecondary)
                                         .copy(alpha = if (ratingEnabled) 1f else 0.38f),
@@ -1016,7 +1025,7 @@ internal fun ReaderPost(
                             loading = pendingRating == PostRating.DOWN,
                             selected = downConfirmed,
                             state = voteDescription ?: if (downConfirmed) "已点踩，再次点击取消" else "未点踩",
-                            iconSize = 17.dp,
+                            iconSize = 18.dp,
                             tint = if (downConfirmed) colors.goldText else colors.textSecondary,
                         )
                     }
@@ -1252,6 +1261,73 @@ private fun PageJumpSheet(
                 confirmEnabled = valid,
                 confirmStyle = CapsuleStyle.SolidGold,
             )
+        }
+    }
+}
+
+/** Compact iconified reputation & post count stats shared by reader posts and share cards. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun PostAuthorMetaStats(
+    reputation: String?,
+    posts: Int?,
+    modifier: Modifier = Modifier,
+) {
+    val rep = reputation?.takeIf { it.isNotBlank() }
+    if (rep == null && posts == null) return
+    val colors = NagiThemeTokens.colors
+    val typography = NagiThemeTokens.typography
+    val statStyle = typography.metadata.copy(
+        fontFeatureSettings = "tnum",
+        platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
+    )
+    FlowRow(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(Space.md),
+        verticalArrangement = Arrangement.spacedBy(Space.xxs),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (rep != null) {
+            Row(
+                modifier = Modifier.semantics(mergeDescendants = true) {
+                    contentDescription = "威望 $rep"
+                },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Icon(
+                    imageVector = NagiIcons.Star,
+                    contentDescription = null,
+                    modifier = Modifier.size(12.dp),
+                    tint = colors.textMuted,
+                )
+                Text(
+                    text = rep,
+                    style = statStyle,
+                    color = colors.textMuted,
+                )
+            }
+        }
+        if (posts != null) {
+            Row(
+                modifier = Modifier.semantics(mergeDescendants = true) {
+                    contentDescription = "发帖 $posts"
+                },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Icon(
+                    imageVector = NagiIcons.Message,
+                    contentDescription = null,
+                    modifier = Modifier.size(12.dp),
+                    tint = colors.textMuted,
+                )
+                Text(
+                    text = posts.toString(),
+                    style = statStyle,
+                    color = colors.textMuted,
+                )
+            }
         }
     }
 }

@@ -67,6 +67,7 @@ import dev.nagi.app.ui.components.NagiHeader
 import dev.nagi.app.ui.components.NagiIconAction
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.NagiPullToRefreshBox
+import dev.nagi.app.ui.components.NeutralTagBadge
 import dev.nagi.app.ui.components.Notice
 import dev.nagi.app.ui.components.SectionCardItem
 import dev.nagi.app.ui.components.SegmentedCapsuleControl
@@ -154,16 +155,14 @@ fun FavoritesScreen(
                         ) {
                             if (favorites.isNotEmpty()) {
                                 item(key = "topic-fav-header") {
-                                    Row(
+                                    Text(
+                                        text = "本地收藏话题",
+                                        style = typography.sectionHeader,
+                                        color = colors.textSecondary,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(horizontal = Space.lg, vertical = Space.sm),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(Space.xs),
-                                    ) {
-                                        Text("收藏话题", style = typography.sectionHeader, color = colors.textSecondary)
-                                        GoldTagBadge(text = "本地")
-                                    }
+                                    )
                                 }
                                 itemsIndexed(favorites, key = { _, fav -> "topic:${fav.topicId}" }) { index, favorite ->
                                     SectionCardItem(CardGroupPosition.at(index, favorites.size)) {
@@ -249,16 +248,14 @@ fun FavoritesScreen(
                                 }
                                 if (resolvedCloudForums.isNotEmpty()) {
                                     item(key = "cloud-forum-fav-header") {
-                                        Row(
+                                        Text(
+                                            text = "NGA 收藏版块",
+                                            style = typography.sectionHeader,
+                                            color = colors.textSecondary,
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .padding(horizontal = Space.lg, vertical = Space.sm),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(Space.xs),
-                                        ) {
-                                            Text("NGA 收藏版块", style = typography.sectionHeader, color = colors.textSecondary)
-                                            GoldTagBadge(text = "NGA")
-                                        }
+                                        )
                                     }
                                     itemsIndexed(
                                         items = resolvedCloudForums,
@@ -302,7 +299,7 @@ fun FavoritesScreen(
                                                         )
                                                     }
                                                     if (forum.collectionId != null) {
-                                                        GoldTagBadge(text = "主题合集")
+                                                        NeutralTagBadge(text = "主题合集")
                                                     }
                                                 }
                                                 NagiIconAction(
