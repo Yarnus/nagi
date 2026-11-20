@@ -3,8 +3,6 @@ package dev.nagi.app.ui.post
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -31,6 +29,7 @@ import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.ChromeIconButton
 import dev.nagi.app.ui.components.FlatCard
 import dev.nagi.app.ui.components.LoadingLine
+import dev.nagi.app.ui.components.NagiIconAction
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
@@ -39,7 +38,6 @@ import dev.nagi.app.viewmodel.ReplySession
 import dev.nagi.sdk.ContentParser
 import dev.nagi.sdk.PublishAction
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ReplyPopup(
     session: ReplySession,
@@ -233,29 +231,43 @@ internal fun ReplyPopup(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Space.sm),
                 ) {
-                    FlowRow(
+                    Row(
                         modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(Space.sm),
-                        verticalArrangement = Arrangement.spacedBy(Space.xs),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (uploadImage != null && !session.comment) ImageUploadButton(
                             enabled = !session.preview && editable && !session.images.blocked, busy = session.images.uploading,
                             scopeKey = session.target.toString(), upload = uploadImage,
+                            iconOnly = true,
+                            iconSize = 22.dp,
+                            visualSize = 40.dp,
                         )
-                        SmilePickerButton(value = session.input, edit = edit, enabled = !session.preview && editable)
+                        SmilePickerButton(
+                            value = session.input,
+                            edit = edit,
+                            enabled = !session.preview && editable,
+                            iconOnly = true,
+                            iconSize = 22.dp,
+                            visualSize = 40.dp,
+                        )
                         if (!session.comment) {
-                            CapsuleButton(
-                                text = "加粗",
-                                onClick = { edit(boldSelection(session.input)) },
+                            NagiIconAction(
                                 icon = NagiIcons.Bold,
+                                description = "加粗",
+                                onClick = { edit(boldSelection(session.input)) },
                                 enabled = !session.preview && editable,
-                                style = CapsuleStyle.Neutral,
+                                iconSize = 22.dp,
+                                visualSize = 40.dp,
+                                tint = colors.textSecondary,
                             )
-                            CapsuleButton(
-                                text = if (session.preview) "编辑" else "预览",
-                                onClick = preview,
+                            NagiIconAction(
                                 icon = if (session.preview) NagiIcons.Compose else NagiIcons.Eye,
-                                style = if (session.preview) CapsuleStyle.SelectedGold else CapsuleStyle.Neutral,
+                                description = if (session.preview) "编辑" else "预览",
+                                onClick = preview,
+                                selected = session.preview,
+                                iconSize = 22.dp,
+                                visualSize = 40.dp,
+                                tint = if (session.preview) colors.goldAccent else colors.textSecondary,
                             )
                         }
                     }
@@ -264,7 +276,7 @@ internal fun ReplyPopup(
                         onClick = send,
                         icon = NagiIcons.Send,
                         enabled = session.canSend,
-                        style = CapsuleStyle.SolidGold,
+                        style = CapsuleStyle.SelectedGold,
                     )
                 }
             }

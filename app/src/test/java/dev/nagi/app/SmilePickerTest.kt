@@ -104,7 +104,7 @@ class SmilePickerTest {
         compose.setContent { NagiTheme {
             ReplyPopup(session, ReadingPreferences(), { session = session.copy(input = it) }, {}, {}, {}, {})
         } }
-        compose.onNodeWithText("表情").performClick()
+        compose.onNodeWithContentDescription("表情").performClick()
         compose.onNodeWithContentDescription("插入表情：blink").performClick()
         compose.onNodeWithText("返回输入").performClick()
         compose.runOnIdle {

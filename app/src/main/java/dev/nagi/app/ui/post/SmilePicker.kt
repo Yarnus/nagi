@@ -35,13 +35,16 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.NagiFrostedSheet
+import dev.nagi.app.ui.components.NagiIconAction
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.NagiSheetHeader
 import dev.nagi.app.ui.components.nagiPressFeedback
+import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
 import dev.nagi.sdk.NgaSmile
 import dev.nagi.sdk.NgaSmiles
@@ -55,17 +58,38 @@ internal fun insertSmile(field: TextFieldValue, smile: NgaSmile): TextFieldValue
 }
 
 @Composable
-internal fun SmilePickerButton(value: TextFieldValue, edit: (TextFieldValue) -> Unit, enabled: Boolean) {
+internal fun SmilePickerButton(
+    value: TextFieldValue,
+    edit: (TextFieldValue) -> Unit,
+    enabled: Boolean,
+    iconOnly: Boolean = false,
+    iconSize: Dp = 18.dp,
+    visualSize: Dp = 36.dp,
+) {
     var open by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
+    val colors = NagiThemeTokens.colors
     LaunchedEffect(enabled) { if (!enabled) open = false }
-    CapsuleButton(
-        text = "表情",
-        icon = NagiIcons.Smile,
-        enabled = enabled,
-        style = if (open) CapsuleStyle.SelectedGold else CapsuleStyle.Neutral,
-        onClick = { keyboard?.hide(); open = true },
-    )
+    if (iconOnly) {
+        NagiIconAction(
+            icon = NagiIcons.Smile,
+            description = "表情",
+            enabled = enabled,
+            selected = open,
+            iconSize = iconSize,
+            visualSize = visualSize,
+            tint = if (open) colors.goldAccent else colors.textSecondary,
+            onClick = { keyboard?.hide(); open = true },
+        )
+    } else {
+        CapsuleButton(
+            text = "表情",
+            icon = NagiIcons.Smile,
+            enabled = enabled,
+            style = if (open) CapsuleStyle.SelectedGold else CapsuleStyle.Neutral,
+            onClick = { keyboard?.hide(); open = true },
+        )
+    }
     if (open && enabled) {
         SmilePicker(
             close = { open = false; keyboard?.show() },

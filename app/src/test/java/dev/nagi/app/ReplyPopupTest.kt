@@ -41,9 +41,9 @@ class ReplyPopupTest {
         compose.setContent { NagiTheme { ReplyPopup(state, ReadingPreferences(), { state = state.copy(input = it) }, {}, {},
             { state = state.copy(preview = !state.preview) }, { closed = true }) } }
         compose.onNodeWithText("写下你的回复…").performTextInput("中文回复 [b]加粗[/b]")
-        compose.onNodeWithText("预览").performClick()
+        compose.onNodeWithContentDescription("预览").performClick()
         compose.onNodeWithText("中文回复 加粗").assertExists()
-        compose.onNodeWithText("编辑").performClick()
+        compose.onNodeWithContentDescription("编辑").performClick()
         compose.onNodeWithContentDescription("关闭回复").performClick()
         compose.onNodeWithText("放弃这次回复？").assertExists()
         compose.onNodeWithText("继续编辑").performClick()
@@ -57,7 +57,7 @@ class ReplyPopupTest {
         var closed = false
         compose.setContent { NagiTheme { ReplyPopup(state, ReadingPreferences(), { state = state.copy(input = it) }, {}, {}, {}, { closed = true }) } }
         compose.onNodeWithText("写下贴条评论…").performTextInput("评论")
-        compose.onNodeWithText("预览").assertDoesNotExist()
+        compose.onNodeWithContentDescription("预览").assertDoesNotExist()
         compose.onNodeWithContentDescription("关闭贴条评论").performClick()
         compose.runOnIdle { assertTrue(closed) }
         compose.onNodeWithText("放弃这次回复？").assertDoesNotExist()
@@ -112,6 +112,34 @@ class ReplyPopupTest {
     @Test fun captureLargest() = capture("light", 2f)
     @Config(qualifiers = "w610dp-h850dp")
     @Test fun captureMedium() = capture("light", 1f)
+    @Test fun toolbarActionsUseIconOnlySingleRowWith48dpTargets() {
+        val state = session()
+        compose.setContent {
+            NagiTheme {
+                ReplyPopup(state, ReadingPreferences(), {}, {}, {}, {}, {}, uploadImage = {})
+            }
+        }
+        val image = compose.onNodeWithContentDescription("图片").assertIsDisplayed()
+        val smile = compose.onNodeWithContentDescription("表情").assertIsDisplayed()
+        val bold = compose.onNodeWithContentDescription("加粗").assertIsDisplayed()
+        val preview = compose.onNodeWithContentDescription("预览").assertIsDisplayed()
+        val send = compose.onNodeWithText("发送").assertIsDisplayed()
+
+        listOf("图片", "表情", "加粗", "预览").forEach { label ->
+            compose.onNodeWithText(label).assertDoesNotExist()
+        }
+
+        val actionBounds = listOf(image, smile, bold, preview).map { it.getUnclippedBoundsInRoot() }
+        actionBounds.forEach { bounds ->
+            assertTrue((bounds.right - bounds.left).value >= 48f)
+            assertTrue((bounds.bottom - bounds.top).value >= 48f)
+        }
+        val sendBounds = send.getUnclippedBoundsInRoot()
+        val minCenterY = (actionBounds + sendBounds).minOf { (it.top.value + it.bottom.value) / 2f }
+        val maxCenterY = (actionBounds + sendBounds).maxOf { (it.top.value + it.bottom.value) / 2f }
+        assertTrue("Toolbar buttons should stay on a single row", maxCenterY - minCenterY < 8f)
+    }
+
     @Config(qualifiers = "w900dp-h850dp")
     @Test fun captureExpanded() = capture("dark", 1f)
     private fun capture(theme: String, scale: Float, quote: Boolean = false, uncertain: Boolean = false) {
