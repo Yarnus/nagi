@@ -48,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -402,6 +403,13 @@ fun NagiApp(
                     }
                     if (showClipboardPrompt) {
                         val activeClipboardLink = clipboardLink!!
+                        val resolvedTitle by produceState<String?>(
+                            initialValue = null,
+                            key1 = activeClipboardLink.url,
+                            key2 = account.revision,
+                        ) {
+                            value = library.resolveExternalTargetTitle(activeClipboardLink.target)
+                        }
                         BackHandler { onClipboardLinkHandled(activeClipboardLink) }
                         CompositionLocalProvider(
                             LocalNagiHaze provides rootHazeState,
@@ -422,6 +430,7 @@ fun NagiApp(
                             ) {
                                 ClipboardLinkPromptDialog(
                                     link = activeClipboardLink,
+                                    resolvedTitle = resolvedTitle,
                                     onOpen = {
                                         onClipboardLinkHandled(activeClipboardLink)
                                         navigateToExternalTarget(activeClipboardLink.target)

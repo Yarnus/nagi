@@ -184,4 +184,45 @@ class LibraryViewModelTest {
         assertEquals(writesBeforeUnconfirmed + 2, writeCount)
         feedbackJob.cancel()
     }
+
+    @Test fun resolveExternalTargetTitleUsesLocalCacheThenNetworkAndRespectsErrors() = runTest(dispatcher) {
+        val sessions = MemorySessionStore()
+        val accounts = AccountManager(sessions, FakeBrowserCookies()).also { it.initialize() }
+        val preferences = PreferenceStore(RuntimeEnvironment.getApplication())
+        val daos = FakeDaoProvider()
+        val dao = daos.forUser(null)
+        dao.saveFavorite(LocalFavorite("101", "收藏帖子标题"))
+        dao.saveHistory(dev.nagi.app.data.ReadingHistory("102", "历史帖子标题", 1000L))
+
+        var postCalls = 0
+        var failNext = false
+        val delegate = FakeClient()
+        val client = object : NgaClient by delegate {
+            override suspend fun getPosts(topicId: String, page: Int, authorId: String?): PostPage {
+                postCalls++
+                if (failNext) throw NgaException.Network()
+                return PostPage(emptyList(), title = "远端帖子标题 #$topicId", authorId = "1", page = 1, total = 1, hasMore = false)
+            }
+        }
+        val vm = LibraryViewModel(client, daos, sessions, preferences, accounts)
+        runCurrent()
+
+        assertEquals("收藏帖子标题", vm.resolveExternalTargetTitle(NgaExternalTarget.Topic("101")))
+        assertEquals("历史帖子标题", vm.resolveExternalTargetTitle(NgaExternalTarget.Topic("102")))
+        assertEquals(0, postCalls)
+
+        assertEquals("远端帖子标题 #103", vm.resolveExternalTargetTitle(NgaExternalTarget.Topic("103", page = 2)))
+        assertEquals(1, postCalls)
+
+        failNext = true
+        assertNull(vm.resolveExternalTargetTitle(NgaExternalTarget.Topic("104")))
+        assertEquals(2, postCalls)
+
+        val firstForum = vm.forums.value.items.first()
+        assertEquals(firstForum.name, vm.resolveExternalTargetTitle(NgaExternalTarget.Forum(firstForum.id, firstForum.collectionId)))
+        assertNull(vm.resolveExternalTargetTitle(NgaExternalTarget.User("42")))
+
+        sessions.saveSession(NgaSession("99", "new-token"))
+        assertNull(vm.resolveExternalTargetTitle(NgaExternalTarget.Topic("105")))
+    }
 }

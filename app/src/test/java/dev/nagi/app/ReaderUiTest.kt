@@ -206,6 +206,24 @@ class ReaderUiTest {
         }
     }
 
+    @Test fun clipboardPromptDisplaysResolvedTopicTitleWithSummaryAndUrl() {
+        val link = dev.nagi.sdk.NgaExternalLinks.extractFromText("https://bbs.nga.cn/read.php?tid=47935130&page=2")!!
+        compose.setContent {
+            NagiTheme {
+                dev.nagi.app.navigation.ClipboardLinkPromptDialog(
+                    link = link,
+                    resolvedTitle = "教你如何攻略一位高个美女",
+                    onOpen = {},
+                    onIgnore = {},
+                )
+            }
+        }
+        compose.onNodeWithText("剪贴板链接").assertIsDisplayed()
+        compose.onNodeWithText("教你如何攻略一位高个美女").assertIsDisplayed()
+        compose.onNodeWithText("https://bbs.nga.cn/read.php?tid=47935130&page=2")
+            .assertIsDisplayed()
+    }
+
     @Test fun clipboardDetectorReadsUriListClipsAndForbidsRawMaterialAlertDialog() {
         val context = org.robolectric.RuntimeEnvironment.getApplication()
         val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)

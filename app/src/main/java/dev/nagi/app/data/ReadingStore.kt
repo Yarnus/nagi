@@ -71,6 +71,8 @@ interface ReadingDao {
     suspend fun readNotifications(ids: List<String>)
     @Query("SELECT * FROM history ORDER BY viewedAt DESC, topicId ASC LIMIT $MAX_HISTORY_ENTRIES")
     fun history(): kotlinx.coroutines.flow.Flow<List<ReadingHistory>>
+    @Query("SELECT title FROM history WHERE topicId = :id LIMIT 1")
+    suspend fun historyTitle(id: String): String?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertHistory(item: ReadingHistory)
     @Query("DELETE FROM history WHERE topicId NOT IN (SELECT topicId FROM history ORDER BY viewedAt DESC, topicId ASC LIMIT :limit)")
     suspend fun pruneHistory(limit: Int = MAX_HISTORY_ENTRIES)

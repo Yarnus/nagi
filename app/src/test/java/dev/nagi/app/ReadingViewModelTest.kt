@@ -697,6 +697,7 @@ class FakeDao : ReadingDao {
     }
     val history = MutableStateFlow<List<ReadingHistory>>(emptyList())
     override fun history(): Flow<List<ReadingHistory>> = history
+    override suspend fun historyTitle(id: String): String? = history.value.firstOrNull { it.topicId == id }?.title
     override suspend fun upsertHistory(item: ReadingHistory) {
         history.update { old -> (old.filterNot { it.topicId == item.topicId } + item).sortedWith(compareByDescending<ReadingHistory> { it.viewedAt }.thenBy { it.topicId }) }
     }

@@ -194,6 +194,35 @@ class LibraryViewModel @Inject constructor(
     fun font(size: Int) = viewModelScope.launch { prefs.font(size) }
     fun lineHeight(size: Int) = viewModelScope.launch { prefs.lineHeight(size) }
     fun theme(value: String) = viewModelScope.launch { prefs.theme(value) }
+    suspend fun resolveExternalTargetTitle(target: NgaExternalTarget): String? = when (target) {
+        is NgaExternalTarget.Topic -> {
+            val cached = favorites.value.firstOrNull { it.topicId == target.topicId }?.title?.trim()?.takeIf { it.isNotEmpty() }
+                ?: dao.favorite(target.topicId)?.title?.trim()?.takeIf { it.isNotEmpty() }
+                ?: history.value.firstOrNull { it.topicId == target.topicId }?.title?.trim()?.takeIf { it.isNotEmpty() }
+                ?: dao.historyTitle(target.topicId)?.trim()?.takeIf { it.isNotEmpty() }
+            if (cached != null) {
+                cached
+            } else if (!currentOwner() || sessions.snapshot().revision != owner.revision) {
+                null
+            } else {
+                try {
+                    val title = client.getPosts(target.topicId, page = 1).title.trim().takeIf { it.isNotEmpty() }
+                    if (currentOwner() && sessions.snapshot().revision == owner.revision) title else null
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
+        is NgaExternalTarget.Forum -> {
+            val match = (_forums.value.items + cloudFavoriteForums.value.items).firstOrNull {
+                it.id == target.forumId && it.collectionId.orEmpty() == target.collectionId.orEmpty()
+            }
+            match?.name?.trim()?.takeIf { it.isNotEmpty() }
+        }
+        is NgaExternalTarget.User -> null
+    }
 }
 
 @HiltViewModel

@@ -136,9 +136,12 @@ internal fun ClipboardLinkPromptDialog(
     onOpen: () -> Unit,
     onIgnore: () -> Unit,
     modifier: Modifier = Modifier,
+    resolvedTitle: String? = null,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
+    val summary = remember(link.target) { clipboardLinkSummary(link.target) }
+    val displayTitle = resolvedTitle?.trim()?.takeIf { it.isNotEmpty() } ?: summary
     FrostedSurface(
         modifier = modifier
             .widthIn(max = 420.dp)
@@ -172,9 +175,11 @@ internal fun ClipboardLinkPromptDialog(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(Space.xxs)) {
                     Text(
-                        text = clipboardLinkSummary(link.target),
+                        text = displayTitle,
                         style = typography.topicTitle,
                         color = colors.textPrimary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = link.url,

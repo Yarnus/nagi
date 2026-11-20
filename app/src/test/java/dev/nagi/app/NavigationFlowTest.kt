@@ -524,7 +524,8 @@ class NavigationFlowTest {
                     .idleFor(java.time.Duration.ofMillis(400))
             }
             compose.onNodeWithText("剪贴板链接").assertIsDisplayed()
-            compose.onNodeWithText("帖子 #47931570").assertIsDisplayed()
+            compose.onNodeWithText("Topic").assertIsDisplayed()
+            compose.onNodeWithText("https://bbs.nga.cn/read.php?tid=47931570").assertIsDisplayed()
             compose.onNodeWithText("忽略").performClick()
             compose.onNodeWithText("剪贴板链接").assertDoesNotExist()
         } finally {
