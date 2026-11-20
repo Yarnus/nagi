@@ -19,6 +19,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import dev.nagi.app.data.ReadingPreferences
+import dev.nagi.app.ui.components.ImageLoadTracker
 import dev.nagi.app.ui.components.LocalUserTags
 import dev.nagi.app.ui.components.UserTagAccess
 import dev.nagi.app.ui.post.HeightBoundedShareCard
@@ -27,8 +28,11 @@ import dev.nagi.app.ui.post.PostShareCardDialog
 import dev.nagi.app.ui.post.ReaderPost
 import dev.nagi.app.ui.post.ReaderTopBar
 import dev.nagi.app.ui.post.SHARE_CARD_EXPORT_WIDTH_PX
+import dev.nagi.app.ui.post.SHARE_CARD_IMAGE_WAIT_TIMEOUT_MS
 import dev.nagi.app.ui.post.ShareCardPictureRecorder
 import dev.nagi.app.ui.post.trimShareCardBlocks
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import dev.nagi.app.ui.theme.NagiTheme
 import dev.nagi.app.viewmodel.MainPostShareState
@@ -39,6 +43,8 @@ import dev.nagi.sdk.NgaSmile
 import dev.nagi.sdk.Post
 import dev.nagi.sdk.TextSpan
 import java.io.File
+import androidx.core.content.FileProvider
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -56,6 +62,14 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PostShareCardTest {
     @get:Rule val compose = createComposeRule()
+
+    @After fun clearFileProviderCache() {
+        runCatching {
+            val field = FileProvider::class.java.getDeclaredField("sCache")
+            field.isAccessible = true
+            (field.get(null) as? MutableMap<*, *>)?.clear()
+        }
+    }
 
     @Test fun trimShareCardBlocksPreservesShortContentAndTruncatesLongContentSafely() {
         val short = listOf(ContentBlock.Text("短内容"), ContentBlock.Image("https://img.nga.cn/a.png"))
@@ -390,5 +404,92 @@ class PostShareCardTest {
         compose.onNodeWithText("一楼评论").assertExists()
         compose.onNodeWithText("二楼评论").assertExists()
         compose.onNodeWithText("三楼评论").assertExists()
+    }
+
+    @Test fun imageLoadTrackerIgnoresInactiveSlotsAndHonorsTimeout() = runBlocking {
+        assertEquals(3_000L, SHARE_CARD_IMAGE_WAIT_TIMEOUT_MS)
+        val tracker = ImageLoadTracker()
+        val inactiveToken = Any()
+        tracker.markPending("initial", inactiveToken)
+        tracker.setActiveSlot("fitted")
+        assertFalse(tracker.hasPending)
+        assertFalse(tracker.awaitSettled(50L))
+
+        val activeToken = Any()
+        tracker.markPending("fitted", activeToken)
+        assertTrue(tracker.hasPending)
+        val job = launch {
+            delay(20L)
+            tracker.markSettled("fitted", activeToken)
+        }
+        assertTrue(tracker.awaitSettled(1_000L))
+        assertFalse(tracker.hasPending)
+        job.join()
+
+        val stuckToken = Any()
+        tracker.markPending("fitted", stuckToken)
+        assertTrue(tracker.hasPending)
+        assertTrue(tracker.awaitSettled(30L))
+        assertTrue(tracker.hasPending)
+    }
+
+    @Test fun shareCardDialogExportsEvenWhenImageLoadFails() {
+        val startedIntents = mutableListOf<Intent>()
+        val cacheDir = RuntimeEnvironment.getApplication().cacheDir
+        File(cacheDir, "shared-images").deleteRecursively()
+
+        val mainPost = Post(
+            id = "4001",
+            floor = 0,
+            author = "测试楼主",
+            authorId = "99",
+            avatar = "",
+            date = "2026-11-20 17:30",
+            content = listOf(
+                ContentBlock.Text("带失效图片的帖子"),
+                ContentBlock.Image("http://127.0.0.1:1/nonexistent.png"),
+            ),
+        )
+
+        compose.setContent {
+            val base = LocalContext.current
+            val wrapped = remember(base) {
+                object : ContextWrapper(base) {
+                    override fun startActivity(intent: Intent) {
+                        startedIntents += intent
+                    }
+                }
+            }
+            CompositionLocalProvider(LocalContext provides wrapped) {
+                NagiTheme("light") {
+                    PostShareCardDialog(
+                        topicId = "47841715",
+                        topicTitle = "图片失败兜底导出测试",
+                        post = mainPost,
+                        shareState = MainPostShareState(open = true),
+                        preferences = ReadingPreferences(),
+                        onRetry = {},
+                        close = {},
+                    )
+                }
+            }
+        }
+
+        compose.runOnIdle {
+            WindowInspector.getGlobalWindowViews().forEach { windowView ->
+                if (windowView.width > 0 && windowView.height > 0) {
+                    val scratch = Bitmap.createBitmap(windowView.width, windowView.height, Bitmap.Config.ARGB_8888)
+                    windowView.draw(Canvas(scratch))
+                    scratch.recycle()
+                }
+            }
+        }
+
+        compose.onNodeWithText("分享图片").assertIsEnabled().performClick()
+        compose.waitUntil(timeoutMillis = 5_000) {
+            startedIntents.isNotEmpty() || org.robolectric.shadows.ShadowToast.getTextOfLatestToast() != null
+        }
+        val toast = org.robolectric.shadows.ShadowToast.getTextOfLatestToast()
+        assertTrue("Unexpected error toast: $toast", startedIntents.isNotEmpty())
     }
 }

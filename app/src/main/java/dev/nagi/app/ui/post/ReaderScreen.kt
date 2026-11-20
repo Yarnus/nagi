@@ -847,35 +847,62 @@ internal fun ReaderPost(
         SelectionContainer { ContentBlocks(post.content, preferences, onImage) }
         if (post.comments.isNotEmpty()) {
             var expandedComments by rememberSaveable(post.id) { mutableStateOf(false) }
-            FlatCard(
+            val previewComments = post.comments.take(3)
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = Space.md),
                 shape = RoundedCornerShape(12.dp),
-                containerColor = colors.insetContainer,
-                borderColor = colors.cardBorder,
+                color = colors.insetContainer,
+                shadowElevation = 0.dp,
+                tonalElevation = 0.dp,
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 180.dp)
+                        .heightIn(max = 220.dp)
                         .verticalScroll(rememberScrollState())
-                        .padding(Space.md),
+                        .padding(horizontal = Space.md, vertical = Space.sm),
                     verticalArrangement = Arrangement.spacedBy(Space.xs),
                 ) {
-                    post.comments.take(3).forEach { comment ->
-                        FlowRow(
-                            modifier = Modifier.padding(top = 2.dp)
-                                .clickable(enabled = openUser != null && dev.nagi.app.ui.components.isPublicUserId(comment.authorId), onClickLabel = "查看用户详情") { openUser?.invoke(comment.authorId) }
-                                .heightIn(min = 48.dp),
-                            horizontalArrangement = Arrangement.spacedBy(Space.xs),
-                            verticalArrangement = Arrangement.spacedBy(Space.xs),
-                            itemVerticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(comment.author, style = typography.capsuleLabel, color = colors.goldText)
-                            UserTagBadge(comment.authorId)
+                    Text(
+                        text = "贴条 · ${post.comments.size}",
+                        style = typography.metadata.copy(fontWeight = FontWeight.Medium),
+                        color = colors.textSecondary,
+                    )
+                    previewComments.forEachIndexed { index, comment ->
+                        if (index > 0) {
+                            HorizontalDivider(
+                                thickness = 0.5.dp,
+                                color = colors.cardBorder.copy(alpha = 0.55f),
+                            )
                         }
-                        SelectionContainer { ContentBlocks(comment.content, preferences, onImage) }
+                        val canOpenCommentUser = openUser != null && dev.nagi.app.ui.components.isPublicUserId(comment.authorId)
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            FlowRow(
+                                modifier = if (canOpenCommentUser) {
+                                    Modifier
+                                        .heightIn(min = 48.dp)
+                                        .clickable(onClickLabel = "查看用户详情") { openUser?.invoke(comment.authorId) }
+                                } else {
+                                    Modifier
+                                },
+                                horizontalArrangement = Arrangement.spacedBy(Space.xs),
+                                verticalArrangement = Arrangement.spacedBy(Space.xs),
+                                itemVerticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(comment.author, style = typography.capsuleLabel, color = colors.goldText)
+                                UserTagBadge(comment.authorId)
+                                if (comment.date.isNotBlank()) {
+                                    Text(
+                                        text = formatTimeText(comment.date),
+                                        style = typography.metadata,
+                                        color = colors.textSecondary,
+                                    )
+                                }
+                            }
+                            SelectionContainer { ContentBlocks(comment.content, preferences, onImage) }
+                        }
                     }
                 }
             }

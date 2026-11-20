@@ -18,8 +18,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -42,7 +42,6 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.ui.components.EdgeAlignedMetaRow
-import dev.nagi.app.ui.components.FlatCard
 import dev.nagi.app.ui.components.GoldTagBadge
 import dev.nagi.app.ui.components.LocalOpenUser
 import dev.nagi.app.ui.components.NagiIcons
@@ -142,15 +141,35 @@ internal fun HotRepliesSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = Space.md),
+            .padding(top = Space.md, bottom = Space.xs),
         verticalArrangement = Arrangement.spacedBy(Space.sm),
     ) {
-        Text(
-            text = "热点回复",
-            style = typography.sectionHeader,
-            color = colors.textSecondary,
-            modifier = Modifier.semantics { heading() },
+        HorizontalDivider(
+            thickness = 0.5.dp,
+            color = colors.cardBorder.copy(alpha = 0.55f),
         )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Space.xs),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(width = 3.dp, height = 12.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(colors.goldAccent),
+            )
+            Text(
+                text = "热点回复",
+                style = typography.sectionHeader,
+                color = colors.textSecondary,
+                modifier = Modifier.semantics { heading() },
+            )
+            Text(
+                text = "· ${replies.size}",
+                style = typography.metaTabular,
+                color = colors.textSecondary,
+            )
+        }
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val columns = if (maxWidth >= 520.dp && replies.size > 1) 2 else 1
             Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
@@ -207,11 +226,12 @@ private fun HotReplyCard(
         if (preview.text.isNotBlank()) append("：${preview.text}")
     }
 
-    FlatCard(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        containerColor = colors.insetContainer,
-        borderColor = colors.cardBorder,
+        color = colors.insetContainer,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
     ) {
         Column(
             modifier = Modifier
@@ -230,8 +250,13 @@ private fun HotReplyCard(
                     }
                 )
                 .semantics { contentDescription = cardSummary }
-                .padding(horizontal = Space.md, vertical = Space.sm),
-            verticalArrangement = Arrangement.spacedBy(Space.xs),
+                .padding(
+                    start = Space.md,
+                    end = Space.md,
+                    top = if (canOpenUser) 0.dp else Space.sm,
+                    bottom = Space.sm,
+                ),
+            verticalArrangement = Arrangement.spacedBy(if (canOpenUser) 2.dp else Space.xs),
         ) {
             EdgeAlignedMetaRow(
                 leading = {
@@ -271,24 +296,33 @@ private fun HotReplyCard(
                 },
                 trailing = {
                     if (reply.score != 0) {
-                        Row(
-                            modifier = Modifier.semantics(mergeDescendants = true) {
-                                contentDescription = "赞 ${reply.score}"
-                            },
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = colors.goldContainer,
+                            shadowElevation = 0.dp,
+                            tonalElevation = 0.dp,
                         ) {
-                            Icon(
-                                imageVector = NagiIcons.ThumbUp,
-                                contentDescription = null,
-                                modifier = Modifier.size(12.dp),
-                                tint = colors.textSecondary,
-                            )
-                            Text(
-                                text = reply.score.toString(),
-                                style = typography.metaTabular,
-                                color = colors.textSecondary,
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                                    .semantics(mergeDescendants = true) {
+                                        contentDescription = "赞 ${reply.score}"
+                                    },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            ) {
+                                Icon(
+                                    imageVector = NagiIcons.ThumbUp,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(11.dp),
+                                    tint = colors.goldText,
+                                )
+                                Text(
+                                    text = reply.score.toString(),
+                                    style = typography.metaTabular.copy(fontWeight = FontWeight.Medium),
+                                    color = colors.goldText,
+                                )
+                            }
                         }
                     } else {
                         Spacer(Modifier.size(0.dp))

@@ -47,6 +47,7 @@ import dev.nagi.sdk.ContentColors
 import dev.nagi.sdk.InlineSmile
 import dev.nagi.sdk.NgaUserLinks
 import dev.nagi.app.ui.components.LocalOpenUser
+import dev.nagi.app.ui.components.TrackSlotImageReadiness
 import dev.nagi.sdk.NgaSmile
 
 internal fun contentTextColor(name: String, background: Color): Color? {
@@ -145,6 +146,8 @@ internal fun PostParagraph(
 @Composable
 internal fun SmileImage(smile: NgaSmile, modifier: Modifier = Modifier) {
     var loadState by remember(smile.url) { mutableStateOf("加载中") }
+    val trackerToken = remember(smile.url) { Any() }
+    TrackSlotImageReadiness(token = trackerToken, settled = loadState != "加载中")
     val colors = NagiThemeTokens.colors
     val lightBacking = colors.isDark && (smile.groupId == "ac" || smile.groupId == "a2")
     Box(

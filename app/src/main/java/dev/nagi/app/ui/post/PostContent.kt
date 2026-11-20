@@ -48,6 +48,7 @@ import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.FlatCard
 import dev.nagi.app.ui.components.NagiIcons
+import dev.nagi.app.ui.components.TrackSlotImageReadiness
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
 import dev.nagi.sdk.ContentAlignment
@@ -253,6 +254,8 @@ private fun RenderContentBlocks(
                     var failed by remember(block.url) { mutableStateOf(false) }
                     var isTall by remember(block.url) { mutableStateOf(false) }
                     var attempt by remember(block.url) { mutableStateOf(0) }
+                    val trackerToken = remember(block.url) { Any() }
+                    TrackSlotImageReadiness(token = trackerToken, settled = loaded || failed)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()

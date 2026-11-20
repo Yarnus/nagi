@@ -9,7 +9,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -111,11 +115,17 @@ fun UserAvatar(
             if (url.isEmpty() || imageModel == null) {
                 Fallback()
             } else {
+                var settled by remember(url, imageModel) { mutableStateOf(false) }
+                val trackerToken = remember(url, imageModel) { Any() }
+                TrackSlotImageReadiness(token = trackerToken, settled = settled)
                 SubcomposeAsyncImage(
                     model = imageModel,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
+                    onLoading = { settled = false },
+                    onSuccess = { settled = true },
+                    onError = { settled = true },
                     loading = { Fallback() },
                     error = { Fallback() },
                 )

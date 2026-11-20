@@ -30,14 +30,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -64,18 +63,18 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import coil.imageLoader
-import coil.request.ImageRequest
 import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.EdgeAlignedMetaRow
 import dev.nagi.app.ui.components.GoldTagBadge
+import dev.nagi.app.ui.components.ImageLoadTracker
 import dev.nagi.app.ui.components.LocalOpenUser
+import dev.nagi.app.ui.components.LocalSlotImageLoadTracker
 import dev.nagi.app.ui.components.NagiDialog
 import dev.nagi.app.ui.components.NagiDialogActions
 import dev.nagi.app.ui.components.NagiIcons
+import dev.nagi.app.ui.components.SlotImageLoadTracker
 import dev.nagi.app.ui.components.UserAvatar
 import dev.nagi.app.ui.theme.DarkSemanticColors
 import dev.nagi.app.ui.theme.LightSemanticColors
@@ -88,15 +87,13 @@ import dev.nagi.sdk.ContentBlock
 import dev.nagi.sdk.Post
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.concurrent.atomic.AtomicInteger
 
 internal const val SHARE_CARD_EXPORT_DENSITY = 3.0f
 internal const val SHARE_CARD_EXPORT_WIDTH_PX = 1200
 internal const val MAX_CARD_EXPORT_HEIGHT_PX = 16000
+internal const val SHARE_CARD_IMAGE_WAIT_TIMEOUT_MS = 3_000L
 private const val SHARE_CARD_JPEG_QUALITY = 96
 private const val MAX_CARD_EXPORT_DIMENSION_PX = 16384
 private const val MAX_CARD_EXPORT_PIXELS = 24_000_000L
@@ -252,48 +249,12 @@ internal fun PostShareCardDialog(
     val typography = NagiThemeTokens.typography
     val scope = rememberCoroutineScope()
     val pictureRecorder = remember(post?.id, shareState.earlyReplies) { ShareCardPictureRecorder() }
+    val imageTracker = remember(post?.id, shareState.earlyReplies) { ImageLoadTracker() }
     var cardDark by rememberSaveable { mutableStateOf(currentColors.isDark) }
     var exporting by remember { mutableStateOf(false) }
-    var pendingImages by remember { mutableIntStateOf(0) }
 
     val trimmed = remember(post?.id, post?.content) {
         post?.let { trimShareCardBlocks(it.content) } ?: ShareCardContent(emptyList(), false)
-    }
-
-    LaunchedEffect(post?.id, trimmed.blocks, post?.comments, post?.hotReplies, shareState.earlyReplies) {
-        if (post == null) {
-            pendingImages = 0
-            return@LaunchedEffect
-        }
-        val extraPosts = post.comments + post.hotReplies + shareState.earlyReplies +
-            shareState.earlyReplies.flatMap { it.comments }
-        val urls = buildList {
-            if (post.avatar.isNotBlank()) add(post.avatar)
-            addAll(collectVisibleCardMediaUrls(trimmed.blocks))
-            extraPosts.forEach { extra ->
-                if (extra.avatar.isNotBlank()) add(extra.avatar)
-                addAll(collectVisibleCardMediaUrls(extra.content))
-            }
-        }.distinct()
-        pendingImages = urls.size
-        if (urls.isEmpty()) return@LaunchedEffect
-        val loader = context.imageLoader
-        val remaining = AtomicInteger(urls.size)
-        urls.map { url ->
-            async {
-                withContext(Dispatchers.IO) {
-                    runCatching {
-                        loader.execute(
-                            ImageRequest.Builder(context)
-                                .data(url)
-                                .allowHardware(false)
-                                .build(),
-                        )
-                    }
-                }
-                pendingImages = remaining.decrementAndGet().coerceAtLeast(0)
-            }
-        }.awaitAll()
     }
 
     NagiDialog(
@@ -369,7 +330,7 @@ internal fun PostShareCardDialog(
             }
 
             else -> {
-                if (pendingImages > 0) {
+                if (imageTracker.hasPending) {
                     Text(
                         text = "正在准备图片…",
                         style = typography.metadata,
@@ -392,6 +353,7 @@ internal fun PostShareCardDialog(
                         preferences = preferences,
                         darkCard = cardDark,
                         pictureRecorder = pictureRecorder,
+                        imageTracker = imageTracker,
                     )
                 }
             }
@@ -405,10 +367,18 @@ internal fun PostShareCardDialog(
                     exporting = true
                     scope.launch {
                         try {
+                            val awaited = imageTracker.awaitSettled(SHARE_CARD_IMAGE_WAIT_TIMEOUT_MS)
+                            if (awaited) {
+                                // Ensure Compose finishes remeasure/drawWithContent after images settle.
+                                withFrameNanos {}
+                                withFrameNanos {}
+                            }
                             exportShareCardImage(context, topicId, pictureRecorder)
                         } catch (t: Throwable) {
                             if (t is CancellationException) throw t
-                            Toast.makeText(context, "卡片内容过长或生成失败", Toast.LENGTH_SHORT).show()
+                            withContext(Dispatchers.Main.immediate) {
+                                Toast.makeText(context, "卡片内容过长或生成失败", Toast.LENGTH_SHORT).show()
+                            }
                         } finally {
                             exporting = false
                         }
@@ -440,6 +410,7 @@ internal fun HeightBoundedShareCard(
     preferences: ReadingPreferences,
     darkCard: Boolean,
     pictureRecorder: ShareCardPictureRecorder,
+    imageTracker: ImageLoadTracker? = null,
 ) {
     val exportDensity = Density(SHARE_CARD_EXPORT_DENSITY, LocalDensity.current.fontScale)
     SubcomposeLayout(modifier = Modifier.fillMaxWidth()) { constraints ->
@@ -452,9 +423,17 @@ internal fun HeightBoundedShareCard(
             slotId: Any,
             candidate: ShareCardContent,
             isProbe: Boolean = false,
-        ): Placeable =
-            subcompose(slotId) {
-                CompositionLocalProvider(LocalDensity provides exportDensity) {
+        ): Placeable {
+            val slotTracker = if (!isProbe && imageTracker != null) {
+                SlotImageLoadTracker(imageTracker, slotId.toString())
+            } else {
+                null
+            }
+            return subcompose(slotId) {
+                CompositionLocalProvider(
+                    LocalDensity provides exportDensity,
+                    LocalSlotImageLoadTracker provides slotTracker,
+                ) {
                     PostShareCardSurface(
                         topicId = topicId,
                         topicTitle = topicTitle,
@@ -492,15 +471,18 @@ internal fun HeightBoundedShareCard(
                     )
                 }
             }.single().measure(exportConstraints)
+        }
 
         fun probeFits(candidate: ShareCardContent): Boolean =
             measureCandidate("probe-${probeCounter++}", candidate, isProbe = true).height <= MAX_CARD_EXPORT_HEIGHT_PX
 
         val initialPlaceable = measureCandidate("initial", preTrimmed)
         val finalPlaceable = if (initialPlaceable.height <= MAX_CARD_EXPORT_HEIGHT_PX) {
+            imageTracker?.setActiveSlot("initial")
             initialPlaceable
         } else {
             val fittedContent = fitShareCardByHeight(preTrimmed.blocks, ::probeFits)
+            imageTracker?.setActiveSlot("fitted")
             measureCandidate("fitted", fittedContent)
         }
 
