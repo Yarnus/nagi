@@ -46,8 +46,7 @@ class LibraryViewModel @Inject constructor(
 ) : ViewModel() {
     private val _forums = MutableStateFlow(ListState<Forum>())
     val forums = _forums.asStateFlow()
-    private val _cloudFavoriteForums = MutableStateFlow(ListState<Forum>())
-    val cloudFavoriteForums = _cloudFavoriteForums.asStateFlow()
+    private val _rawCloudFavoriteForums = MutableStateFlow(ListState<Forum>())
     private val _cloudForumBusyKeys = MutableStateFlow<Set<String>>(emptySet())
     val cloudForumBusyKeys = _cloudForumBusyKeys.asStateFlow()
     private val _cloudForumUncertainKeys = MutableStateFlow<Set<String>>(emptySet())
@@ -59,6 +58,17 @@ class LibraryViewModel @Inject constructor(
     private val owner = accounts.state.value
     val isSignedIn: Boolean get() = owner.userId != null
     private val dao = daos.forUser(owner.userId)
+    private val cloudFavoriteOrders = dao.cloudForumFavoriteOrders()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val hasCustomCloudForumOrder: StateFlow<Boolean> = cloudFavoriteOrders
+        .map { it.isNotEmpty() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val cloudFavoriteForums: StateFlow<ListState<Forum>> = combine(
+        _rawCloudFavoriteForums,
+        cloudFavoriteOrders,
+    ) { state, orders ->
+        state.copy(items = applyCloudForumOrder(state.items, orders))
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, ListState())
     val favorites = dao.favorites().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val history = dao.history().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private var loading: Job? = null
@@ -87,23 +97,23 @@ class LibraryViewModel @Inject constructor(
     }
     fun loadCloudFavoriteForums() {
         if (owner.userId == null) {
-            _cloudFavoriteForums.value = ListState()
+            _rawCloudFavoriteForums.value = ListState()
             return
         }
         if (cloudForumsLoading?.isActive == true) return
         cloudForumsLoading = viewModelScope.launch {
-            _cloudFavoriteForums.update { it.copy(loading = true, error = null) }
+            _rawCloudFavoriteForums.update { it.copy(loading = true, error = null) }
             try {
                 if (sessions.snapshot().revision != owner.revision) throw CancellationException("Account changed")
                 val items = client.getFavoriteForums()
                 if (sessions.snapshot().revision != owner.revision) throw CancellationException("Account changed")
-                _cloudFavoriteForums.value = ListState(items)
+                _rawCloudFavoriteForums.value = ListState(items)
                 _cloudForumUncertainKeys.value = emptySet()
                 _cloudForumNotice.value = null
             }
             catch (error: CancellationException) { throw error }
             catch (error: Exception) {
-                _cloudFavoriteForums.update { it.copy(loading = false, error = userMessage(error)) }
+                _rawCloudFavoriteForums.update { it.copy(loading = false, error = userMessage(error)) }
             }
         }
     }
@@ -145,7 +155,7 @@ class LibraryViewModel @Inject constructor(
                             _cloudForumNotice.value = null
                             _cloudForumFeedback.tryEmit(if (favorite) "已加入 NGA 收藏版块" else "已取消 NGA 收藏版块")
                             cloudForumsLoading?.cancel()
-                            _cloudFavoriteForums.update { current ->
+                            _rawCloudFavoriteForums.update { current ->
                                 val updated = if (favorite) {
                                     if (current.items.any { it.key == key }) current.items else current.items + forum
                                 } else {
@@ -173,8 +183,24 @@ class LibraryViewModel @Inject constructor(
         }
     }
     fun toggleCloudForumFavorite(forum: Forum) {
-        val isCloudFavorite = _cloudFavoriteForums.value.items.any { it.key == forum.key }
+        val isCloudFavorite = _rawCloudFavoriteForums.value.items.any { it.key == forum.key }
         setCloudForumFavorite(forum, !isCloudFavorite)
+    }
+    fun saveCloudFavoriteForumOrder(orderedKeys: List<String>) {
+        if (owner.userId == null) return
+        viewModelScope.launch {
+            accounts.withCurrentRevision(owner.revision) {
+                dao.replaceCloudForumFavoriteOrders(orderedKeys)
+            }
+        }
+    }
+    fun resetCloudFavoriteForumOrder() {
+        if (owner.userId == null) return
+        viewModelScope.launch {
+            accounts.withCurrentRevision(owner.revision) {
+                dao.clearCloudForumFavoriteOrders()
+            }
+        }
     }
     fun dismissCloudForumNotice() {
         _cloudForumNotice.value = null
@@ -222,6 +248,25 @@ class LibraryViewModel @Inject constructor(
             match?.name?.trim()?.takeIf { it.isNotEmpty() }
         }
         is NgaExternalTarget.User -> null
+    }
+}
+
+internal fun applyCloudForumOrder(
+    ngaForums: List<Forum>,
+    localOrders: List<CloudForumFavoriteOrder>,
+): List<Forum> {
+    if (ngaForums.isEmpty() || localOrders.isEmpty()) return ngaForums
+    val orderMap = localOrders.associate { it.forumKey to it.sortOrder }
+    val ranked = ArrayList<Pair<Int, Forum>>()
+    val fallback = ArrayList<Forum>()
+    for (forum in ngaForums) {
+        val rank = orderMap[forum.key]
+        if (rank != null) ranked.add(rank to forum) else fallback.add(forum)
+    }
+    ranked.sortBy { it.first }
+    return ArrayList<Forum>(ngaForums.size).apply {
+        ranked.forEach { add(it.second) }
+        addAll(fallback)
     }
 }
 

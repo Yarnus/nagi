@@ -40,8 +40,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -86,27 +86,29 @@ internal fun NagiPullToRefreshBox(
     onRefresh: () -> Unit,
     topPadding: Dp,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val state = rememberPullToRefreshState()
-    PullToRefreshBox(
-        isRefreshing = isRefreshing,
-        onRefresh = onRefresh,
-        modifier = modifier,
-        state = state,
-        indicator = {
-            PullToRefreshDefaults.Indicator(
-                state = state,
-                isRefreshing = isRefreshing,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = topPadding),
-                containerColor = NagiThemeTokens.colors.cardSurface,
-                color = NagiThemeTokens.colors.goldAccent,
-            )
-        },
-        content = content,
-    )
+    Box(
+        modifier = modifier.pullToRefresh(
+            isRefreshing = isRefreshing,
+            state = state,
+            enabled = enabled,
+            onRefresh = onRefresh,
+        ),
+    ) {
+        content()
+        PullToRefreshDefaults.Indicator(
+            state = state,
+            isRefreshing = isRefreshing,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = topPadding),
+            containerColor = NagiThemeTokens.colors.cardSurface,
+            color = NagiThemeTokens.colors.goldAccent,
+        )
+    }
 }
 
 @Composable

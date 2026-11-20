@@ -716,6 +716,7 @@ class FakeDao : ReadingDao {
     }
     val favorites = MutableStateFlow<List<LocalFavorite>>(emptyList())
     val forumFavorites = MutableStateFlow<List<LocalForumFavorite>>(emptyList())
+    val cloudForumFavoriteOrders = MutableStateFlow<List<CloudForumFavoriteOrder>>(emptyList())
     private val positions = mutableMapOf<String, ReadingPosition>()
     override fun favorites(): Flow<List<LocalFavorite>> = favorites
     override suspend fun favorite(id: String): LocalFavorite? = favorites.value.firstOrNull { it.topicId == id }
@@ -725,6 +726,20 @@ class FakeDao : ReadingDao {
     override suspend fun forumFavorite(key: String): LocalForumFavorite? = forumFavorites.value.firstOrNull { it.forumKey == key }
     override suspend fun saveForumFavorite(item: LocalForumFavorite) { forumFavorites.update { old -> old.filterNot { it.forumKey == item.forumKey } + item } }
     override suspend fun removeForumFavorite(key: String) { forumFavorites.update { it.filterNot { item -> item.forumKey == key } } }
+    override fun cloudForumFavoriteOrders(): Flow<List<CloudForumFavoriteOrder>> = cloudForumFavoriteOrders
+    override suspend fun insertCloudForumFavoriteOrders(items: List<CloudForumFavoriteOrder>) {
+        cloudForumFavoriteOrders.update { old ->
+            val byKey = old.associateBy { it.forumKey }.toMutableMap()
+            items.forEach { byKey[it.forumKey] = it }
+            byKey.values.sortedBy { it.sortOrder }
+        }
+    }
+    override suspend fun clearCloudForumFavoriteOrders() {
+        cloudForumFavoriteOrders.value = emptyList()
+    }
+    override suspend fun replaceCloudForumFavoriteOrders(keys: List<String>) {
+        cloudForumFavoriteOrders.value = keys.distinct().mapIndexed { index, key -> CloudForumFavoriteOrder(key, index) }
+    }
     override suspend fun position(id: String): ReadingPosition? = positions[id]
     override suspend fun upsertPosition(item: ReadingPosition) { positions[item.topicId] = item }
     override suspend fun prunePositions(limit: Int) {

@@ -29,6 +29,12 @@ data class LocalForumFavorite(
     val key: String get() = forumKey
 }
 
+@Entity(tableName = "cloud_forum_favorite_order")
+data class CloudForumFavoriteOrder(
+    @PrimaryKey val forumKey: String,
+    val sortOrder: Int,
+)
+
 const val MAX_HISTORY_ENTRIES = 100
 const val MAX_UNFAVORITED_POSITIONS = 500
 
@@ -103,6 +109,21 @@ interface ReadingDao {
     }
     @Query("DELETE FROM forum_favorites WHERE forumKey = :key")
     suspend fun removeForumFavorite(key: String)
+    @Query("SELECT * FROM cloud_forum_favorite_order ORDER BY sortOrder ASC")
+    fun cloudForumFavoriteOrders(): kotlinx.coroutines.flow.Flow<List<CloudForumFavoriteOrder>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCloudForumFavoriteOrders(items: List<CloudForumFavoriteOrder>)
+    @Query("DELETE FROM cloud_forum_favorite_order")
+    suspend fun clearCloudForumFavoriteOrders()
+    @Transaction
+    suspend fun replaceCloudForumFavoriteOrders(keys: List<String>) {
+        clearCloudForumFavoriteOrders()
+        if (keys.isNotEmpty()) {
+            insertCloudForumFavoriteOrders(
+                keys.distinct().mapIndexed { index, key -> CloudForumFavoriteOrder(key, index) },
+            )
+        }
+    }
     @Query("SELECT * FROM positions WHERE topicId = :id") suspend fun position(id: String): ReadingPosition?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertPosition(item: ReadingPosition)
     @Query(
@@ -120,13 +141,26 @@ interface ReadingDao {
 }
 
 @Database(
-    entities = [LocalFavorite::class, LocalForumFavorite::class, ReadingPosition::class, ReadingHistory::class, LocalNotification::class, LocalUserTag::class],
-    version = 6,
+    entities = [
+        LocalFavorite::class,
+        LocalForumFavorite::class,
+        CloudForumFavoriteOrder::class,
+        ReadingPosition::class,
+        ReadingHistory::class,
+        LocalNotification::class,
+        LocalUserTag::class,
+    ],
+    version = 7,
     exportSchema = false,
 )
 abstract class ReadingDatabase : RoomDatabase() {
     abstract fun readingDao(): ReadingDao
     companion object {
+        val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `cloud_forum_favorite_order` (`forumKey` TEXT NOT NULL, `sortOrder` INTEGER NOT NULL, PRIMARY KEY(`forumKey`))")
+            }
+        }
         val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 var hasUpdatedAt = false

@@ -240,4 +240,56 @@ class CloudFavoriteForumsUiTest {
         compose.onAllNodesWithText("艾泽拉斯议事厅").onFirst().performClick()
         compose.runOnIdle { assertEquals("艾泽拉斯议事厅", clickedForum?.name) }
     }
+
+    @Test fun cloudFavoriteForumsReorderMenuAndAccessibilityAndReset() {
+        val cloudState = ListState(
+            items = listOf(
+                Forum("7", "艾泽拉斯议事厅", "", ""),
+                Forum("0", "精品合集", "", "", collectionId = "99"),
+            ),
+        )
+        var savedOrder: List<String>? = null
+        var resetCalled = false
+        var hasCustom by mutableStateOf(false)
+
+        compose.setContent {
+            NagiTheme {
+                ForumDirectory(
+                    state = ListState(items = directory),
+                    refresh = {},
+                    onSelect = {},
+                    onForum = {},
+                    isSignedIn = true,
+                    cloudFavoriteForums = cloudState,
+                    hasCustomCloudOrder = hasCustom,
+                    onToggleCloudFavorite = {},
+                    onSaveCloudOrder = { savedOrder = it },
+                    onResetCloudOrder = { resetCalled = true },
+                )
+            }
+        }
+
+        // Open long-press menu on first item in NGA 收藏版块 and start reorder mode
+        compose.onAllNodesWithText("艾泽拉斯议事厅").onFirst().performTouchInput { longClick() }
+        compose.onNodeWithText("调整版块顺序").performClick()
+        compose.onNodeWithText("长按拖动").assertIsDisplayed()
+        compose.onNodeWithText("完成").assertIsDisplayed()
+
+        // Accessibility move down persists new order
+        val moveDownNode = compose.onAllNodesWithText("艾泽拉斯议事厅").onFirst().fetchSemanticsNode()
+        val moveDownAction = moveDownNode.config[androidx.compose.ui.semantics.SemanticsActions.CustomActions]
+            .first { it.label == "下移" }
+        compose.runOnIdle { assertTrue(moveDownAction.action()) }
+        compose.runOnIdle { assertEquals(listOf("collection:99", "forum:7"), savedOrder) }
+
+        // Exit reorder mode
+        compose.onNodeWithText("完成").performClick()
+        compose.onNodeWithText("完成").assertDoesNotExist()
+
+        // Reset custom order from long-press menu
+        compose.runOnIdle { hasCustom = true }
+        compose.onAllNodesWithText("艾泽拉斯议事厅").onFirst().performTouchInput { longClick() }
+        compose.onNodeWithText("恢复默认顺序").performClick()
+        compose.runOnIdle { assertTrue(resetCalled) }
+    }
 }

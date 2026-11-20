@@ -23,6 +23,7 @@ class AccountDatabases(context: Context, private val name: String = "reading") :
                     ReadingDatabase.MIGRATION_3_4,
                     ReadingDatabase.MIGRATION_4_5,
                     ReadingDatabase.MIGRATION_5_6,
+                    ReadingDatabase.MIGRATION_6_7,
                 ).build()
         }.readingDao()
     }

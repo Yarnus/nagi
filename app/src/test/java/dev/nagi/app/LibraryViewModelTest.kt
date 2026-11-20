@@ -225,4 +225,50 @@ class LibraryViewModelTest {
         sessions.saveSession(NgaSession("99", "new-token"))
         assertNull(vm.resolveExternalTargetTitle(NgaExternalTarget.Topic("105")))
     }
+
+    @Test fun cloudFavoriteForumsPreferLocalOrderPerAccountAndFallbackToNga() = runTest(dispatcher) {
+        val sessions = MemorySessionStore().apply { saveSession(NgaSession("7", "token-7")) }
+        val accounts = AccountManager(sessions, FakeBrowserCookies()).also { it.initialize() }
+        val preferences = PreferenceStore(RuntimeEnvironment.getApplication())
+        val daos = FakeDaoProvider()
+        val serverForums = listOf(
+            Forum("1", "Forum 1", "", ""),
+            Forum("2", "Forum 2", "", ""),
+            Forum("3", "Forum 3", "", ""),
+        )
+        val delegate = FakeClient()
+        val client = object : NgaClient by delegate {
+            override suspend fun getFavoriteForums(): List<Forum> = serverForums
+        }
+
+        val vm7 = LibraryViewModel(client, daos, sessions, preferences, accounts)
+        runCurrent()
+        assertFalse(vm7.hasCustomCloudForumOrder.value)
+        assertEquals(listOf("forum:1", "forum:2", "forum:3"), vm7.cloudFavoriteForums.value.items.map { it.key })
+
+        // Local order takes precedence; unranked item ("forum:2") falls back to NGA order at the end
+        vm7.saveCloudFavoriteForumOrder(listOf("forum:3", "forum:1"))
+        runCurrent()
+        assertTrue(vm7.hasCustomCloudForumOrder.value)
+        assertEquals(listOf("forum:3", "forum:1", "forum:2"), vm7.cloudFavoriteForums.value.items.map { it.key })
+
+        // Separate account remains unaffected and falls back to NGA order
+        sessions.saveSession(NgaSession("8", "token-8"))
+        accounts.initialize()
+        val vm8 = LibraryViewModel(client, daos, sessions, preferences, accounts)
+        runCurrent()
+        assertFalse(vm8.hasCustomCloudForumOrder.value)
+        assertEquals(listOf("forum:1", "forum:2", "forum:3"), vm8.cloudFavoriteForums.value.items.map { it.key })
+
+        // Resetting account 7 restores NGA order
+        sessions.saveSession(NgaSession("7", "token-7"))
+        accounts.initialize()
+        val vm7Again = LibraryViewModel(client, daos, sessions, preferences, accounts)
+        runCurrent()
+        assertEquals(listOf("forum:3", "forum:1", "forum:2"), vm7Again.cloudFavoriteForums.value.items.map { it.key })
+        vm7Again.resetCloudFavoriteForumOrder()
+        runCurrent()
+        assertFalse(vm7Again.hasCustomCloudForumOrder.value)
+        assertEquals(listOf("forum:1", "forum:2", "forum:3"), vm7Again.cloudFavoriteForums.value.items.map { it.key })
+    }
 }

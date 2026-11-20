@@ -46,9 +46,11 @@
 | 版本检查与发布页 | 启动静默请求 `releases/latest` 重定向、不附带 NGA 凭据、失败静默、24 小时节流、已升级清除旧提示；发现新版本时头像菜单 / 设置入口 / 关于页展示金色胶囊提示且不占用未读红点；关于页“检查更新”按钮绕过节流立即检查并展示检查中 / 最新 / 有更新 / 失败状态；存在新版本时支持主动按 ABI 下载 APK 并校验 `SHA256SUMS`、包名、版本号与签名一致性（含进度条、取消下载、`REQUEST_INSTALL_PACKAGES` 权限引导及返回自动刷新安装，及失败回退发布页）；“查看最新版本”外部打开正确 Release 页面，无浏览器时可复制链接 |
 | 开源许可 | 无网络时可读取项目及第三方许可；长文本可滚动，关闭后返回关于页 |
 | 本地收藏与历史 | 本地收藏话题账号隔离、Room 2→3 / 5→6 迁移保留数据；历史时间展示、筛选、单条移除与清空（含未收藏进度清理选项）；未收藏阅读进度自动淘汰与收藏进度保护 |
-| NGA 收藏版块 | 游客不发请求并可引导登录；已登录读取 `forum_favor2` 区分版块与合集、匹配目录时对齐目录名称与图标（未匹配项保留服务端名称）；版块目录顶部分区、长按菜单、过滤与主题列表更多菜单；收藏页双标签切换及位置保留、移除确认弹窗；写入确认后即时更新列表、拒绝保留原态、结果不明锁定至刷新核对 |
+| NGA 收藏版块 | 游客不发请求并可引导登录；已登录读取 `forum_favor2` 区分版块与合集、匹配目录时对齐目录名称与图标（未匹配项保留服务端名称）；版块目录顶部分区、长按菜单、过滤与主题列表更多菜单；支持按账号隔离的本地排序（长按菜单进入排序态拖拽、无障碍上/下移、恢复默认，有本地顺序优先，无则回退 NGA 顺序）；收藏页双标签切换及位置保留、移除确认弹窗；写入确认后即时更新列表、拒绝保留原态、结果不明锁定至刷新核对 |
 
 ## 验证边界
+
+NGA 收藏版块按账号隔离的本地排序（Room 6→7 迁移 `cloud_forum_favorite_order` 表、`LibraryViewModel` 本地优先 + NGA 回退排序合并、`ForumScreen` 长按菜单进入排序态/长按拖拽/无障碍上移下移/恢复默认顺序）的本地 **模拟测试通过**：运行 `./gradlew --no-daemon --max-workers=1 :nga-sdk:check :app:assembleDebug :app:lintDebug :app:testDebugUnitTest` 全部通过（应用 372 项单元测试 0 失败 0 跳过，lint 0 个错误）；`ReadingDatabaseTest` 覆盖 6→7 迁移与多账号隔离，`LibraryViewModelTest` 覆盖本地顺序优先、未排序项回退 NGA 顺序、账号隔离与重置恢复，`CloudFavoriteForumsUiTest` 覆盖长按菜单进入排序态、无障碍下移持久化与恢复默认顺序。**未验证：** 设备集成测试、真机、真实触控拖拽手势与 TalkBack 实机朗读。
 
 UI/UX 组件规范化与逐页交互一致性优化（新增 `NagiIconAction`、`NagiSearchTextField`、`NagiSheetHeader`、`FrostedDropdownDivider` 与 16 枚 1.6dp 单线矢量图标；统一设置页、收藏/历史页、编辑器、阅读器、搜索框、图片浏览层及贴条/表情面板的图标、按钮、工具栏、菜单和按压反馈）的本地 **模拟测试通过**：最终代码改动后运行 `./gradlew --no-daemon --max-workers=1 :nga-sdk:check :app:assembleDebug :app:lintDebug :app:testDebugUnitTest` 全部通过（SDK 214 项、应用 362 项单元测试 0 失败 0 跳过，lint 0 个错误）；`UiDesignContractTest` 及各页面 UI 回归测试覆盖 48dp 热区、无障碍语义与窄屏 2x 大字号布局。**未验证：** 本次变更的设备集成测试、真机及 TalkBack 实机朗读。
 

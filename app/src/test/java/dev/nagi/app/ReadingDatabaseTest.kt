@@ -151,4 +151,33 @@ class ReadingDatabaseTest {
             context.deleteDatabase("${name}_7.db")
         }
     }
+
+    @Test fun migration6To7AddsCloudForumOrderPerAccount() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val name = "cloud-forum-order-migration"
+        context.deleteDatabase("${name}_7.db"); context.deleteDatabase("${name}_8.db")
+        var databases = AccountDatabases(context, name)
+        try {
+            databases.forUser("7").saveFavorite(LocalFavorite("123", "Preserved", 1))
+            databases.close()
+            android.database.sqlite.SQLiteDatabase.openDatabase(context.getDatabasePath("${name}_7.db").path, null, 0).use {
+                it.execSQL("DROP TABLE cloud_forum_favorite_order")
+                it.version = 6
+            }
+            databases = AccountDatabases(context, name)
+            val dao7 = databases.forUser("7")
+            assertEquals("Preserved", dao7.favorite("123")?.title)
+            assertTrue(dao7.cloudForumFavoriteOrders().first().isEmpty())
+
+            dao7.replaceCloudForumFavoriteOrders(listOf("collection:99", "forum:7"))
+            assertEquals(listOf("collection:99", "forum:7"), dao7.cloudForumFavoriteOrders().first().map { it.forumKey })
+            assertTrue(databases.forUser("8").cloudForumFavoriteOrders().first().isEmpty())
+
+            dao7.clearCloudForumFavoriteOrders()
+            assertTrue(dao7.cloudForumFavoriteOrders().first().isEmpty())
+        } finally {
+            databases.close()
+            context.deleteDatabase("${name}_7.db"); context.deleteDatabase("${name}_8.db")
+        }
+    }
 }

@@ -61,6 +61,7 @@ fun SectionCardItem(
     margin: Dp = 16.dp,
     cornerRadius: Dp = 20.dp,
     dividerIndent: Dp = 16.dp,
+    dividerEndIndent: Dp = 16.dp,
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
 ) {
@@ -96,9 +97,14 @@ fun SectionCardItem(
                     drawContent()
                     val stroke = 1.dp.toPx()
                     val half = stroke / 2f
+                    val dividerStroke = 0.5.dp.toPx()
+                    val dividerHalf = dividerStroke / 2f
+                    val dividerColor = borderColor.copy(alpha = 0.55f)
                     val w = size.width
                     val h = size.height
                     val r = cornerRadius.toPx().coerceAtMost(minOf(w, h) / 2f)
+                    val dividerStart = dividerIndent.toPx()
+                    val dividerEnd = (w - dividerEndIndent.toPx()).coerceAtLeast(dividerStart)
 
                     when (position) {
                         CardGroupPosition.First -> {
@@ -112,20 +118,20 @@ fun SectionCardItem(
                             }
                             drawPath(path, borderColor, style = Stroke(width = stroke))
                             drawLine(
-                                color = borderColor,
-                                start = Offset(dividerIndent.toPx(), h - half),
-                                end = Offset(w - half, h - half),
-                                strokeWidth = stroke,
+                                color = dividerColor,
+                                start = Offset(dividerStart, h - dividerHalf),
+                                end = Offset(dividerEnd, h - dividerHalf),
+                                strokeWidth = dividerStroke,
                             )
                         }
                         CardGroupPosition.Middle -> {
                             drawLine(borderColor, Offset(half, 0f), Offset(half, h), stroke)
                             drawLine(borderColor, Offset(w - half, 0f), Offset(w - half, h), stroke)
                             drawLine(
-                                color = borderColor,
-                                start = Offset(dividerIndent.toPx(), h - half),
-                                end = Offset(w - half, h - half),
-                                strokeWidth = stroke,
+                                color = dividerColor,
+                                start = Offset(dividerStart, h - dividerHalf),
+                                end = Offset(dividerEnd, h - dividerHalf),
+                                strokeWidth = dividerStroke,
                             )
                         }
                         CardGroupPosition.Last -> {

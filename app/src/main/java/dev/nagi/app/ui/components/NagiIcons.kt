@@ -425,4 +425,9 @@ object NagiIcons {
         arcTo(1.8f, 1.8f, 0f, true, true, 13.8f, 12f)
         arcTo(1.8f, 1.8f, 0f, true, true, 10.2f, 12f)
     }
+
+    val DragHandle: ImageVector = strokeIcon("DragHandle") {
+        moveTo(5.5f, 9.5f); lineTo(18.5f, 9.5f)
+        moveTo(5.5f, 14.5f); lineTo(18.5f, 14.5f)
+    }
 }

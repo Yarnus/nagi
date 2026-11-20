@@ -6,6 +6,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,14 +24,17 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -38,8 +42,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
@@ -54,11 +63,14 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.nagi.app.ui.components.AccountMenuButton
+import dev.nagi.app.ui.components.CapsuleButton
+import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.CardGroupPosition
 import dev.nagi.app.ui.components.ChromeIconButton
 import dev.nagi.app.ui.components.FrostedDropdownDivider
 import dev.nagi.app.ui.components.FrostedDropdownItem
 import dev.nagi.app.ui.components.FrostedDropdownMenu
+import dev.nagi.app.ui.components.FrostedSurface
 import dev.nagi.app.ui.components.GoldTagBadge
 import dev.nagi.app.ui.components.InlineStatusBanner
 import dev.nagi.app.ui.components.LoadingLine
@@ -87,6 +99,7 @@ fun ForumScreen(
     val cloudBusyKeys by vm.cloudForumBusyKeys.collectAsStateWithLifecycle()
     val cloudUncertainKeys by vm.cloudForumUncertainKeys.collectAsStateWithLifecycle()
     val cloudNotice by vm.cloudForumNotice.collectAsStateWithLifecycle()
+    val hasCustomCloudOrder by vm.hasCustomCloudForumOrder.collectAsStateWithLifecycle()
     ForumDirectory(
         state = state,
         refresh = vm::loadForums,
@@ -97,8 +110,11 @@ fun ForumScreen(
         cloudBusyKeys = cloudBusyKeys,
         cloudUncertainKeys = cloudUncertainKeys,
         cloudNotice = cloudNotice,
+        hasCustomCloudOrder = hasCustomCloudOrder,
         onRefreshCloudFavorites = vm::loadCloudFavoriteForums,
         onToggleCloudFavorite = vm::toggleCloudForumFavorite,
+        onSaveCloudOrder = vm::saveCloudFavoriteForumOrder,
+        onResetCloudOrder = vm::resetCloudFavoriteForumOrder,
     )
 }
 
@@ -114,19 +130,37 @@ internal fun ForumDirectory(
     cloudBusyKeys: Set<String> = emptySet(),
     cloudUncertainKeys: Set<String> = emptySet(),
     cloudNotice: String? = null,
+    hasCustomCloudOrder: Boolean = false,
     onRefreshCloudFavorites: (() -> Unit)? = null,
     onToggleCloudFavorite: ((Forum) -> Unit)? = null,
+    onSaveCloudOrder: ((List<String>) -> Unit)? = null,
+    onResetCloudOrder: (() -> Unit)? = null,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
     val openLogin = LocalOpenLogin.current
+    val haptic = LocalHapticFeedback.current
     val cloudKeys = remember(cloudFavoriteForums.items) { cloudFavoriteForums.items.map { it.key }.toSet() }
     var onlyCloudFavorites by rememberSaveable { mutableStateOf(false) }
     val activeCloudFilter = onlyCloudFavorites && isSignedIn
     var menuExpanded by remember { mutableStateOf(false) }
+    var isReorderingCloud by rememberSaveable { mutableStateOf(false) }
+    var draggingKey by remember { mutableStateOf<String?>(null) }
+    var draggingOffsetY by remember { mutableFloatStateOf(0f) }
 
     val cloudResolvedForums = remember(cloudFavoriteForums.items, state.items) {
         cloudFavoriteForums.items.resolveCloudForumMetadata(state.items)
+    }
+    var reorderingList by remember { mutableStateOf(cloudResolvedForums) }
+    LaunchedEffect(cloudResolvedForums, isSignedIn, activeCloudFilter) {
+        if (!isSignedIn || activeCloudFilter || cloudResolvedForums.size <= 1) {
+            isReorderingCloud = false
+            draggingKey = null
+            draggingOffsetY = 0f
+        }
+        if (!isReorderingCloud) {
+            reorderingList = cloudResolvedForums
+        }
     }
 
     val visibleItems = remember(state.items, activeCloudFilter, cloudResolvedForums) {
@@ -228,18 +262,71 @@ internal fun ForumDirectory(
                         .fillMaxWidth()
                         .padding(horizontal = Space.lg, vertical = Space.sm),
                 ) {
-                    SearchCapsuleBar(
-                        placeholder = "搜索版块、话题或用户",
-                        onClick = { onSelect("search") },
-                        actionDescription = "搜索",
-                    )
+                    if (isReorderingCloud) {
+                        FrostedSurface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = Space.dockHeight),
+                            shape = CircleShape,
+                            borderColor = colors.goldBorder,
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = Space.lg, end = Space.xs, top = Space.xs, bottom = Space.xs),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                            ) {
+                                Text(
+                                    text = "长按拖动排序",
+                                    modifier = Modifier.weight(1f),
+                                    style = typography.sectionHeader,
+                                    color = colors.textSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (hasCustomCloudOrder && onResetCloudOrder != null) {
+                                    CapsuleButton(
+                                        text = "恢复默认",
+                                        style = CapsuleStyle.Neutral,
+                                        visualHeight = 38.dp,
+                                        onClick = {
+                                            isReorderingCloud = false
+                                            draggingKey = null
+                                            draggingOffsetY = 0f
+                                            onResetCloudOrder()
+                                        },
+                                    )
+                                }
+                                CapsuleButton(
+                                    text = "完成",
+                                    icon = NagiIcons.Check,
+                                    style = CapsuleStyle.SelectedGold,
+                                    visualHeight = 38.dp,
+                                    onClick = {
+                                        isReorderingCloud = false
+                                        draggingKey = null
+                                        draggingOffsetY = 0f
+                                        onSaveCloudOrder?.invoke(reorderingList.map { it.key })
+                                    },
+                                )
+                            }
+                        }
+                    } else {
+                        SearchCapsuleBar(
+                            placeholder = "搜索版块、话题或用户",
+                            onClick = { onSelect("search") },
+                            actionDescription = "搜索",
+                        )
+                    }
                 }
             },
         ) { padding ->
             NagiPullToRefreshBox(
-                isRefreshing = (state.loading && state.items.isNotEmpty()) || (activeCloudFilter && cloudFavoriteForums.loading),
+                isRefreshing = !isReorderingCloud && ((state.loading && state.items.isNotEmpty()) || (activeCloudFilter && cloudFavoriteForums.loading)),
                 onRefresh = refreshAll,
                 topPadding = padding.calculateTopPadding(),
+                enabled = !isReorderingCloud,
             ) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -289,37 +376,136 @@ internal fun ForumDirectory(
 
                     if (!activeCloudFilter && isSignedIn && cloudResolvedForums.isNotEmpty()) {
                         val cloudFavKey = "__cloud_favorites__"
-                        val cloudFavExpanded = cloudFavKey !in collapsed
+                        val cloudFavExpanded = isReorderingCloud || cloudFavKey !in collapsed
+                        val displayedCloudForums = if (isReorderingCloud) reorderingList else cloudResolvedForums
                         item(key = "header:$cloudFavKey", contentType = "group-heading") {
                             DirectoryGroupHeader(
                                 title = "NGA 收藏版块",
-                                badge = "NGA",
+                                badge = if (isReorderingCloud) "长按拖动" else "NGA",
                                 expanded = cloudFavExpanded,
                                 onToggle = {
-                                    collapsed = if (cloudFavExpanded) collapsed + cloudFavKey else collapsed - cloudFavKey
+                                    if (!isReorderingCloud) {
+                                        collapsed = if (cloudFavExpanded) collapsed + cloudFavKey else collapsed - cloudFavKey
+                                    }
                                 },
                             )
                         }
                         if (cloudFavExpanded) {
                             itemsIndexed(
-                                items = cloudResolvedForums,
+                                items = displayedCloudForums,
                                 key = { _, forum -> "cloud-fav:${forum.key}" },
                                 contentType = { _, _ -> "forum" },
                             ) { index, forum ->
-                                SectionCardItem(
-                                    position = CardGroupPosition.at(index, cloudResolvedForums.size),
-                                    dividerIndent = 58.dp,
-                                ) {
-                                    ForumDirectoryRow(
-                                        forum = forum,
-                                        isCloudFavorite = true,
-                                        isSignedIn = isSignedIn,
-                                        isCloudBusy = forum.key in cloudBusyKeys,
-                                        isCloudUncertain = forum.key in cloudUncertainKeys,
-                                        onClick = { onForum(forum) },
-                                        onToggleCloudFavorite = onToggleCloudFavorite?.let { toggle -> { toggle(forum) } },
-                                        onOpenLogin = openLogin,
-                                    )
+                                val isDragging = isReorderingCloud && draggingKey == forum.key
+                                val dragModifier = if (isReorderingCloud) {
+                                    Modifier
+                                        .zIndex(if (isDragging) 1f else 0f)
+                                        .then(if (isDragging) Modifier else Modifier.animateItem())
+                                        .graphicsLayer {
+                                            translationY = if (isDragging) draggingOffsetY else 0f
+                                            scaleX = if (isDragging) 1.02f else 1f
+                                            scaleY = if (isDragging) 1.02f else 1f
+                                        }
+                                        .pointerInput(forum.key) {
+                                            detectDragGesturesAfterLongPress(
+                                                onDragStart = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    draggingKey = forum.key
+                                                    draggingOffsetY = 0f
+                                                },
+                                                onDragEnd = {
+                                                    draggingKey = null
+                                                    draggingOffsetY = 0f
+                                                    onSaveCloudOrder?.invoke(reorderingList.map { it.key })
+                                                },
+                                                onDragCancel = {
+                                                    draggingKey = null
+                                                    draggingOffsetY = 0f
+                                                    onSaveCloudOrder?.invoke(reorderingList.map { it.key })
+                                                },
+                                                onDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    draggingOffsetY += dragAmount.y
+                                                    val currentKey = "cloud-fav:${forum.key}"
+                                                    val currentInfo = listState.layoutInfo.visibleItemsInfo
+                                                        .firstOrNull { it.key == currentKey }
+                                                        ?: return@detectDragGesturesAfterLongPress
+                                                    val currentCenter = currentInfo.offset + currentInfo.size / 2f + draggingOffsetY
+                                                    val currentIndex = reorderingList.indexOfFirst { it.key == forum.key }
+                                                    if (currentIndex < 0) return@detectDragGesturesAfterLongPress
+                                                    val targetInfo = listState.layoutInfo.visibleItemsInfo
+                                                        .firstOrNull { item ->
+                                                            val itemKey = item.key as? String
+                                                            itemKey != null &&
+                                                                itemKey.startsWith("cloud-fav:") &&
+                                                                itemKey != currentKey &&
+                                                                currentCenter in item.offset.toFloat()..(item.offset + item.size).toFloat()
+                                                        }
+                                                    if (targetInfo != null) {
+                                                        val targetForumKey = (targetInfo.key as String).removePrefix("cloud-fav:")
+                                                        val targetIndex = reorderingList.indexOfFirst { it.key == targetForumKey }
+                                                        if (targetIndex >= 0 && targetIndex != currentIndex) {
+                                                            reorderingList = reorderingList.toMutableList().apply {
+                                                                add(targetIndex, removeAt(currentIndex))
+                                                            }
+                                                            draggingOffsetY += (currentInfo.offset - targetInfo.offset)
+                                                        }
+                                                    }
+                                                },
+                                            )
+                                        }
+                                } else {
+                                    Modifier
+                                }
+                                Box(modifier = dragModifier) {
+                                    SectionCardItem(
+                                        position = CardGroupPosition.at(index, displayedCloudForums.size),
+                                        dividerIndent = 58.dp,
+                                    ) {
+                                        ForumDirectoryRow(
+                                            forum = forum,
+                                            isCloudFavorite = true,
+                                            isSignedIn = isSignedIn,
+                                            isCloudBusy = forum.key in cloudBusyKeys,
+                                            isCloudUncertain = forum.key in cloudUncertainKeys,
+                                            onClick = { onForum(forum) },
+                                            onToggleCloudFavorite = onToggleCloudFavorite?.let { toggle -> { toggle(forum) } },
+                                            onOpenLogin = openLogin,
+                                            isReordering = isReorderingCloud,
+                                            isDragging = isDragging,
+                                            canStartReorder = onSaveCloudOrder != null && cloudResolvedForums.size > 1,
+                                            hasCustomCloudOrder = hasCustomCloudOrder,
+                                            onStartReorder = {
+                                                reorderingList = cloudResolvedForums
+                                                isReorderingCloud = true
+                                            },
+                                            onResetCloudOrder = onResetCloudOrder,
+                                            onMoveUp = if (isReorderingCloud && index > 0) {
+                                                {
+                                                    reorderingList = reorderingList.toMutableList().apply {
+                                                        add(index - 1, removeAt(index))
+                                                    }
+                                                    onSaveCloudOrder?.invoke(reorderingList.map { it.key })
+                                                }
+                                            } else null,
+                                            onMoveDown = if (isReorderingCloud && index < displayedCloudForums.lastIndex) {
+                                                {
+                                                    reorderingList = reorderingList.toMutableList().apply {
+                                                        add(index + 1, removeAt(index))
+                                                    }
+                                                    onSaveCloudOrder?.invoke(reorderingList.map { it.key })
+                                                }
+                                            } else null,
+                                            onFinishReorder = if (isReorderingCloud) {
+                                                {
+                                                    isReorderingCloud = false
+                                                    draggingKey = null
+                                                    draggingOffsetY = 0f
+                                                    onSaveCloudOrder?.invoke(reorderingList.map { it.key })
+                                                }
+                                            } else null,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -491,37 +677,57 @@ private fun ForumDirectoryRow(
     onClick: () -> Unit,
     onToggleCloudFavorite: (() -> Unit)?,
     onOpenLogin: (() -> Unit)?,
+    isReordering: Boolean = false,
+    isDragging: Boolean = false,
+    canStartReorder: Boolean = false,
+    hasCustomCloudOrder: Boolean = false,
+    onStartReorder: (() -> Unit)? = null,
+    onResetCloudOrder: (() -> Unit)? = null,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null,
+    onFinishReorder: (() -> Unit)? = null,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
     var actionMenuExpanded by remember { mutableStateOf(false) }
-    val hasActions = onToggleCloudFavorite != null
+    val hasActions = !isReordering && onToggleCloudFavorite != null
     val a11yActions = buildList {
-        if (onToggleCloudFavorite != null && isSignedIn && !isCloudBusy && !isCloudUncertain) {
+        if (isReordering) {
+            onMoveUp?.let { move -> add(CustomAccessibilityAction("上移") { move(); true }) }
+            onMoveDown?.let { move -> add(CustomAccessibilityAction("下移") { move(); true }) }
+            onFinishReorder?.let { finish -> add(CustomAccessibilityAction("完成排序") { finish(); true }) }
+        } else if (onToggleCloudFavorite != null && isSignedIn && !isCloudBusy && !isCloudUncertain) {
             add(
                 CustomAccessibilityAction(if (isCloudFavorite) "取消 NGA 收藏版块" else "收藏到 NGA 版块") {
                     onToggleCloudFavorite()
                     true
                 },
             )
+            if (canStartReorder && onStartReorder != null) {
+                add(CustomAccessibilityAction("调整版块顺序") { onStartReorder(); true })
+            }
+            if (hasCustomCloudOrder && onResetCloudOrder != null) {
+                add(CustomAccessibilityAction("恢复默认顺序") { onResetCloudOrder(); true })
+            }
         }
     }
-    val clickModifier = if (hasActions) {
-        Modifier
+    val clickModifier = when {
+        isReordering -> Modifier.semantics(mergeDescendants = true) { customActions = a11yActions }
+        hasActions -> Modifier
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = { actionMenuExpanded = true },
                 onLongClickLabel = "版块收藏选项",
             )
             .semantics { customActions = a11yActions }
-    } else {
-        Modifier.clickable(onClick = onClick)
+        else -> Modifier.clickable(onClick = onClick)
     }
 
     Box(Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(if (isDragging) colors.goldContainer else Color.Transparent)
                 .then(clickModifier)
                 .heightIn(min = 56.dp)
                 .padding(horizontal = Space.lg, vertical = 12.dp),
@@ -542,7 +748,7 @@ private fun ForumDirectoryRow(
                         text = forum.name,
                         modifier = Modifier.padding(end = Space.sm),
                         style = typography.topicTitle,
-                        color = colors.textPrimary,
+                        color = if (isDragging) colors.goldText else colors.textPrimary,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -567,13 +773,13 @@ private fun ForumDirectoryRow(
                 }
             }
             Icon(
-                imageVector = NagiIcons.ChevronRight,
-                contentDescription = null,
+                imageVector = if (isReordering) NagiIcons.DragHandle else NagiIcons.ChevronRight,
+                contentDescription = if (isReordering) "长按拖动调整顺序" else null,
                 modifier = Modifier.size(18.dp),
-                tint = colors.textSecondary,
+                tint = if (isDragging) colors.goldText else colors.textSecondary,
             )
         }
-        if (onToggleCloudFavorite != null) {
+        if (!isReordering && onToggleCloudFavorite != null) {
             FrostedDropdownMenu(
                 expanded = actionMenuExpanded,
                 onDismissRequest = { actionMenuExpanded = false },
@@ -594,6 +800,30 @@ private fun ForumDirectoryRow(
                         if (!isSignedIn) onOpenLogin?.invoke() else onToggleCloudFavorite()
                     },
                 )
+                if (canStartReorder && onStartReorder != null) {
+                    FrostedDropdownDivider()
+                    FrostedDropdownItem(
+                        text = "调整版块顺序",
+                        supporting = "仅保存在当前账号本地",
+                        leadingIcon = NagiIcons.Sort,
+                        onClick = {
+                            actionMenuExpanded = false
+                            onStartReorder()
+                        },
+                    )
+                }
+                if (hasCustomCloudOrder && onResetCloudOrder != null) {
+                    if (!canStartReorder) FrostedDropdownDivider()
+                    FrostedDropdownItem(
+                        text = "恢复默认顺序",
+                        supporting = "使用 NGA 返回顺序",
+                        leadingIcon = NagiIcons.Refresh,
+                        onClick = {
+                            actionMenuExpanded = false
+                            onResetCloudOrder()
+                        },
+                    )
+                }
             }
         }
     }
