@@ -12,9 +12,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.graphics.layer.GraphicsLayer
-import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.*
@@ -30,7 +27,7 @@ import dev.nagi.app.ui.post.PostShareCardDialog
 import dev.nagi.app.ui.post.ReaderPost
 import dev.nagi.app.ui.post.ReaderTopBar
 import dev.nagi.app.ui.post.SHARE_CARD_EXPORT_WIDTH_PX
-import dev.nagi.app.ui.post.toSoftwareArgb8888
+import dev.nagi.app.ui.post.ShareCardPictureRecorder
 import dev.nagi.app.ui.post.trimShareCardBlocks
 import kotlinx.coroutines.runBlocking
 import dev.nagi.app.ui.theme.NagiTheme
@@ -145,7 +142,7 @@ class PostShareCardTest {
         val cacheDir = RuntimeEnvironment.getApplication().cacheDir
         File(cacheDir, "shared-images").deleteRecursively()
 
-        val longBlocks = List(40) { index -> ContentBlock.Text("第 $index 段主楼内容") }
+        val longBlocks = List(110) { index -> ContentBlock.Text("第 $index 段主楼内容") }
         val mainPost = Post(
             id = "1001",
             floor = 0,
@@ -207,7 +204,7 @@ class PostShareCardTest {
             }
         }
 
-        compose.onNodeWithText("分享 PNG").assertExists().performClick()
+        compose.onNodeWithText("分享图片").assertExists().performClick()
         compose.waitUntil(timeoutMillis = 5_000) {
             startedIntents.isNotEmpty() || org.robolectric.shadows.ShadowToast.getTextOfLatestToast() != null
         }
@@ -216,9 +213,9 @@ class PostShareCardTest {
 
         val shareFiles = File(cacheDir, "shared-images").listFiles().orEmpty()
         assertEquals(1, shareFiles.size)
-        val pngFile = shareFiles.single()
-        assertTrue(pngFile.name.endsWith(".png"))
-        val decoded = BitmapFactory.decodeFile(pngFile.absolutePath)
+        val imageFile = shareFiles.single()
+        assertTrue(imageFile.name.endsWith(".jpg"))
+        val decoded = BitmapFactory.decodeFile(imageFile.absolutePath)
         assertNotNull(decoded)
         assertEquals(SHARE_CARD_EXPORT_WIDTH_PX, decoded.width)
         assertTrue(decoded.height in 1..MAX_CARD_EXPORT_HEIGHT_PX)
@@ -230,7 +227,7 @@ class PostShareCardTest {
         val target = chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
         assertNotNull(target)
         assertEquals(Intent.ACTION_SEND, target!!.action)
-        assertEquals("image/png", target.type)
+        assertEquals("image/jpeg", target.type)
         assertTrue((target.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0)
     }
 
@@ -264,7 +261,7 @@ class PostShareCardTest {
                 }
             }
         }
-        compose.onNodeWithText("分享 PNG").assertIsDisplayed()
+        compose.onNodeWithText("分享图片").assertIsDisplayed()
         compose.onNodeWithText("关闭").assertIsDisplayed().performClick()
         compose.runOnIdle { assertTrue(closed) }
     }
@@ -306,10 +303,9 @@ class PostShareCardTest {
             content = longParagraphs,
         )
         val preTrimmed = trimShareCardBlocks(mainPost.content)
-        lateinit var capturedLayer: GraphicsLayer
+        val recorder = ShareCardPictureRecorder()
 
         compose.setContent {
-            capturedLayer = rememberGraphicsLayer()
             CompositionLocalProvider(
                 LocalDensity provides Density(density = 4f, fontScale = 2f),
             ) {
@@ -321,7 +317,7 @@ class PostShareCardTest {
                         preTrimmed = preTrimmed,
                         preferences = ReadingPreferences(),
                         darkCard = false,
-                        graphicsLayer = capturedLayer,
+                        pictureRecorder = recorder,
                     )
                 }
             }
@@ -339,17 +335,60 @@ class PostShareCardTest {
             }
         }
 
-        val bitmap = runBlocking {
-            capturedLayer.toImageBitmap().asAndroidBitmap().toSoftwareArgb8888()
+        val picture = recorder.picture
+        assertNotNull(picture)
+        assertEquals(SHARE_CARD_EXPORT_WIDTH_PX, picture!!.width)
+        assertTrue(
+            "Expected height in 1..$MAX_CARD_EXPORT_HEIGHT_PX, got ${picture.height}",
+            picture.height in 1..MAX_CARD_EXPORT_HEIGHT_PX,
+        )
+    }
+
+    @Test fun shareCardDialogRendersCommentsHotRepliesAndEarlyFloors() {
+        val mainPost = Post(
+            id = "3001",
+            floor = 0,
+            author = "楼主",
+            authorId = "1",
+            avatar = "",
+            date = "2026-11-20 15:00",
+            content = listOf(ContentBlock.Text("主楼完整正文")),
+            comments = listOf(
+                Post("3002", 0, "贴条路人", "2", "", "2026-11-20 15:01", listOf(ContentBlock.Text("主楼贴条内容"))),
+            ),
+            hotReplies = listOf(
+                Post("3003", 5, "热评大佬", "3", "", "2026-11-20 15:02", listOf(ContentBlock.Text("高赞热评正文")), score = 128),
+            ),
+        )
+        val earlyReplies = listOf(
+            Post("3004", 1, "沙发", "4", "", "2026-11-20 15:03", listOf(ContentBlock.Text("一楼评论"))),
+            Post("3005", 2, "板凳", "5", "", "2026-11-20 15:04", listOf(ContentBlock.Text("二楼评论"))),
+            Post("3006", 3, "地板", "6", "", "2026-11-20 15:05", listOf(ContentBlock.Text("三楼评论"))),
+        )
+
+        compose.setContent {
+            NagiTheme("light") {
+                PostShareCardDialog(
+                    topicId = "47841714",
+                    topicTitle = "含贴条热评与前排回复的卡片",
+                    post = mainPost,
+                    shareState = MainPostShareState(open = true, earlyReplies = earlyReplies),
+                    preferences = ReadingPreferences(),
+                    onRetry = {},
+                    close = {},
+                )
+            }
         }
-        try {
-            assertEquals(SHARE_CARD_EXPORT_WIDTH_PX, bitmap.width)
-            assertTrue(
-                "Expected height in 1..$MAX_CARD_EXPORT_HEIGHT_PX, got ${bitmap.height}",
-                bitmap.height in 1..MAX_CARD_EXPORT_HEIGHT_PX,
-            )
-        } finally {
-            bitmap.recycle()
-        }
+
+        compose.onNodeWithText("主楼完整正文").assertExists()
+        compose.onNodeWithText("贴条 · 1").assertExists()
+        compose.onNodeWithText("主楼贴条内容").assertExists()
+        compose.onNodeWithText("热门回复").assertExists()
+        compose.onNodeWithText("赞 128").assertExists()
+        compose.onNodeWithText("高赞热评正文").assertExists()
+        compose.onNodeWithText("前排回复").assertExists()
+        compose.onNodeWithText("一楼评论").assertExists()
+        compose.onNodeWithText("二楼评论").assertExists()
+        compose.onNodeWithText("三楼评论").assertExists()
     }
 }

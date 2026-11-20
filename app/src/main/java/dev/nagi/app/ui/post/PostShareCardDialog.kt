@@ -2,7 +2,7 @@ package dev.nagi.app.ui.post
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.os.Build
+import android.graphics.Picture
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -48,11 +49,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.layer.GraphicsLayer
-import androidx.compose.ui.graphics.layer.drawLayer
-import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalContext
@@ -96,15 +94,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicInteger
 
-internal const val SHARE_CARD_EXPORT_DENSITY = 2.75f
-internal const val SHARE_CARD_EXPORT_WIDTH_PX = 1080
-internal const val MAX_CARD_EXPORT_HEIGHT_PX = 8000
+internal const val SHARE_CARD_EXPORT_DENSITY = 3.0f
+internal const val SHARE_CARD_EXPORT_WIDTH_PX = 1200
+internal const val MAX_CARD_EXPORT_HEIGHT_PX = 16000
+private const val SHARE_CARD_JPEG_QUALITY = 96
 private const val MAX_CARD_EXPORT_DIMENSION_PX = 16384
 private const val MAX_CARD_EXPORT_PIXELS = 24_000_000L
 
 internal data class ShareCardContent(
     val blocks: List<ContentBlock>,
     val truncated: Boolean,
+    val includeExtras: Boolean = true,
 )
 
 private data class BlockStats(
@@ -164,9 +164,9 @@ private fun truncateTextBlock(block: ContentBlock.Text, maxChars: Int): ContentB
 
 internal fun trimShareCardBlocks(
     blocks: List<ContentBlock>,
-    maxBlocks: Int = 36,
-    maxChars: Int = 3200,
-    maxImages: Int = 6,
+    maxBlocks: Int = 100,
+    maxChars: Int = 8000,
+    maxImages: Int = 12,
 ): ShareCardContent {
     if (blocks.isEmpty()) return ShareCardContent(emptyList(), truncated = false)
     val result = mutableListOf<ContentBlock>()
@@ -200,43 +200,40 @@ internal fun trimShareCardBlocks(
     return ShareCardContent(result, truncated)
 }
 
-internal fun Bitmap.toSoftwareArgb8888(): Bitmap {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && config == Bitmap.Config.HARDWARE) {
-        return copy(Bitmap.Config.ARGB_8888, false)
-            ?: error("Unable to convert hardware bitmap to software ARGB_8888")
-    }
-    return this
+internal class ShareCardPictureRecorder {
+    @Volatile
+    var picture: Picture? = null
 }
 
-internal suspend fun exportShareCardPng(
+internal suspend fun exportShareCardImage(
     context: Context,
     topicId: String,
-    graphicsLayer: GraphicsLayer,
+    recorder: ShareCardPictureRecorder,
 ) {
-    val size = graphicsLayer.size
-    check(size.width > 0 && size.height > 0) { "Card has not been drawn yet" }
-    check(size.width <= MAX_CARD_EXPORT_DIMENSION_PX && size.height <= MAX_CARD_EXPORT_DIMENSION_PX) {
+    val picture = recorder.picture
+    check(picture != null && picture.width > 0 && picture.height > 0) { "Card has not been drawn yet" }
+    check(picture.width <= MAX_CARD_EXPORT_DIMENSION_PX && picture.height <= MAX_CARD_EXPORT_DIMENSION_PX) {
         "Card exceeds maximum supported image dimension"
     }
-    check(size.width.toLong() * size.height.toLong() <= MAX_CARD_EXPORT_PIXELS) {
+    check(picture.width.toLong() * picture.height.toLong() <= MAX_CARD_EXPORT_PIXELS) {
         "Card exceeds maximum supported pixel budget"
     }
-    val rawBitmap = graphicsLayer.toImageBitmap().asAndroidBitmap()
-    val softwareBitmap = withContext(Dispatchers.Default) { rawBitmap.toSoftwareArgb8888() }
-    val uri = try {
-        prepareShareImageUri(context, "nagi_card_${topicId}_${System.currentTimeMillis()}.png") { file ->
-            file.outputStream().buffered().use { output ->
-                check(softwareBitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) {
-                    "Failed to encode share card PNG"
+    val uri = withContext(Dispatchers.Default) {
+        val bitmap = Bitmap.createBitmap(picture.width, picture.height, Bitmap.Config.ARGB_8888)
+        try {
+            android.graphics.Canvas(bitmap).drawPicture(picture)
+            prepareShareImageUri(context, "nagi_card_${topicId}_${System.currentTimeMillis()}.jpg") { file ->
+                file.outputStream().buffered().use { output ->
+                    check(bitmap.compress(Bitmap.CompressFormat.JPEG, SHARE_CARD_JPEG_QUALITY, output)) {
+                        "Failed to encode share card JPEG"
+                    }
                 }
             }
-        }
-    } finally {
-        if (softwareBitmap !== rawBitmap) {
-            softwareBitmap.recycle()
+        } finally {
+            bitmap.recycle()
         }
     }
-    launchShareImageIntent(context, uri, "image/png", "分享主楼卡片")
+    launchShareImageIntent(context, uri, "image/jpeg", "分享主楼卡片")
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -254,7 +251,7 @@ internal fun PostShareCardDialog(
     val currentColors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
     val scope = rememberCoroutineScope()
-    val graphicsLayer = rememberGraphicsLayer()
+    val pictureRecorder = remember(post?.id, shareState.earlyReplies) { ShareCardPictureRecorder() }
     var cardDark by rememberSaveable { mutableStateOf(currentColors.isDark) }
     var exporting by remember { mutableStateOf(false) }
     var pendingImages by remember { mutableIntStateOf(0) }
@@ -263,14 +260,20 @@ internal fun PostShareCardDialog(
         post?.let { trimShareCardBlocks(it.content) } ?: ShareCardContent(emptyList(), false)
     }
 
-    LaunchedEffect(post?.id, trimmed.blocks) {
+    LaunchedEffect(post?.id, trimmed.blocks, post?.comments, post?.hotReplies, shareState.earlyReplies) {
         if (post == null) {
             pendingImages = 0
             return@LaunchedEffect
         }
+        val extraPosts = post.comments + post.hotReplies + shareState.earlyReplies +
+            shareState.earlyReplies.flatMap { it.comments }
         val urls = buildList {
             if (post.avatar.isNotBlank()) add(post.avatar)
             addAll(collectVisibleCardMediaUrls(trimmed.blocks))
+            extraPosts.forEach { extra ->
+                if (extra.avatar.isNotBlank()) add(extra.avatar)
+                addAll(collectVisibleCardMediaUrls(extra.content))
+            }
         }.distinct()
         pendingImages = urls.size
         if (urls.isEmpty()) return@LaunchedEffect
@@ -384,10 +387,11 @@ internal fun PostShareCardDialog(
                         topicId = topicId,
                         topicTitle = topicTitle,
                         post = post,
+                        earlyReplies = shareState.earlyReplies,
                         preTrimmed = trimmed,
                         preferences = preferences,
                         darkCard = cardDark,
-                        graphicsLayer = graphicsLayer,
+                        pictureRecorder = pictureRecorder,
                     )
                 }
             }
@@ -395,13 +399,13 @@ internal fun PostShareCardDialog(
 
         if (post != null && !shareState.loading) {
             NagiDialogActions(
-                confirmLabel = if (exporting) "生成中…" else "分享 PNG",
+                confirmLabel = if (exporting) "生成中…" else "分享图片",
                 onConfirm = {
                     if (exporting) return@NagiDialogActions
                     exporting = true
                     scope.launch {
                         try {
-                            exportShareCardPng(context, topicId, graphicsLayer)
+                            exportShareCardImage(context, topicId, pictureRecorder)
                         } catch (t: Throwable) {
                             if (t is CancellationException) throw t
                             Toast.makeText(context, "卡片内容过长或生成失败", Toast.LENGTH_SHORT).show()
@@ -431,10 +435,11 @@ internal fun HeightBoundedShareCard(
     topicId: String,
     topicTitle: String,
     post: Post,
+    earlyReplies: List<Post> = emptyList(),
     preTrimmed: ShareCardContent,
     preferences: ReadingPreferences,
     darkCard: Boolean,
-    graphicsLayer: GraphicsLayer,
+    pictureRecorder: ShareCardPictureRecorder,
 ) {
     val exportDensity = Density(SHARE_CARD_EXPORT_DENSITY, LocalDensity.current.fontScale)
     SubcomposeLayout(modifier = Modifier.fillMaxWidth()) { constraints ->
@@ -454,6 +459,7 @@ internal fun HeightBoundedShareCard(
                         topicId = topicId,
                         topicTitle = topicTitle,
                         post = post,
+                        earlyReplies = earlyReplies,
                         content = candidate,
                         preferences = preferences,
                         darkCard = darkCard,
@@ -466,10 +472,20 @@ internal fun HeightBoundedShareCard(
                                     Modifier
                                         .testTag("share-card-canvas")
                                         .drawWithContent {
-                                            graphicsLayer.record {
+                                            val widthPx = size.width.toInt().coerceAtLeast(1)
+                                            val heightPx = size.height.toInt().coerceAtLeast(1)
+                                            val picture = Picture()
+                                            val recordingCanvas = picture.beginRecording(widthPx, heightPx)
+                                            val previousCanvas = drawContext.canvas
+                                            drawContext.canvas = androidx.compose.ui.graphics.Canvas(recordingCanvas)
+                                            try {
                                                 this@drawWithContent.drawContent()
+                                            } finally {
+                                                picture.endRecording()
+                                                drawContext.canvas = previousCanvas
                                             }
-                                            drawLayer(graphicsLayer)
+                                            pictureRecorder.picture = picture
+                                            previousCanvas.nativeCanvas.drawPicture(picture)
                                         }
                                 },
                             ),
@@ -503,6 +519,20 @@ private fun fitShareCardByHeight(
     blocks: List<ContentBlock>,
     fits: (ShareCardContent) -> Boolean,
 ): ShareCardContent {
+    if (!fits(ShareCardContent(emptyList(), truncated = true, includeExtras = true))) {
+        return fitBlocksForHeight(blocks) { blocksCandidate ->
+            fits(ShareCardContent(blocksCandidate, truncated = true, includeExtras = false))
+        }.copy(includeExtras = false)
+    }
+    return fitBlocksForHeight(blocks) { blocksCandidate ->
+        fits(ShareCardContent(blocksCandidate, truncated = true, includeExtras = true))
+    }
+}
+
+private fun fitBlocksForHeight(
+    blocks: List<ContentBlock>,
+    fits: (List<ContentBlock>) -> Boolean,
+): ShareCardContent {
     if (blocks.isEmpty()) return ShareCardContent(emptyList(), truncated = true)
 
     var low = 0
@@ -510,7 +540,7 @@ private fun fitShareCardByHeight(
     var bestBlockCount = 0
     while (low <= high) {
         val mid = (low + high) ushr 1
-        if (fits(ShareCardContent(blocks.take(mid), truncated = true))) {
+        if (fits(blocks.take(mid))) {
             bestBlockCount = mid
             low = mid + 1
         } else {
@@ -527,7 +557,7 @@ private fun fitShareCardByHeight(
         while (charLow <= charHigh) {
             val midChars = (charLow + charHigh) ushr 1
             val trimmedBoundary = truncateTextBlock(boundary, midChars)
-            if (trimmedBoundary != null && fits(ShareCardContent(prefix + trimmedBoundary, truncated = true))) {
+            if (trimmedBoundary != null && fits(prefix + trimmedBoundary)) {
                 bestTextBlock = trimmedBoundary
                 charLow = midChars + 1
             } else {
@@ -548,6 +578,7 @@ internal fun PostShareCardSurface(
     topicId: String,
     topicTitle: String,
     post: Post,
+    earlyReplies: List<Post> = emptyList(),
     content: ShareCardContent,
     preferences: ReadingPreferences,
     darkCard: Boolean,
@@ -765,6 +796,31 @@ internal fun PostShareCardSurface(
                             )
                         }
                     }
+
+                    if (content.includeExtras && post.comments.isNotEmpty()) {
+                        ShareCardCommentsSection(
+                            comments = post.comments,
+                            preferences = preferences,
+                        )
+                    }
+
+                    if (content.includeExtras && post.hotReplies.isNotEmpty()) {
+                        ShareCardRepliesSection(
+                            title = "热门回复",
+                            replies = post.hotReplies,
+                            preferences = preferences,
+                            showScore = true,
+                        )
+                    }
+
+                    if (content.includeExtras && earlyReplies.isNotEmpty()) {
+                        ShareCardRepliesSection(
+                            title = "前排回复",
+                            replies = earlyReplies,
+                            preferences = preferences,
+                            showFloor = true,
+                        )
+                    }
                 }
             }
 
@@ -786,6 +842,152 @@ internal fun PostShareCardSurface(
                     color = cardColors.goldText,
                     modifier = Modifier.size(13.dp),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShareCardCommentsSection(
+    comments: List<Post>,
+    preferences: ReadingPreferences,
+) {
+    val colors = NagiThemeTokens.colors
+    val typography = NagiThemeTokens.typography
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(colors.insetContainer)
+            .padding(Space.md),
+        verticalArrangement = Arrangement.spacedBy(Space.sm),
+    ) {
+        Text(
+            text = "贴条 · ${comments.size}",
+            style = typography.metadata.copy(fontWeight = FontWeight.Medium),
+            color = colors.textSecondary,
+        )
+        comments.forEachIndexed { index, comment ->
+            if (index > 0) {
+                HorizontalDivider(color = colors.cardBorder.copy(alpha = 0.6f))
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                EdgeAlignedMetaRow(
+                    leading = {
+                        Text(
+                            text = comment.author,
+                            style = typography.metadata.copy(fontWeight = FontWeight.Medium),
+                            color = colors.textPrimary,
+                        )
+                    },
+                    trailing = {
+                        if (comment.date.isNotBlank()) {
+                            Text(
+                                text = formatTimeText(comment.date),
+                                style = typography.metadata,
+                                color = colors.textSecondary,
+                            )
+                        }
+                    },
+                )
+                ContentBlocks(
+                    blocks = comment.content,
+                    preferences = preferences,
+                    onImage = {},
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ShareCardRepliesSection(
+    title: String,
+    replies: List<Post>,
+    preferences: ReadingPreferences,
+    showScore: Boolean = false,
+    showFloor: Boolean = false,
+) {
+    val colors = NagiThemeTokens.colors
+    val typography = NagiThemeTokens.typography
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = Space.xs),
+        verticalArrangement = Arrangement.spacedBy(Space.sm),
+    ) {
+        HorizontalDivider(color = colors.cardBorder)
+        Text(
+            text = title,
+            style = typography.metadata.copy(fontWeight = FontWeight.SemiBold),
+            color = colors.goldText,
+        )
+        replies.forEach { reply ->
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(colors.insetContainer)
+                    .padding(Space.md),
+                verticalArrangement = Arrangement.spacedBy(Space.xs),
+            ) {
+                EdgeAlignedMetaRow(
+                    verticalAlignment = Alignment.CenterVertically,
+                    leading = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                        ) {
+                            UserAvatar(
+                                name = reply.author,
+                                avatarUrl = reply.avatar,
+                                uid = reply.authorId,
+                                size = 22.dp,
+                                colors = colors,
+                                imageModel = rememberPostImageModel(reply.avatar),
+                            )
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(Space.xs),
+                                verticalArrangement = Arrangement.spacedBy(Space.xs),
+                                itemVerticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = reply.author,
+                                    style = typography.metadata.copy(fontWeight = FontWeight.Medium),
+                                    color = colors.textPrimary,
+                                )
+                                if (showScore && reply.score > 0) {
+                                    GoldTagBadge(text = "赞 ${reply.score}")
+                                }
+                            }
+                        }
+                    },
+                    trailing = {
+                        val meta = buildList {
+                            if (showFloor) add("#${reply.floor}")
+                            if (reply.date.isNotBlank()) add(formatTimeText(reply.date))
+                        }.joinToString(" · ")
+                        if (meta.isNotBlank()) {
+                            Text(
+                                text = meta,
+                                style = typography.metadata,
+                                color = colors.textSecondary,
+                            )
+                        }
+                    },
+                )
+                ContentBlocks(
+                    blocks = reply.content,
+                    preferences = preferences,
+                    onImage = {},
+                )
+                if (reply.comments.isNotEmpty()) {
+                    ShareCardCommentsSection(
+                        comments = reply.comments,
+                        preferences = preferences,
+                    )
+                }
             }
         }
     }

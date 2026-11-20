@@ -384,6 +384,7 @@ data class MainPostShareState(
     val open: Boolean = false,
     val loading: Boolean = false,
     val error: String? = null,
+    val earlyReplies: List<Post> = emptyList(),
 )
 
 data class ReaderState(
@@ -478,20 +479,25 @@ class ReaderViewModel @Inject constructor(
         val topicId = current.id
         if (topicId.isBlank() || !currentReferenceOwner()) return
         val existing = current.mainPost ?: current.items.firstOrNull { it.floor == 0 }
-        if (existing != null) {
+        val hasPageOne = !current.authorOnly && (current.data?.page == 1 || current.items.any { it.floor == 1 })
+        if (existing != null && hasPageOne) {
             if (current.mainPost == null) {
                 _state.update { if (it.id == topicId && it.mainPost == null) it.copy(mainPost = existing) else it }
             }
-            _shareCard.value = MainPostShareState(open = true)
+            val early = current.items.filter { it.floor in 1..3 }.sortedBy { it.floor }
+            _shareCard.value = MainPostShareState(open = true, earlyReplies = early)
             return
         }
         fetchMainPostForShare(topicId)
     }
     fun retryShareCard() {
-        val topicId = _state.value.id
+        val current = _state.value
+        val topicId = current.id
         if (topicId.isBlank() || !currentReferenceOwner()) return
-        if (_state.value.mainPost != null) {
-            _shareCard.value = MainPostShareState(open = true)
+        val hasPageOne = !current.authorOnly && (current.data?.page == 1 || current.items.any { it.floor == 1 })
+        if (current.mainPost != null && hasPageOne) {
+            val early = current.items.filter { it.floor in 1..3 }.sortedBy { it.floor }
+            _shareCard.value = MainPostShareState(open = true, earlyReplies = early)
             return
         }
         fetchMainPostForShare(topicId)
@@ -514,8 +520,9 @@ class ReaderViewModel @Inject constructor(
                 if (version != mainPostGeneration || !currentReferenceOwner() || sessions.snapshot().revision != owner.revision) return@launch
                 if (_state.value.id != topicId) return@launch
                 val post = page.items.firstOrNull { it.floor == 0 } ?: throw NgaException.NotFound()
+                val early = page.items.filter { it.floor in 1..3 }.sortedBy { it.floor }
                 _state.update { if (it.id == topicId) it.copy(mainPost = post) else it }
-                _shareCard.value = MainPostShareState(open = true)
+                _shareCard.value = MainPostShareState(open = true, earlyReplies = early)
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) {
                 if (version == mainPostGeneration && currentReferenceOwner() && _state.value.id == topicId) {

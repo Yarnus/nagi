@@ -77,7 +77,7 @@ class PostShareCardDeviceTest {
         compose.onNodeWithTag("share-card-theme-toggle").performClick()
         compose.onNodeWithText("深色卡片").assertIsDisplayed()
 
-        compose.onNodeWithText("分享 PNG").assertIsDisplayed().performClick()
+        compose.onNodeWithText("分享图片").assertIsDisplayed().performClick()
         compose.waitUntil(timeoutMillis = 5_000) { startedIntents.isNotEmpty() }
 
         val files = shareDir.listFiles().orEmpty()
@@ -92,6 +92,6 @@ class PostShareCardDeviceTest {
         val send = chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
         assertNotNull(send)
         assertEquals(Intent.ACTION_SEND, send!!.action)
-        assertEquals("image/png", send.type)
+        assertEquals("image/jpeg", send.type)
     }
 }
