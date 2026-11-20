@@ -420,11 +420,14 @@ private fun ImageViewerPage(
     onZoomedChanged: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
+    val candidates = remember(url) { imageFallbackCandidates(url) }
+    var candidateIndex by remember(url) { mutableIntStateOf(0) }
+    val activeUrl = candidates.getOrElse(candidateIndex) { url }
     // Bound decoded dimensions rather than decoding arbitrarily large originals.
     var attempt by remember(url) { mutableIntStateOf(0) }
-    val request = remember(url, context, attempt) {
+    val request = remember(activeUrl, context, attempt) {
         ImageRequest.Builder(context)
-            .data(url)
+            .data(activeUrl)
             .size(4096, 4096)
             .setParameter("viewer-attempt", attempt)
             .build()
@@ -479,8 +482,15 @@ private fun ImageViewerPage(
             contentDescription = "帖子图片",
             contentScale = ContentScale.Fit,
             onState = { state ->
-                loadState = state
-                if (state is AsyncImagePainter.State.Success) imageSize = state.painter.intrinsicSize
+                if (state is AsyncImagePainter.State.Error &&
+                    isHttp404Error(state.result.throwable) &&
+                    candidateIndex + 1 < candidates.size
+                ) {
+                    candidateIndex++
+                } else {
+                    loadState = state
+                    if (state is AsyncImagePainter.State.Success) imageSize = state.painter.intrinsicSize
+                }
             },
             modifier = Modifier.fillMaxSize().graphicsLayer {
                 scaleX = current.scale
@@ -501,7 +511,10 @@ private fun ImageViewerPage(
                 )
                 CapsuleButton(
                     text = "重试",
-                    onClick = { attempt++ },
+                    onClick = {
+                        candidateIndex = 0
+                        attempt++
+                    },
                     icon = NagiIcons.Refresh,
                     style = CapsuleStyle.Neutral,
                 )

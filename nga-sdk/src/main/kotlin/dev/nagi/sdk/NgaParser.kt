@@ -187,8 +187,7 @@ internal object NgaParser {
         val topic = data.optJSONObject("__T") ?: throw NgaException.Protocol(ProtocolReason.JSON_THREAD_NODE)
         val users = data.optJSONObject("__U")
         val groups = parseJsonGroups(users?.optJSONObject("__GROUPS") ?: data.optJSONObject("__GROUPS"))
-        val base = data.optJSONObject("__GLOBAL")?.optString("_ATTACH_BASE_VIEW")
-            ?.takeIf { it.isNotBlank() } ?: "https://img.nga.cn/attachments/"
+        val base = normalizeAttachmentBase(data.optJSONObject("__GLOBAL")?.optString("_ATTACH_BASE_VIEW"))
         fun parsePost(item: JSONObject, fallbackFloor: Int, depth: Int): Post {
             if (depth > 8) throw NgaException.Protocol(ProtocolReason.JSON_COMMENT_DEPTH)
             val uid = item.optString("authorid")
@@ -510,11 +509,42 @@ internal fun normalizeClientPlatform(raw: String?): String? {
     }
 }
 
+private const val DEFAULT_ATTACHMENT_BASE = "https://img.nga.cn/attachments/"
+private val ngaImageHostRegex = Regex("^img\\d*\\.nga\\.cn$")
+private val legacyNgaImagePathRegex = Regex("https?://img\\d*\\.(nga\\.178\\.com|ngacn\\.cc|ngabbs\\.com)/attachments/")
+private val legacyNgaImageHostRegex = Regex("https?://img(\\d*)\\.(nga\\.178\\.com|ngacn\\.cc|ngabbs\\.com)/")
+
+internal fun normalizeAttachmentBase(raw: String?): String {
+    val trimmed = decodeNumericEntities(raw.orEmpty()).trim()
+    if (trimmed.isEmpty() || trimmed == "null") return DEFAULT_ATTACHMENT_BASE
+    var normalized = trimmed
+        .replace(legacyNgaImagePathRegex, "https://img.nga.cn/attachments/")
+        .replace(legacyNgaImageHostRegex, "https://img$1.nga.cn/")
+    normalized = when {
+        normalized.startsWith("//") -> "https:$normalized"
+        normalized.startsWith("http://", ignoreCase = true) || normalized.startsWith("https://", ignoreCase = true) -> normalized
+        else -> "https://$normalized"
+    }
+    val uri = runCatching { java.net.URI(normalized) }.getOrNull() ?: return DEFAULT_ATTACHMENT_BASE
+    val host = uri.host?.lowercase(java.util.Locale.ROOT) ?: return DEFAULT_ATTACHMENT_BASE
+    if (uri.scheme !in setOf("http", "https") || uri.userInfo != null) return DEFAULT_ATTACHMENT_BASE
+    val scheme = if (uri.scheme == "http" && ngaImageHostRegex.matches(host)) "https" else uri.scheme
+    if (scheme != "https") return DEFAULT_ATTACHMENT_BASE
+    val rawPath = uri.rawPath.orEmpty()
+    val path = if (ngaImageHostRegex.matches(host) && (rawPath.isEmpty() || rawPath == "/")) {
+        "/attachments/"
+    } else {
+        rawPath.trimEnd('/') + "/"
+    }
+    val port = if (uri.port != -1) ":${uri.port}" else ""
+    return "$scheme://$host$port$path"
+}
+
 internal fun resourceUrl(raw: String, base: String): String {
     var value = decodeNumericEntities(raw).trim().replace("&amp;", "&").substringBefore("|.a")
     if (value.isBlank() || value == "null") return ""
-    value = value.replace(Regex("https?://img\\d*\\.(nga\\.178\\.com|ngacn\\.cc|ngabbs\\.com)/attachments/"), "https://img.nga.cn/attachments/")
-        .replace(Regex("https?://img(\\d*)\\.(nga\\.178\\.com|ngacn\\.cc|ngabbs\\.com)/"), "https://img$1.nga.cn/")
+    value = value.replace(legacyNgaImagePathRegex, "https://img.nga.cn/attachments/")
+        .replace(legacyNgaImageHostRegex, "https://img$1.nga.cn/")
     val origin = when {
         base.startsWith("//") -> "https:$base"
         base.startsWith("http") -> base
@@ -523,7 +553,15 @@ internal fun resourceUrl(raw: String, base: String): String {
     value = when {
         value.startsWith("//") -> "https:$value"
         value.startsWith("img") && value.contains(".nga.cn/") -> "https://$value"
-        value.startsWith("./") -> origin + value.removePrefix("./").removePrefix("attachments/")
+        value.startsWith("./") -> {
+            val relative = value.removePrefix("./").removePrefix("attachments/")
+            val needsAttachmentsPrefix = relative.startsWith("mon_") &&
+                runCatching { java.net.URI(origin) }.getOrNull()?.let {
+                    it.host?.lowercase(java.util.Locale.ROOT)?.matches(ngaImageHostRegex) == true &&
+                        (it.rawPath.isNullOrEmpty() || it.rawPath == "/")
+                } == true
+            if (needsAttachmentsPrefix) "${origin}attachments/$relative" else origin + relative
+        }
         else -> value
     }
     val resolved = runCatching { java.net.URI(origin).resolve(value).toString() }.getOrDefault("")

@@ -94,4 +94,15 @@ class ContentFormattingTest {
         assertEquals(ContentBlock.Code("[h]标题[/h]======"), ContentParser.parse("<pre>[h]标题[/h]======</pre>").single())
         assertEquals(ContentBlock.Text("[custom]原文[/custom]"), ContentParser.parse("[custom]原文[/custom]").single())
     }
+
+    @Test fun bareAttachmentHostStillResolvesMonAttachments() {
+        assertEquals("https://img.nga.cn/attachments/", normalizeAttachmentBase("img.nga.cn"))
+        assertEquals("https://img.nga.cn/attachments/", normalizeAttachmentBase("//img.nga.cn/"))
+        assertEquals("https://img8.nga.cn/attachments/", normalizeAttachmentBase("http://img8.nga.cn"))
+        val block = ContentParser.parse(
+            "[img]./mon_202611/20/-7Q46-kgwsK1xT3cSlc-sg.jpeg[/img]",
+            attachmentBase = "https://img.nga.cn/",
+        ).single() as ContentBlock.Image
+        assertEquals("https://img.nga.cn/attachments/mon_202611/20/-7Q46-kgwsK1xT3cSlc-sg.jpeg", block.url)
+    }
 }

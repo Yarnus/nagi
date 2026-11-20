@@ -246,6 +246,9 @@ private fun RenderContentBlocks(
                 )
 
                 is ContentBlock.Image -> {
+                    val candidates = remember(block.url) { imageFallbackCandidates(block.url) }
+                    var candidateIndex by remember(block.url) { mutableStateOf(0) }
+                    val activeUrl = candidates.getOrElse(candidateIndex) { block.url }
                     var loaded by remember(block.url) { mutableStateOf(false) }
                     var failed by remember(block.url) { mutableStateOf(false) }
                     var isTall by remember(block.url) { mutableStateOf(false) }
@@ -267,6 +270,7 @@ private fun RenderContentBlocks(
                                     .fillMaxWidth()
                                     .heightIn(min = 120.dp)
                                     .clickable(onClickLabel = "重试加载图片") {
+                                        candidateIndex = 0
                                         failed = false
                                         attempt++
                                     }
@@ -288,7 +292,7 @@ private fun RenderContentBlocks(
                             }
                         } else {
                             AsyncImage(
-                                model = rememberPostImageModel(block.url, attempt),
+                                model = rememberPostImageModel(activeUrl, attempt),
                                 contentDescription = "帖子图片，点击查看",
                                 contentScale = ContentScale.Crop,
                                 alignment = Alignment.TopCenter,
@@ -298,14 +302,18 @@ private fun RenderContentBlocks(
                                     val size = state.painter.intrinsicSize
                                     isTall = size.width > 0f && size.height > size.width * 1.6f
                                 },
-                                onError = {
-                                    loaded = false
-                                    failed = true
-                                    isTall = false
+                                onError = { state ->
+                                    if (isHttp404Error(state.result.throwable) && candidateIndex + 1 < candidates.size) {
+                                        candidateIndex++
+                                    } else {
+                                        loaded = false
+                                        failed = true
+                                        isTall = false
+                                    }
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { onImage(block.url) },
+                                    .clickable { onImage(activeUrl) },
                             )
                             if (isTall) {
                                 Text(

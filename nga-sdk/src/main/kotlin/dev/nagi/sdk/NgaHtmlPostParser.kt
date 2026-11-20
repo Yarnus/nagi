@@ -46,9 +46,11 @@ internal object NgaHtmlPostParser {
             val groups = parseJsonGroups(users.optJSONObject("__GROUPS"))
             val title = decodeNumericEntities(document.getElementById("currentTopicName")?.text().orEmpty())
             need(title.isNotBlank(), ProtocolReason.HTML_TITLE_MISSING)
-            val attachmentBase = Regex("""\b__ATTACH_BASE_VIEW\s*=\s*""").find(scripts)?.let {
-                JSONTokener(scripts.substring(it.range.last + 1)).nextValue() as? String
-            } ?: "https://img.nga.cn/attachments/"
+            val attachmentBase = normalizeAttachmentBase(
+                Regex("""\b__ATTACH_BASE_VIEW\s*=\s*""").find(scripts)?.let {
+                    JSONTokener(scripts.substring(it.range.last + 1)).nextValue() as? String
+                },
+            )
             val container = document.getElementById("m_posts_c") ?: throw NgaException.Protocol(ProtocolReason.HTML_POSTS_CONTAINER)
             val postContainers = container.select("[id]").filter { it.id().matches(Regex("postcontainer\\d+")) }
             val contents = container.select("[id]").filter { it.id().matches(Regex("postcontent\\d+")) }

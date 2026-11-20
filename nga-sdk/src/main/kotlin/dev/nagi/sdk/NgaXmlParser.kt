@@ -100,8 +100,7 @@ internal object NgaXmlParser {
             ).trim()
             if (gid.isNotBlank() && name.isNotBlank()) gid to name else null
         }?.toMap().orEmpty()
-        val base = root.directChild("__GLOBAL")?.field("_ATTACH_BASE_VIEW")
-            ?.takeIf(String::isNotBlank) ?: "https://img.nga.cn/attachments/"
+        val base = normalizeAttachmentBase(root.directChild("__GLOBAL")?.field("_ATTACH_BASE_VIEW"))
         val size = (root.fieldOrNull("__R__ROWS_PAGE")?.toIntOrNull() ?: 0).coerceAtLeast(0)
         val paginationSize = size.takeIf { it > 0 } ?: 20
         fun parsePost(item: Element, fallbackFloor: Int, depth: Int): Post {
