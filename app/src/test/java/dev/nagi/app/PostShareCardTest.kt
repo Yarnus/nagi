@@ -12,6 +12,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.*
@@ -21,10 +24,15 @@ import androidx.compose.ui.unit.dp
 import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.ui.components.LocalUserTags
 import dev.nagi.app.ui.components.UserTagAccess
+import dev.nagi.app.ui.post.HeightBoundedShareCard
+import dev.nagi.app.ui.post.MAX_CARD_EXPORT_HEIGHT_PX
 import dev.nagi.app.ui.post.PostShareCardDialog
 import dev.nagi.app.ui.post.ReaderPost
 import dev.nagi.app.ui.post.ReaderTopBar
+import dev.nagi.app.ui.post.SHARE_CARD_EXPORT_WIDTH_PX
+import dev.nagi.app.ui.post.toSoftwareArgb8888
 import dev.nagi.app.ui.post.trimShareCardBlocks
+import kotlinx.coroutines.runBlocking
 import dev.nagi.app.ui.theme.NagiTheme
 import dev.nagi.app.viewmodel.MainPostShareState
 import dev.nagi.app.viewmodel.UserTagsState
@@ -212,7 +220,8 @@ class PostShareCardTest {
         assertTrue(pngFile.name.endsWith(".png"))
         val decoded = BitmapFactory.decodeFile(pngFile.absolutePath)
         assertNotNull(decoded)
-        assertTrue(decoded.width > 0 && decoded.height > 0)
+        assertEquals(SHARE_CARD_EXPORT_WIDTH_PX, decoded.width)
+        assertTrue(decoded.height in 1..MAX_CARD_EXPORT_HEIGHT_PX)
         decoded.recycle()
 
         assertEquals(1, startedIntents.size)
@@ -281,5 +290,66 @@ class PostShareCardTest {
         compose.onNodeWithText("网络超时").assertIsDisplayed()
         compose.onNodeWithText("重试").performClick()
         compose.runOnIdle { assertEquals(1, retries) }
+    }
+
+    @Test fun shareCardDialogExportsFixedWidthAndTruncatesByActualHeightOnHighDensity() {
+        val longParagraphs = List(30) { index ->
+            ContentBlock.Text("第 $index 段：" + "超长测试文本内容换行验证".repeat(8))
+        }
+        val mainPost = Post(
+            id = "2002",
+            floor = 0,
+            author = "高分屏测试",
+            authorId = "88",
+            avatar = "",
+            date = "2026-11-20 14:00",
+            content = longParagraphs,
+        )
+        val preTrimmed = trimShareCardBlocks(mainPost.content)
+        lateinit var capturedLayer: GraphicsLayer
+
+        compose.setContent {
+            capturedLayer = rememberGraphicsLayer()
+            CompositionLocalProvider(
+                LocalDensity provides Density(density = 4f, fontScale = 2f),
+            ) {
+                NagiTheme("light") {
+                    HeightBoundedShareCard(
+                        topicId = "47841713",
+                        topicTitle = "高密度大字号高度精准截断测试",
+                        post = mainPost,
+                        preTrimmed = preTrimmed,
+                        preferences = ReadingPreferences(),
+                        darkCard = false,
+                        graphicsLayer = capturedLayer,
+                    )
+                }
+            }
+        }
+
+        compose.onNodeWithText("内容已节选 · 完整内容请查看原帖").assertExists()
+
+        compose.runOnIdle {
+            WindowInspector.getGlobalWindowViews().forEach { windowView ->
+                if (windowView.width > 0 && windowView.height > 0) {
+                    val scratch = Bitmap.createBitmap(windowView.width, windowView.height, Bitmap.Config.ARGB_8888)
+                    windowView.draw(Canvas(scratch))
+                    scratch.recycle()
+                }
+            }
+        }
+
+        val bitmap = runBlocking {
+            capturedLayer.toImageBitmap().asAndroidBitmap().toSoftwareArgb8888()
+        }
+        try {
+            assertEquals(SHARE_CARD_EXPORT_WIDTH_PX, bitmap.width)
+            assertTrue(
+                "Expected height in 1..$MAX_CARD_EXPORT_HEIGHT_PX, got ${bitmap.height}",
+                bitmap.height in 1..MAX_CARD_EXPORT_HEIGHT_PX,
+            )
+        } finally {
+            bitmap.recycle()
+        }
     }
 }

@@ -47,16 +47,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -81,6 +88,7 @@ import dev.nagi.app.ui.topic.formatTimeText
 import dev.nagi.app.viewmodel.MainPostShareState
 import dev.nagi.sdk.ContentBlock
 import dev.nagi.sdk.Post
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -88,6 +96,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicInteger
 
+internal const val SHARE_CARD_EXPORT_DENSITY = 2.75f
+internal const val SHARE_CARD_EXPORT_WIDTH_PX = 1080
+internal const val MAX_CARD_EXPORT_HEIGHT_PX = 8000
 private const val MAX_CARD_EXPORT_DIMENSION_PX = 16384
 private const val MAX_CARD_EXPORT_PIXELS = 24_000_000L
 
@@ -369,22 +380,14 @@ internal fun PostShareCardDialog(
                         .clip(RoundedCornerShape(16.dp))
                         .verticalScroll(rememberScrollState()),
                 ) {
-                    PostShareCardSurface(
+                    HeightBoundedShareCard(
                         topicId = topicId,
                         topicTitle = topicTitle,
                         post = post,
-                        content = trimmed,
+                        preTrimmed = trimmed,
                         preferences = preferences,
                         darkCard = cardDark,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("share-card-canvas")
-                            .drawWithContent {
-                                graphicsLayer.record {
-                                    this@drawWithContent.drawContent()
-                                }
-                                drawLayer(graphicsLayer)
-                            },
+                        graphicsLayer = graphicsLayer,
                     )
                 }
             }
@@ -399,7 +402,8 @@ internal fun PostShareCardDialog(
                     scope.launch {
                         try {
                             exportShareCardPng(context, topicId, graphicsLayer)
-                        } catch (_: Throwable) {
+                        } catch (t: Throwable) {
+                            if (t is CancellationException) throw t
                             Toast.makeText(context, "卡片内容过长或生成失败", Toast.LENGTH_SHORT).show()
                         } finally {
                             exporting = false
@@ -420,6 +424,122 @@ internal fun PostShareCardDialog(
             )
         }
     }
+}
+
+@Composable
+internal fun HeightBoundedShareCard(
+    topicId: String,
+    topicTitle: String,
+    post: Post,
+    preTrimmed: ShareCardContent,
+    preferences: ReadingPreferences,
+    darkCard: Boolean,
+    graphicsLayer: GraphicsLayer,
+) {
+    val exportDensity = Density(SHARE_CARD_EXPORT_DENSITY, LocalDensity.current.fontScale)
+    SubcomposeLayout(modifier = Modifier.fillMaxWidth()) { constraints ->
+        val previewWidthPx = constraints.maxWidth.coerceAtLeast(1)
+        val previewScale = previewWidthPx.toFloat() / SHARE_CARD_EXPORT_WIDTH_PX.toFloat()
+        val exportConstraints = Constraints.fixedWidth(SHARE_CARD_EXPORT_WIDTH_PX)
+        var probeCounter = 0
+
+        fun measureCandidate(
+            slotId: Any,
+            candidate: ShareCardContent,
+            isProbe: Boolean = false,
+        ): Placeable =
+            subcompose(slotId) {
+                CompositionLocalProvider(LocalDensity provides exportDensity) {
+                    PostShareCardSurface(
+                        topicId = topicId,
+                        topicTitle = topicTitle,
+                        post = post,
+                        content = candidate,
+                        preferences = preferences,
+                        darkCard = darkCard,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (isProbe) {
+                                    Modifier.clearAndSetSemantics {}
+                                } else {
+                                    Modifier
+                                        .testTag("share-card-canvas")
+                                        .drawWithContent {
+                                            graphicsLayer.record {
+                                                this@drawWithContent.drawContent()
+                                            }
+                                            drawLayer(graphicsLayer)
+                                        }
+                                },
+                            ),
+                    )
+                }
+            }.single().measure(exportConstraints)
+
+        fun probeFits(candidate: ShareCardContent): Boolean =
+            measureCandidate("probe-${probeCounter++}", candidate, isProbe = true).height <= MAX_CARD_EXPORT_HEIGHT_PX
+
+        val initialPlaceable = measureCandidate("initial", preTrimmed)
+        val finalPlaceable = if (initialPlaceable.height <= MAX_CARD_EXPORT_HEIGHT_PX) {
+            initialPlaceable
+        } else {
+            val fittedContent = fitShareCardByHeight(preTrimmed.blocks, ::probeFits)
+            measureCandidate("fitted", fittedContent)
+        }
+
+        val previewHeightPx = kotlin.math.ceil(finalPlaceable.height * previewScale).toInt().coerceAtLeast(1)
+        layout(previewWidthPx, previewHeightPx) {
+            finalPlaceable.placeWithLayer(0, 0) {
+                scaleX = previewScale
+                scaleY = previewScale
+                transformOrigin = TransformOrigin(0f, 0f)
+            }
+        }
+    }
+}
+
+private fun fitShareCardByHeight(
+    blocks: List<ContentBlock>,
+    fits: (ShareCardContent) -> Boolean,
+): ShareCardContent {
+    if (blocks.isEmpty()) return ShareCardContent(emptyList(), truncated = true)
+
+    var low = 0
+    var high = blocks.size
+    var bestBlockCount = 0
+    while (low <= high) {
+        val mid = (low + high) ushr 1
+        if (fits(ShareCardContent(blocks.take(mid), truncated = true))) {
+            bestBlockCount = mid
+            low = mid + 1
+        } else {
+            high = mid - 1
+        }
+    }
+
+    val prefix = blocks.take(bestBlockCount)
+    val boundary = blocks.getOrNull(bestBlockCount)
+    if (boundary is ContentBlock.Text && boundary.value.isNotEmpty()) {
+        var charLow = 1
+        var charHigh = boundary.value.length
+        var bestTextBlock: ContentBlock.Text? = null
+        while (charLow <= charHigh) {
+            val midChars = (charLow + charHigh) ushr 1
+            val trimmedBoundary = truncateTextBlock(boundary, midChars)
+            if (trimmedBoundary != null && fits(ShareCardContent(prefix + trimmedBoundary, truncated = true))) {
+                bestTextBlock = trimmedBoundary
+                charLow = midChars + 1
+            } else {
+                charHigh = midChars - 1
+            }
+        }
+        if (bestTextBlock != null) {
+            return ShareCardContent(prefix + bestTextBlock, truncated = true)
+        }
+    }
+
+    return ShareCardContent(prefix, truncated = true)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
