@@ -76,6 +76,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.ui.components.CapsuleButton
+import dev.nagi.app.ui.components.formatAuthorDisplayName
 import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.ChromeIconButton
 import dev.nagi.app.ui.components.EdgeAlignedMetaRow
@@ -731,7 +732,7 @@ fun TopicsScreen(
                 horizontalArrangement = Arrangement.spacedBy(Space.sm),
             ) {
                 Icon(NagiIcons.Person, contentDescription = null, modifier = Modifier.size(16.dp), tint = colors.textSecondary)
-                Text(topic.author.ifBlank { "匿名" }, style = typography.body, color = colors.textSecondary)
+                Text(formatAuthorDisplayName(topic.author), style = typography.body, color = colors.textSecondary)
             }
             if (topic.createdAt > 0) {
                 Text("发布 ${formatTime(topic.createdAt)}", style = typography.metadata, color = colors.textSecondary)
@@ -1215,7 +1216,7 @@ internal fun TopicRow(
             EdgeAlignedMetaRow(
                 leading = {
                     Text(
-                        text = topic.author.ifBlank { "匿名" },
+                        text = formatAuthorDisplayName(topic.author),
                         style = typography.metadata,
                         color = colors.textSecondary,
                     )

@@ -3,6 +3,7 @@ package dev.nagi.app.ui.components
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -18,6 +19,8 @@ internal class ImageLoadTracker {
     private val slotPending = mutableMapOf<String, MutableSet<Any>>()
     private var activeSlot: String? = null
     var hasPending by mutableStateOf(false)
+        private set
+    var settledRevision by mutableIntStateOf(0)
         private set
 
     fun setActiveSlot(slotId: String?) {
@@ -37,7 +40,10 @@ internal class ImageLoadTracker {
         val set = slotPending[slotId] ?: return
         if (set.remove(token)) {
             if (set.isEmpty()) slotPending.remove(slotId)
-            if (slotId == activeSlot) refresh()
+            if (slotId == activeSlot) {
+                settledRevision++
+                refresh()
+            }
         }
     }
 

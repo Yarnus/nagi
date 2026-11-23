@@ -313,7 +313,7 @@ fun SearchScreen(
         dev.nagi.app.ui.components.NagiConfirmDialog(
             onDismissRequest = { topicDetails = null },
             title = topic.title,
-            message = "${topic.author}\n${topic.replies} 条回复",
+            message = "${dev.nagi.app.ui.components.formatAuthorDisplayName(topic.author)}\n${topic.replies} 条回复",
             confirmLabel = "关闭",
             onConfirm = { topicDetails = null },
             confirmStyle = CapsuleStyle.Neutral,

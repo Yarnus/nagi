@@ -74,7 +74,9 @@ internal fun ReplyReferenceCard(quote: ContentBlock.Quote, preferences: ReadingP
     LaunchedEffect(expanded, target) {
         if (expanded && target != null) references?.request?.invoke(target, false)
     }
-    val author = result?.post?.author ?: quote.author
+    val author = (result?.post?.author ?: quote.author)?.let {
+        dev.nagi.app.ui.components.formatAuthorDisplayName(it)
+    }
     val floor = result?.post?.floor
     val preview = referencePreview(if (hasSnapshot) quote.children else result?.post?.content.orEmpty())
     val heading = buildString {

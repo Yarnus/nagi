@@ -170,6 +170,7 @@ class PostShareCardTest {
         )
 
         var fontScale by mutableStateOf(1f)
+        var closed = false
         compose.setContent {
             val base = LocalContext.current
             val wrapped = remember(base) {
@@ -192,7 +193,7 @@ class PostShareCardTest {
                         shareState = MainPostShareState(open = true),
                         preferences = ReadingPreferences(),
                         onRetry = {},
-                        close = {},
+                        close = { closed = true },
                     )
                 }
             }
@@ -243,6 +244,7 @@ class PostShareCardTest {
         assertEquals(Intent.ACTION_SEND, target!!.action)
         assertEquals("image/jpeg", target.type)
         assertTrue((target.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0)
+        assertTrue("Expected share dialog to close after launching OS share sheet", closed)
     }
 
     @Test
@@ -409,8 +411,11 @@ class PostShareCardTest {
     @Test fun imageLoadTrackerIgnoresInactiveSlotsAndHonorsTimeout() = runBlocking {
         assertEquals(3_000L, SHARE_CARD_IMAGE_WAIT_TIMEOUT_MS)
         val tracker = ImageLoadTracker()
+        val initialRevision = tracker.settledRevision
         val inactiveToken = Any()
         tracker.markPending("initial", inactiveToken)
+        tracker.markSettled("initial", inactiveToken)
+        assertEquals(initialRevision, tracker.settledRevision)
         tracker.setActiveSlot("fitted")
         assertFalse(tracker.hasPending)
         assertFalse(tracker.awaitSettled(50L))
@@ -424,6 +429,7 @@ class PostShareCardTest {
         }
         assertTrue(tracker.awaitSettled(1_000L))
         assertFalse(tracker.hasPending)
+        assertEquals(initialRevision + 1, tracker.settledRevision)
         job.join()
 
         val stuckToken = Any()
@@ -491,5 +497,60 @@ class PostShareCardTest {
         }
         val toast = org.robolectric.shadows.ShadowToast.getTextOfLatestToast()
         assertTrue("Unexpected error toast: $toast", startedIntents.isNotEmpty())
+    }
+
+    @Test fun heightBoundedShareCardReRecordsPictureWhenImageSettles() {
+        val mainPost = Post(
+            id = "5001",
+            floor = 0,
+            author = "测试楼主",
+            authorId = "100",
+            avatar = "",
+            date = "2026-11-23 16:00",
+            content = listOf(ContentBlock.Text("图片加载完成后刷新 Picture 录制")),
+        )
+        val recorder = ShareCardPictureRecorder()
+        val tracker = ImageLoadTracker()
+
+        compose.setContent {
+            NagiTheme("light") {
+                HeightBoundedShareCard(
+                    topicId = "47841716",
+                    topicTitle = "Picture 刷新测试",
+                    post = mainPost,
+                    preTrimmed = trimShareCardBlocks(mainPost.content),
+                    preferences = ReadingPreferences(),
+                    darkCard = false,
+                    pictureRecorder = recorder,
+                    imageTracker = tracker,
+                )
+            }
+        }
+
+        fun drawWindow() {
+            compose.runOnIdle {
+                WindowInspector.getGlobalWindowViews().forEach { windowView ->
+                    if (windowView.width > 0 && windowView.height > 0) {
+                        val scratch = Bitmap.createBitmap(windowView.width, windowView.height, Bitmap.Config.ARGB_8888)
+                        windowView.draw(Canvas(scratch))
+                        scratch.recycle()
+                    }
+                }
+            }
+        }
+
+        drawWindow()
+        val firstPicture = recorder.picture
+        assertNotNull(firstPicture)
+
+        val token = Any()
+        compose.runOnIdle {
+            tracker.markPending("initial", token)
+            tracker.markSettled("initial", token)
+        }
+        drawWindow()
+        val refreshedPicture = recorder.picture
+        assertNotNull(refreshedPicture)
+        assertTrue("Expected Picture to be re-recorded after image settled", refreshedPicture !== firstPicture)
     }
 }

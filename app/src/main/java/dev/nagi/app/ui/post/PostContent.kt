@@ -49,6 +49,7 @@ import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.FlatCard
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.TrackSlotImageReadiness
+import dev.nagi.app.ui.components.formatAuthorDisplayName
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
 import dev.nagi.sdk.ContentAlignment
@@ -151,7 +152,7 @@ internal fun contentPlainText(blocks: List<ContentBlock>): String {
             is ContentBlock.Code -> block.value.takeIf { it.isNotBlank() }
             is ContentBlock.Quote -> {
                 val body = render(block.children)
-                val header = block.author?.let { "引用 $it：" } ?: "引用："
+                val header = block.author?.let { "引用 ${formatAuthorDisplayName(it)}：" } ?: "引用："
                 if (body.isBlank()) null else "$header\n$body"
             }
             is ContentBlock.Table -> block.rows.joinToString("\n") { row ->

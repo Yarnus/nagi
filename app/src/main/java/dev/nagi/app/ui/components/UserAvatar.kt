@@ -72,8 +72,13 @@ fun UserAvatar(
     showBorder: Boolean = true,
 ) {
     val typography = NagiThemeTokens.typography
-    val initialChar = name?.trim()?.firstOrNull()?.let { ch ->
-        if (ch in 'a'..'z') ch.uppercaseChar() else ch
+    val trimmedName = name?.trim().orEmpty()
+    val initialChar = when {
+        trimmedName.isEmpty() -> null
+        isAnonymousHandle(trimmedName) -> '匿'
+        else -> trimmedName.firstOrNull()?.let { ch ->
+            if (ch in 'a'..'z') ch.uppercaseChar() else ch
+        }
     }
     val tone = avatarToneFor(uid?.takeIf { it.isNotBlank() } ?: name, colors)
     val baseModifier = modifier

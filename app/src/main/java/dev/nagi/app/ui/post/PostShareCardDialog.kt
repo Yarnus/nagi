@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -76,6 +77,7 @@ import dev.nagi.app.ui.components.NagiDialogActions
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.SlotImageLoadTracker
 import dev.nagi.app.ui.components.UserAvatar
+import dev.nagi.app.ui.components.formatAuthorDisplayName
 import dev.nagi.app.ui.theme.DarkSemanticColors
 import dev.nagi.app.ui.theme.LightSemanticColors
 import dev.nagi.app.ui.theme.LocalNagiColors
@@ -252,6 +254,7 @@ internal fun PostShareCardDialog(
     val imageTracker = remember(post?.id, shareState.earlyReplies) { ImageLoadTracker() }
     var cardDark by rememberSaveable { mutableStateOf(currentColors.isDark) }
     var exporting by remember { mutableStateOf(false) }
+    var captureNonce by remember { mutableIntStateOf(0) }
 
     val trimmed = remember(post?.id, post?.content) {
         post?.let { trimShareCardBlocks(it.content) } ?: ShareCardContent(emptyList(), false)
@@ -354,6 +357,7 @@ internal fun PostShareCardDialog(
                         darkCard = cardDark,
                         pictureRecorder = pictureRecorder,
                         imageTracker = imageTracker,
+                        captureNonce = captureNonce,
                     )
                 }
             }
@@ -367,13 +371,14 @@ internal fun PostShareCardDialog(
                     exporting = true
                     scope.launch {
                         try {
-                            val awaited = imageTracker.awaitSettled(SHARE_CARD_IMAGE_WAIT_TIMEOUT_MS)
-                            if (awaited) {
-                                // Ensure Compose finishes remeasure/drawWithContent after images settle.
-                                withFrameNanos {}
-                                withFrameNanos {}
-                            }
+                            imageTracker.awaitSettled(SHARE_CARD_IMAGE_WAIT_TIMEOUT_MS)
+                            // Force the root drawWithContent modifier to re-record the Picture after
+                            // child image nodes finish drawing, then wait for the frame to commit.
+                            captureNonce++
+                            withFrameNanos {}
+                            withFrameNanos {}
                             exportShareCardImage(context, topicId, pictureRecorder)
+                            close()
                         } catch (t: Throwable) {
                             if (t is CancellationException) throw t
                             withContext(Dispatchers.Main.immediate) {
@@ -411,6 +416,7 @@ internal fun HeightBoundedShareCard(
     darkCard: Boolean,
     pictureRecorder: ShareCardPictureRecorder,
     imageTracker: ImageLoadTracker? = null,
+    captureNonce: Int = 0,
 ) {
     val exportDensity = Density(SHARE_CARD_EXPORT_DENSITY, LocalDensity.current.fontScale)
     SubcomposeLayout(modifier = Modifier.fillMaxWidth()) { constraints ->
@@ -451,6 +457,10 @@ internal fun HeightBoundedShareCard(
                                     Modifier
                                         .testTag("share-card-canvas")
                                         .drawWithContent {
+                                            // Subscribe to image settle & explicit capture ticks so
+                                            // child image loads re-record the outer Picture.
+                                            imageTracker?.settledRevision
+                                            captureNonce
                                             val widthPx = size.width.toInt().coerceAtLeast(1)
                                             val heightPx = size.height.toInt().coerceAtLeast(1)
                                             val picture = Picture()
@@ -707,7 +717,7 @@ internal fun PostShareCardSurface(
                                         itemVerticalAlignment = Alignment.CenterVertically,
                                     ) {
                                         Text(
-                                            text = post.author,
+                                            text = formatAuthorDisplayName(post.author),
                                             style = typography.bodyText.copy(fontWeight = FontWeight.Medium),
                                             color = cardColors.textPrimary,
                                         )
@@ -857,7 +867,7 @@ private fun ShareCardCommentsSection(
                 EdgeAlignedMetaRow(
                     leading = {
                         Text(
-                            text = comment.author,
+                            text = formatAuthorDisplayName(comment.author),
                             style = typography.metadata.copy(fontWeight = FontWeight.Medium),
                             color = colors.textPrimary,
                         )
@@ -935,7 +945,7 @@ private fun ShareCardRepliesSection(
                                 itemVerticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    text = reply.author,
+                                    text = formatAuthorDisplayName(reply.author),
                                     style = typography.metadata.copy(fontWeight = FontWeight.Medium),
                                     color = colors.textPrimary,
                                 )

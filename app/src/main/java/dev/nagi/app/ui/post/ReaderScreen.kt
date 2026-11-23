@@ -112,6 +112,7 @@ import dev.nagi.app.ui.components.nagiPressFeedback
 import dev.nagi.app.ui.components.SectionCardItem
 import dev.nagi.app.ui.components.SegmentedCapsuleControl
 import dev.nagi.app.ui.components.UserAvatar
+import dev.nagi.app.ui.components.formatAuthorDisplayName
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
 import dev.nagi.app.ui.topic.formatTimeText
@@ -168,7 +169,7 @@ fun ReaderScreen(
             PublishAction.QUOTE -> "引用回复"
             else -> "回复"
         }
-        replies.open(target, "$label ${post.author} · #${post.floor}")
+        replies.open(target, "$label ${formatAuthorDisplayName(post.author)} · #${post.floor}")
     }
     val state by vm.state.collectAsStateWithLifecycle()
     LaunchedEffect(state.id, state.loadedRevision) {
@@ -370,7 +371,7 @@ fun ReaderScreen(
                                         onFilterAuthor = if (canFilterAuthor) {
                                             {
                                                 if (filteringThisAuthor) vm.load(page = 1, clearAuthorFilter = true)
-                                                else vm.load(page = 1, filterAuthorId = post.authorId, filterAuthorName = post.author)
+                                                else vm.load(page = 1, filterAuthorId = post.authorId, filterAuthorName = formatAuthorDisplayName(post.author))
                                             }
                                         } else null,
                                         onCopyText = if (plainText.isNotEmpty()) {
@@ -761,7 +762,7 @@ internal fun ReaderPost(
             leading = {
                 Row(
                     modifier = if (canOpenUser) Modifier
-                        .clickable(onClickLabel = "查看 ${post.author} 的用户详情") { openUser?.invoke(post.authorId) }
+                        .clickable(onClickLabel = "查看 ${formatAuthorDisplayName(post.author)} 的用户详情") { openUser?.invoke(post.authorId) }
                         .heightIn(min = 48.dp) else Modifier,
                     verticalAlignment = Alignment.Top,
                 ) {
@@ -783,7 +784,7 @@ internal fun ReaderPost(
                             itemVerticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = post.author,
+                                text = formatAuthorDisplayName(post.author),
                                 style = typography.bodyText.copy(
                                     fontWeight = FontWeight.Medium,
                                     lineHeight = 19.sp,
@@ -891,7 +892,11 @@ internal fun ReaderPost(
                                 verticalArrangement = Arrangement.spacedBy(Space.xs),
                                 itemVerticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(comment.author, style = typography.capsuleLabel, color = colors.goldText)
+                                Text(
+                                    text = formatAuthorDisplayName(comment.author),
+                                    style = typography.capsuleLabel,
+                                    color = colors.goldText,
+                                )
                                 UserTagBadge(comment.authorId)
                                 if (comment.date.isNotBlank()) {
                                     Text(
@@ -936,7 +941,11 @@ internal fun ReaderPost(
                                     verticalArrangement = Arrangement.spacedBy(Space.xs),
                                     itemVerticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Text(comment.author, style = typography.capsuleLabel, color = colors.goldText)
+                                    Text(
+                                    text = formatAuthorDisplayName(comment.author),
+                                    style = typography.capsuleLabel,
+                                    color = colors.goldText,
+                                )
                                     UserTagBadge(comment.authorId)
                                 }
                                 SelectionContainer { ContentBlocks(comment.content, preferences, onImage) }

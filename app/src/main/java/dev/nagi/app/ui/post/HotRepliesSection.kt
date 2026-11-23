@@ -46,6 +46,7 @@ import dev.nagi.app.ui.components.GoldTagBadge
 import dev.nagi.app.ui.components.LocalOpenUser
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.UserAvatar
+import dev.nagi.app.ui.components.formatAuthorDisplayName
 import dev.nagi.app.ui.components.UserTagBadge
 import dev.nagi.app.ui.components.isPublicUserId
 import dev.nagi.app.ui.theme.NagiTheme
@@ -218,7 +219,7 @@ private fun HotReplyCard(
         lineHeight = (previewSize + 6).sp,
     )
 
-    val authorName = reply.author.ifBlank { "匿名" }
+    val authorName = formatAuthorDisplayName(reply.author)
     val cardSummary = buildString {
         append(authorName)
         if (reply.score != 0) append("，赞 ${reply.score}")
@@ -283,7 +284,7 @@ private fun HotReplyCard(
                             itemVerticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = reply.author.ifBlank { "匿名" },
+                                text = authorName,
                                 style = typography.capsuleLabel.copy(fontWeight = FontWeight.Medium),
                                 color = colors.textPrimary,
                             )
