@@ -157,6 +157,7 @@ fun NagiApp(
                 val cloudForumBusyKeys by library.cloudForumBusyKeys.collectAsStateWithLifecycle()
                 val cloudForumUncertainKeys by library.cloudForumUncertainKeys.collectAsStateWithLifecycle()
                 val cloudForumNotice by library.cloudForumNotice.collectAsStateWithLifecycle()
+                val topicReadStates by library.topicReadStates.collectAsStateWithLifecycle()
                 val appContext = LocalContext.current
                 LaunchedEffect(library) {
                     library.cloudForumFeedback.collect { message ->
@@ -208,6 +209,7 @@ fun NagiApp(
                                 if (uid.matches(Regex("[1-9][0-9]*"))) select("user/${Uri.encode(uid)}/topics")
                             },
                             LocalOpenLogin provides { select("login") },
+                            dev.nagi.app.ui.components.LocalTopicReadStates provides topicReadStates,
                         ) {
                             NavHost(
                                 nav,

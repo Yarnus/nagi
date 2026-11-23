@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -350,26 +351,39 @@ fun NeutralTagBadge(
     }
 }
 
+val LocalTopicReadStates = staticCompositionLocalOf<Map<String, dev.nagi.app.data.TopicReadState>> { emptyMap() }
+
 @Composable
 fun ReplyCountPill(
     count: Int,
     modifier: Modifier = Modifier,
+    newReplies: Int? = null,
+    hasNewActivity: Boolean = newReplies != null && newReplies > 0,
 ) {
     val tokens = NagiThemeTokens.colors
     val isHot = count >= 100
+    val delta = newReplies?.takeIf { it > 0 }
+    val showNewDot = delta == null && hasNewActivity
     val bg = if (isHot) tokens.goldContainer else tokens.insetContainer
     val fg = when {
         isHot -> tokens.goldText
         count > 0 -> tokens.textSecondary
         else -> tokens.textMuted
     }
-    Box(
+    val deltaText = delta?.let { if (it > 99) "+99+" else "+$it" }
+    val description = when {
+        delta != null -> "$count 条回复，新增 $delta 条"
+        showNewDot -> "$count 条回复，有新动态"
+        else -> "$count 条回复"
+    }
+    Row(
         modifier = modifier
             .clip(CircleShape)
             .background(bg)
             .padding(horizontal = 8.dp, vertical = 2.5.dp)
-            .clearAndSetSemantics { contentDescription = "$count 条回复" },
-        contentAlignment = Alignment.Center,
+            .clearAndSetSemantics { contentDescription = description },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(
             text = count.toString(),
@@ -377,6 +391,21 @@ fun ReplyCountPill(
             color = fg,
             maxLines = 1,
         )
+        if (deltaText != null) {
+            Text(
+                text = deltaText,
+                style = NagiThemeTokens.typography.replyCount,
+                color = tokens.goldText,
+                maxLines = 1,
+            )
+        } else if (showNewDot) {
+            Box(
+                modifier = Modifier
+                    .size(5.dp)
+                    .clip(CircleShape)
+                    .background(tokens.goldAccent),
+            )
+        }
     }
 }
 

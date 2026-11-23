@@ -37,6 +37,51 @@ data class CloudForumFavoriteOrder(
 
 const val MAX_HISTORY_ENTRIES = 100
 const val MAX_UNFAVORITED_POSITIONS = 500
+const val MAX_UNFAVORITED_READ_STATES = 2000
+
+@Entity(tableName = "topic_read_states")
+data class TopicReadState(
+    @PrimaryKey val topicId: String,
+    /** Reply count recorded when last read (`-1` if unknown, e.g. migrated or author-filtered). */
+    val lastReadReplies: Int,
+    /** Epoch seconds (`System.currentTimeMillis() / 1000L`) when last read. */
+    val lastReadAt: Long,
+)
+
+sealed interface TopicReadStatus {
+    data object Unread : TopicReadStatus
+    data object Read : TopicReadStatus
+    data class Updated(val newReplies: Int?) : TopicReadStatus
+}
+
+fun TopicReadStatus.accessibilityStateDescription(): String? = when (this) {
+    TopicReadStatus.Unread -> null
+    TopicReadStatus.Read -> "已读"
+    is TopicReadStatus.Updated -> newReplies?.let { "有 $it 条新回复" } ?: "有新回复"
+}
+
+fun TopicReadStatus.formatReplySummary(replies: Int): String = when (this) {
+    TopicReadStatus.Unread -> "$replies 条回复"
+    TopicReadStatus.Read -> "$replies 条回复 · 已读"
+    is TopicReadStatus.Updated -> if (newReplies != null) {
+        "$replies 条回复 · 新增 $newReplies 条"
+    } else {
+        "$replies 条回复 · 有新动态"
+    }
+}
+
+fun resolveTopicReadStatus(topic: dev.nagi.sdk.Topic, readState: TopicReadState?): TopicReadStatus {
+    if (readState == null) return TopicReadStatus.Unread
+    if (readState.lastReadReplies >= 0) {
+        val delta = topic.replies - readState.lastReadReplies
+        return if (delta > 0) TopicReadStatus.Updated(delta) else TopicReadStatus.Read
+    }
+    return if (readState.lastReadAt > 0L && topic.lastActiveAt > readState.lastReadAt) {
+        TopicReadStatus.Updated(newReplies = null)
+    } else {
+        TopicReadStatus.Read
+    }
+}
 
 @Entity(tableName = "positions")
 data class ReadingPosition(
@@ -138,6 +183,30 @@ interface ReadingDao {
     }
     @Query("DELETE FROM positions WHERE topicId NOT IN (SELECT topicId FROM favorites)")
     suspend fun clearUnfavoritedPositions()
+    @Query("SELECT * FROM topic_read_states")
+    fun topicReadStates(): kotlinx.coroutines.flow.Flow<List<TopicReadState>>
+    @Query("SELECT * FROM topic_read_states WHERE topicId = :id")
+    suspend fun topicReadState(id: String): TopicReadState?
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertTopicReadState(item: TopicReadState)
+    @Query(
+        "DELETE FROM topic_read_states WHERE topicId NOT IN (SELECT topicId FROM favorites) " +
+            "AND topicId NOT IN (SELECT topicId FROM topic_read_states WHERE topicId NOT IN (SELECT topicId FROM favorites) ORDER BY lastReadAt DESC, topicId ASC LIMIT :limit)",
+    )
+    suspend fun pruneTopicReadStates(limit: Int = MAX_UNFAVORITED_READ_STATES)
+    @Transaction
+    suspend fun recordTopicRead(topicId: String, knownReplies: Int?, readAtSeconds: Long) {
+        val existing = topicReadState(topicId)
+        val mergedReplies = when {
+            knownReplies != null && knownReplies >= 0 -> knownReplies
+            else -> existing?.lastReadReplies ?: -1
+        }
+        val mergedAt = maxOf(existing?.lastReadAt ?: 0L, readAtSeconds)
+        upsertTopicReadState(TopicReadState(topicId, mergedReplies, mergedAt))
+        pruneTopicReadStates()
+    }
+    @Query("DELETE FROM topic_read_states WHERE topicId NOT IN (SELECT topicId FROM favorites)")
+    suspend fun clearUnfavoritedReadStates()
 }
 
 @Database(
@@ -149,13 +218,29 @@ interface ReadingDao {
         ReadingHistory::class,
         LocalNotification::class,
         LocalUserTag::class,
+        TopicReadState::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 abstract class ReadingDatabase : RoomDatabase() {
     abstract fun readingDao(): ReadingDao
     companion object {
+        val MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `topic_read_states` (`topicId` TEXT NOT NULL, `lastReadReplies` INTEGER NOT NULL, `lastReadAt` INTEGER NOT NULL, PRIMARY KEY(`topicId`))",
+                )
+                db.execSQL(
+                    "INSERT OR IGNORE INTO `topic_read_states` (`topicId`, `lastReadReplies`, `lastReadAt`) " +
+                        "SELECT `topicId`, -1, CASE WHEN `updatedAt` > 0 THEN `updatedAt` / 1000 ELSE 0 END FROM `positions`",
+                )
+                db.execSQL(
+                    "INSERT OR IGNORE INTO `topic_read_states` (`topicId`, `lastReadReplies`, `lastReadAt`) " +
+                        "SELECT `topicId`, -1, CASE WHEN `viewedAt` > 0 THEN `viewedAt` / 1000 ELSE 0 END FROM `history`",
+                )
+            }
+        }
         val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `cloud_forum_favorite_order` (`forumKey` TEXT NOT NULL, `sortOrder` INTEGER NOT NULL, PRIMARY KEY(`forumKey`))")

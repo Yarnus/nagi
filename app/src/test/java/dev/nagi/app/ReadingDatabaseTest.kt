@@ -180,4 +180,48 @@ class ReadingDatabaseTest {
             context.deleteDatabase("${name}_7.db"); context.deleteDatabase("${name}_8.db")
         }
     }
+
+    @Test fun migration7To8SeedsReadStatesAndProtectsFavoritesOnPruneAndClear() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val name = "topic-read-state-migration"
+        context.deleteDatabase("${name}_7.db"); context.deleteDatabase("${name}_8.db")
+        var databases = AccountDatabases(context, name)
+        try {
+            val pre7 = databases.forUser("7")
+            pre7.saveFavorite(LocalFavorite("fav", "Fav", 1L))
+            pre7.upsertPosition(ReadingPosition("fav", 2, 1, 0, updatedAt = 5_000L))
+            pre7.upsertPosition(ReadingPosition("pos-only", 1, 0, 0, updatedAt = 9_000L))
+            pre7.upsertHistory(ReadingHistory("hist-only", "History", 12_000L))
+            databases.close()
+
+            android.database.sqlite.SQLiteDatabase.openDatabase(context.getDatabasePath("${name}_7.db").path, null, 0).use { db ->
+                db.execSQL("DROP TABLE topic_read_states")
+                db.version = 7
+            }
+
+            databases = AccountDatabases(context, name)
+            val dao7 = databases.forUser("7")
+            assertEquals(TopicReadState("fav", -1, 5L), dao7.topicReadState("fav"))
+            assertEquals(TopicReadState("pos-only", -1, 9L), dao7.topicReadState("pos-only"))
+            assertEquals(TopicReadState("hist-only", -1, 12L), dao7.topicReadState("hist-only"))
+            assertTrue(databases.forUser("8").topicReadStates().first().isEmpty())
+
+            dao7.recordTopicRead("pos-only", knownReplies = 25, readAtSeconds = 100L)
+            assertEquals(TopicReadState("pos-only", 25, 100L), dao7.topicReadState("pos-only"))
+            dao7.recordTopicRead("pos-only", knownReplies = null, readAtSeconds = 110L)
+            assertEquals(TopicReadState("pos-only", 25, 110L), dao7.topicReadState("pos-only"))
+
+            dao7.pruneTopicReadStates(limit = 1)
+            assertNotNull(dao7.topicReadState("fav"))
+            assertNotNull(dao7.topicReadState("pos-only"))
+            assertNull(dao7.topicReadState("hist-only"))
+
+            dao7.clearUnfavoritedReadStates()
+            assertNotNull(dao7.topicReadState("fav"))
+            assertNull(dao7.topicReadState("pos-only"))
+        } finally {
+            databases.close()
+            context.deleteDatabase("${name}_7.db"); context.deleteDatabase("${name}_8.db")
+        }
+    }
 }

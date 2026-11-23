@@ -75,7 +75,13 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.nagi.app.data.ReadingPreferences
+import dev.nagi.app.data.TopicReadState
+import dev.nagi.app.data.TopicReadStatus
+import dev.nagi.app.data.accessibilityStateDescription
+import dev.nagi.app.data.formatReplySummary
+import dev.nagi.app.data.resolveTopicReadStatus
 import dev.nagi.app.ui.components.CapsuleButton
+import dev.nagi.app.ui.components.LocalTopicReadStates
 import dev.nagi.app.ui.components.formatAuthorDisplayName
 import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.ChromeIconButton
@@ -740,7 +746,8 @@ fun TopicsScreen(
             if (topic.lastActiveAt > 0) {
                 Text("活跃 ${formatTime(topic.lastActiveAt)}", style = typography.metadata, color = colors.textSecondary)
             }
-            Text("${topic.replies} 条回复", style = typography.metadata, color = colors.goldText)
+            val readStatus = resolveTopicReadStatus(topic, LocalTopicReadStates.current[topic.id])
+            Text(readStatus.formatReplySummary(topic.replies), style = typography.metadata, color = colors.goldText)
             NagiDialogActions(
                 confirmLabel = "关闭",
                 onConfirm = { details = null },
@@ -1098,6 +1105,7 @@ internal fun FlatTopicCard(
     selected: Boolean,
     selectableMode: Boolean,
     margin: Dp = Space.lg,
+    readState: TopicReadState? = LocalTopicReadStates.current[topic.id],
     onDetails: () -> Unit,
     onClick: () -> Unit,
 ) {
@@ -1116,6 +1124,7 @@ internal fun FlatTopicCard(
             selected = selected,
             selectableMode = selectableMode,
             gutter = 14.dp,
+            readState = readState,
             onDetails = onDetails,
             onClick = onClick,
         )
@@ -1130,11 +1139,22 @@ internal fun TopicRow(
     selected: Boolean,
     selectableMode: Boolean,
     gutter: Dp,
+    readState: TopicReadState? = LocalTopicReadStates.current[topic.id],
     onDetails: () -> Unit,
     onClick: () -> Unit,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
+    val readStatus = remember(topic.id, topic.replies, topic.lastActiveAt, readState) {
+        resolveTopicReadStatus(topic, readState)
+    }
+    val titleColor = when {
+        selected -> colors.textPrimary
+        readStatus is TopicReadStatus.Read -> colors.textSecondary
+        else -> colors.textPrimary
+    }
+    val updatedNewReplies = (readStatus as? TopicReadStatus.Updated)?.newReplies
+    val hasNewActivity = readStatus is TopicReadStatus.Updated
     val interactionModifier = Modifier
         .testTag("topic-${topic.id}")
         .combinedClickable(
@@ -1144,6 +1164,7 @@ internal fun TopicRow(
         )
         .semantics {
             if (selectableMode) this.selected = selected
+            readStatus.accessibilityStateDescription()?.let { stateDescription = it }
             customActions = listOf(CustomAccessibilityAction("查看主题信息") { onDetails(); true })
         }
 
@@ -1179,7 +1200,11 @@ internal fun TopicRow(
                             NeutralTagBadge(text = parsed.tag)
                         }
                     }
-                    ReplyCountPill(count = topic.replies)
+                    ReplyCountPill(
+                        count = topic.replies,
+                        newReplies = updatedNewReplies,
+                        hasNewActivity = hasNewActivity,
+                    )
                 }
                 Text(
                     text = parsed.cleanTitle,
@@ -1188,7 +1213,7 @@ internal fun TopicRow(
                         .clearAndSetSemantics { text = AnnotatedString(topic.title) },
                     style = typography.topicTitle,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                    color = colors.textPrimary,
+                    color = titleColor,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -1205,11 +1230,15 @@ internal fun TopicRow(
                             .clearAndSetSemantics { text = AnnotatedString(topic.title) },
                         style = typography.topicTitle,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                        color = colors.textPrimary,
+                        color = titleColor,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    ReplyCountPill(count = topic.replies)
+                    ReplyCountPill(
+                        count = topic.replies,
+                        newReplies = updatedNewReplies,
+                        hasNewActivity = hasNewActivity,
+                    )
                 }
             }
 

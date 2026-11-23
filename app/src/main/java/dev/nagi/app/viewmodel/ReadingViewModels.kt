@@ -71,6 +71,9 @@ class LibraryViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ListState())
     val favorites = dao.favorites().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val history = dao.history().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val topicReadStates: StateFlow<Map<String, TopicReadState>> = dao.topicReadStates()
+        .map { list -> list.associateBy { it.topicId } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
     private var loading: Job? = null
     private var cloudForumsLoading: Job? = null
     private val cloudForumWriteMutex = Mutex()
@@ -214,7 +217,10 @@ class LibraryViewModel @Inject constructor(
     fun clearHistory(clearUnfavoritedPositions: Boolean = false) = viewModelScope.launch {
         accounts.withCurrentRevision(owner.revision) {
             dao.clearHistory()
-            if (clearUnfavoritedPositions) dao.clearUnfavoritedPositions()
+            if (clearUnfavoritedPositions) {
+                dao.clearUnfavoritedPositions()
+                dao.clearUnfavoritedReadStates()
+            }
         }
     }
     fun font(size: Int) = viewModelScope.launch { prefs.font(size) }
@@ -707,6 +713,7 @@ class ReaderViewModel @Inject constructor(
                     accounts.withCurrentRevision(owner.revision) {
                         dao.saveHistory(ReadingHistory(old.id, data.title, System.currentTimeMillis()))
                     }
+                    recordReadState(old.id, data, filtered)
                 } catch (error: CancellationException) { throw error }
                 catch (_: Exception) {  }
                 if (version != generation) return@launch
@@ -752,6 +759,13 @@ class ReaderViewModel @Inject constructor(
                 val result = client.getPosts(state.id, page, author)
                 ensureActive()
                 if (version != generation || sessions.snapshot().revision != owner.revision) return@launch
+                if (author == null) {
+                    try {
+                        recordReadState(state.id, result, filtered = false)
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) { }
+                }
                 _state.update { current ->
                     if (current.epoch != state.epoch || current.id != state.id || current.data == null) return@update current
                     val adjacent = if (prepend) current.startPage == page + 1 else current.endPage == page - 1
@@ -806,6 +820,17 @@ class ReaderViewModel @Inject constructor(
             val position = ReadingPosition(state.id, page, index, offset, updatedAt = System.currentTimeMillis())
             dao.savePosition(position)
             latestPosition = position
+        }
+    }
+    private suspend fun recordReadState(topicId: String, page: PostPage, filtered: Boolean) {
+        val knownReplies = if (!filtered) {
+            maxOf((page.total - 1).coerceAtLeast(0), page.items.maxOfOrNull { it.floor } ?: 0)
+        } else {
+            null
+        }
+        val nowSeconds = System.currentTimeMillis() / 1000L
+        accounts.withCurrentRevision(owner.revision) {
+            dao.recordTopicRead(topicId, knownReplies, nowSeconds)
         }
     }
     fun toggleFavorite() = viewModelScope.launch {

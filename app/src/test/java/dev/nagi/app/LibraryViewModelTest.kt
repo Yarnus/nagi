@@ -65,6 +65,8 @@ class LibraryViewModelTest {
         dao.saveFavorite(LocalFavorite("fav", "Fav"))
         dao.savePosition(dev.nagi.app.data.ReadingPosition("fav", 2, 1, 0, updatedAt = 10L))
         dao.savePosition(dev.nagi.app.data.ReadingPosition("other", 3, 2, 0, updatedAt = 20L))
+        dao.recordTopicRead("fav", knownReplies = 10, readAtSeconds = 10L)
+        dao.recordTopicRead("other", knownReplies = 20, readAtSeconds = 20L)
         dao.saveHistory(dev.nagi.app.data.ReadingHistory("fav", "Fav", 1000L))
         dao.saveHistory(dev.nagi.app.data.ReadingHistory("other", "Other", 2000L))
 
@@ -73,11 +75,14 @@ class LibraryViewModelTest {
         vm.removeHistory("other"); runCurrent()
         assertEquals(listOf("fav"), dao.history.value.map { it.topicId })
         assertNotNull(dao.position("other"))
+        assertNotNull(dao.topicReadState("other"))
 
         vm.clearHistory(clearUnfavoritedPositions = true); runCurrent()
         assertTrue(dao.history.value.isEmpty())
         assertNotNull(dao.position("fav"))
         assertNull(dao.position("other"))
+        assertNotNull(dao.topicReadState("fav"))
+        assertNull(dao.topicReadState("other"))
     }
 
     @Test fun guestDoesNotRequestOrWriteCloudFavoriteForums() = runTest(dispatcher) {

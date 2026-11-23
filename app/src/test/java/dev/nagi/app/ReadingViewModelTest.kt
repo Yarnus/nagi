@@ -539,6 +539,46 @@ class ReadingViewModelTest {
         assertEquals(1 to null, client.postRequests.last())
     }
 
+    @Test fun readerRecordsTopicReadStateAndAuthorFilterPreservesReplyBaseline() = runTest(dispatcher) {
+        val sessions = MemorySessionStore()
+        val daos = FakeDaoProvider()
+        val accounts = AccountManager(sessions, FakeBrowserCookies()).also { it.initialize() }
+        var page1Total = 16
+        var page2Total = 20
+        val client = object : NgaClient by FakeClient() {
+            override suspend fun getPosts(topicId: String, page: Int, authorId: String?): PostPage {
+                if (authorId != null) {
+                    return PostPage(
+                        items = listOf(Post("a1", 0, "OP", authorId, "", "", listOf(ContentBlock.Text("Filtered")))),
+                        title = "Topic",
+                        authorId = authorId,
+                        page = page,
+                        total = 2,
+                        hasMore = false,
+                    )
+                }
+                val total = if (page == 1) page1Total else page2Total
+                return PostPage(
+                    items = listOf(Post("p$page", (page - 1) * 10, "Author", "7", "", "", listOf(ContentBlock.Text("Page $page")))),
+                    title = "Topic",
+                    authorId = "7",
+                    page = page,
+                    total = total,
+                    hasMore = page == 1,
+                )
+            }
+        }
+        val vm = ReaderViewModel(client, daos, sessions, accounts)
+        vm.open("100"); runCurrent()
+        assertEquals(15, daos.forUser(null).topicReadState("100")?.lastReadReplies)
+
+        vm.loadNext(); runCurrent()
+        assertEquals(19, daos.forUser(null).topicReadState("100")?.lastReadReplies)
+
+        vm.load(page = 1, authorOnly = true); runCurrent()
+        assertEquals(19, daos.forUser(null).topicReadState("100")?.lastReadReplies)
+    }
+
     @Test fun recommendedSortReloadsRestoresAndHidesEntryOnlyAfterConfirmedEmptyPage() = runTest(dispatcher) {
         val sessions = MemorySessionStore().apply { saveSession(NgaSession("7", "test-token")) }
         val accounts = AccountManager(sessions, FakeBrowserCookies()).also { it.initialize() }
@@ -718,6 +758,7 @@ class FakeDao : ReadingDao {
     val forumFavorites = MutableStateFlow<List<LocalForumFavorite>>(emptyList())
     val cloudForumFavoriteOrders = MutableStateFlow<List<CloudForumFavoriteOrder>>(emptyList())
     private val positions = mutableMapOf<String, ReadingPosition>()
+    private val readStates = MutableStateFlow<Map<String, TopicReadState>>(emptyMap())
     override fun favorites(): Flow<List<LocalFavorite>> = favorites
     override suspend fun favorite(id: String): LocalFavorite? = favorites.value.firstOrNull { it.topicId == id }
     override suspend fun saveFavorite(item: LocalFavorite) { favorites.update { old -> old.filterNot { it.topicId == item.topicId } + item } }
@@ -755,6 +796,34 @@ class FakeDao : ReadingDao {
     override suspend fun clearUnfavoritedPositions() {
         val favIds = favorites.value.mapTo(HashSet()) { it.topicId }
         positions.keys.removeAll { it !in favIds }
+    }
+    override fun topicReadStates(): Flow<List<TopicReadState>> = readStates.map { it.values.toList() }
+    override suspend fun topicReadState(id: String): TopicReadState? = readStates.value[id]
+    override suspend fun upsertTopicReadState(item: TopicReadState) {
+        readStates.update { it + (item.topicId to item) }
+    }
+    override suspend fun pruneTopicReadStates(limit: Int) {
+        val favIds = favorites.value.mapTo(HashSet()) { it.topicId }
+        readStates.update { current ->
+            val unfavorited = current.values.filter { it.topicId !in favIds }
+                .sortedWith(compareByDescending<TopicReadState> { it.lastReadAt }.thenBy { it.topicId })
+            val dropIds = unfavorited.drop(limit).mapTo(HashSet()) { it.topicId }
+            current.filterKeys { it !in dropIds }
+        }
+    }
+    override suspend fun recordTopicRead(topicId: String, knownReplies: Int?, readAtSeconds: Long) {
+        val existing = topicReadState(topicId)
+        val mergedReplies = when {
+            knownReplies != null && knownReplies >= 0 -> knownReplies
+            else -> existing?.lastReadReplies ?: -1
+        }
+        val mergedAt = maxOf(existing?.lastReadAt ?: 0L, readAtSeconds)
+        upsertTopicReadState(TopicReadState(topicId, mergedReplies, mergedAt))
+        pruneTopicReadStates()
+    }
+    override suspend fun clearUnfavoritedReadStates() {
+        val favIds = favorites.value.mapTo(HashSet()) { it.topicId }
+        readStates.update { current -> current.filterKeys { it in favIds } }
     }
 }
 

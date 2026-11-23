@@ -26,14 +26,20 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.nagi.app.data.TopicReadStatus
+import dev.nagi.app.data.accessibilityStateDescription
+import dev.nagi.app.data.resolveTopicReadStatus
 import dev.nagi.app.ui.components.CardGroupPosition
 import dev.nagi.app.ui.components.ChromeIconButton
 import dev.nagi.app.ui.components.FlatCard
 import dev.nagi.app.ui.components.LoadingLine
+import dev.nagi.app.ui.components.LocalTopicReadStates
 import dev.nagi.app.ui.components.NagiHeader
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.Notice
@@ -126,6 +132,10 @@ fun UserContentScreen(
                 }
             } else {
                 itemsIndexed(state.topics, key = { _, topic -> topic.id }) { _, topic ->
+                    val readState = LocalTopicReadStates.current[topic.id]
+                    val readStatus = remember(topic.id, topic.replies, topic.lastActiveAt, readState) {
+                        resolveTopicReadStatus(topic, readState)
+                    }
                     FlatCard(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -136,6 +146,9 @@ fun UserContentScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { read(topic.id) }
+                                .semantics {
+                                    readStatus.accessibilityStateDescription()?.let { stateDescription = it }
+                                }
                                 .padding(horizontal = 14.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.Top,
                             horizontalArrangement = Arrangement.spacedBy(Space.md),
@@ -147,7 +160,7 @@ fun UserContentScreen(
                                 Text(
                                     text = topic.title,
                                     style = typography.topicTitle,
-                                    color = colors.textPrimary,
+                                    color = if (readStatus is TopicReadStatus.Read) colors.textSecondary else colors.textPrimary,
                                     maxLines = 3,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -160,7 +173,11 @@ fun UserContentScreen(
                                     )
                                 }
                             }
-                            ReplyCountPill(count = topic.replies)
+                            ReplyCountPill(
+                                count = topic.replies,
+                                newReplies = (readStatus as? TopicReadStatus.Updated)?.newReplies,
+                                hasNewActivity = readStatus is TopicReadStatus.Updated,
+                            )
                         }
                     }
                 }

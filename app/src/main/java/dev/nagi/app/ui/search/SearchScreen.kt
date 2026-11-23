@@ -41,6 +41,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.nagi.app.data.formatReplySummary
+import dev.nagi.app.data.resolveTopicReadStatus
 import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.CardGroupPosition
@@ -310,10 +312,15 @@ fun SearchScreen(
     }
 
     topicDetails?.let { topic ->
+        val readStatus = resolveTopicReadStatus(
+            topic,
+            dev.nagi.app.ui.components.LocalTopicReadStates.current[topic.id],
+        )
+        val replyLine = readStatus.formatReplySummary(topic.replies)
         dev.nagi.app.ui.components.NagiConfirmDialog(
             onDismissRequest = { topicDetails = null },
             title = topic.title,
-            message = "${dev.nagi.app.ui.components.formatAuthorDisplayName(topic.author)}\n${topic.replies} 条回复",
+            message = "${dev.nagi.app.ui.components.formatAuthorDisplayName(topic.author)}\n$replyLine",
             confirmLabel = "关闭",
             onConfirm = { topicDetails = null },
             confirmStyle = CapsuleStyle.Neutral,
