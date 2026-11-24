@@ -41,7 +41,10 @@ const val MAX_HISTORY_ENTRIES = 100
 const val MAX_UNFAVORITED_POSITIONS = 500
 const val MAX_UNFAVORITED_READ_STATES = 2000
 
-@Entity(tableName = "topic_read_states")
+@Entity(
+    tableName = "topic_read_states",
+    indices = [Index(value = ["lastReadAt", "topicId"])],
+)
 data class TopicReadState(
     @PrimaryKey val topicId: String,
     /** Reply count recorded when last read (`-1` if unknown, e.g. migrated or author-filtered). */
@@ -85,7 +88,10 @@ fun resolveTopicReadStatus(topic: dev.nagi.sdk.Topic, readState: TopicReadState?
     }
 }
 
-@Entity(tableName = "positions")
+@Entity(
+    tableName = "positions",
+    indices = [Index(value = ["updatedAt", "topicId"])],
+)
 data class ReadingPosition(
     @PrimaryKey val topicId: String,
     val page: Int,
@@ -105,7 +111,10 @@ data class ReadingPosition(
     }
 }
 
-@Entity(tableName = "history")
+@Entity(
+    tableName = "history",
+    indices = [Index(value = ["viewedAt", "topicId"])],
+)
 data class ReadingHistory(@PrimaryKey val topicId: String, val title: String, val viewedAt: Long)
 
 @Dao
@@ -126,13 +135,14 @@ interface ReadingDao {
     fun history(): kotlinx.coroutines.flow.Flow<List<ReadingHistory>>
     @Query("SELECT title FROM history WHERE topicId = :id LIMIT 1")
     suspend fun historyTitle(id: String): String?
+    @Query("SELECT COUNT(*) FROM history") suspend fun historyCount(): Int
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertHistory(item: ReadingHistory)
     @Query("DELETE FROM history WHERE topicId NOT IN (SELECT topicId FROM history ORDER BY viewedAt DESC, topicId ASC LIMIT :limit)")
     suspend fun pruneHistory(limit: Int = MAX_HISTORY_ENTRIES)
     @Transaction
     suspend fun saveHistory(item: ReadingHistory) {
         upsertHistory(item)
-        pruneHistory()
+        if (historyCount() > MAX_HISTORY_ENTRIES) pruneHistory()
     }
     @Query("DELETE FROM history WHERE topicId = :topicId") suspend fun removeHistory(topicId: String)
     @Query("DELETE FROM history") suspend fun clearHistory()
@@ -171,6 +181,7 @@ interface ReadingDao {
             )
         }
     }
+    @Query("SELECT COUNT(*) FROM positions") suspend fun positionCount(): Int
     @Query("SELECT * FROM positions WHERE topicId = :id") suspend fun position(id: String): ReadingPosition?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertPosition(item: ReadingPosition)
     @Query(
@@ -181,10 +192,11 @@ interface ReadingDao {
     @Transaction
     suspend fun savePosition(item: ReadingPosition) {
         upsertPosition(item)
-        prunePositions()
+        if (positionCount() > MAX_UNFAVORITED_POSITIONS) prunePositions()
     }
     @Query("DELETE FROM positions WHERE topicId NOT IN (SELECT topicId FROM favorites)")
     suspend fun clearUnfavoritedPositions()
+    @Query("SELECT COUNT(*) FROM topic_read_states") suspend fun topicReadStateCount(): Int
     @Query("SELECT * FROM topic_read_states")
     fun topicReadStates(): kotlinx.coroutines.flow.Flow<List<TopicReadState>>
     @Query("SELECT * FROM topic_read_states WHERE topicId = :id")
@@ -205,7 +217,7 @@ interface ReadingDao {
         }
         val mergedAt = maxOf(existing?.lastReadAt ?: 0L, readAtSeconds)
         upsertTopicReadState(TopicReadState(topicId, mergedReplies, mergedAt))
-        pruneTopicReadStates()
+        if (topicReadStateCount() > MAX_UNFAVORITED_READ_STATES) pruneTopicReadStates()
     }
     @Query("DELETE FROM topic_read_states WHERE topicId NOT IN (SELECT topicId FROM favorites)")
     suspend fun clearUnfavoritedReadStates()
@@ -222,12 +234,20 @@ interface ReadingDao {
         LocalUserTag::class,
         TopicReadState::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = false,
 )
 abstract class ReadingDatabase : RoomDatabase() {
     abstract fun readingDao(): ReadingDao
     companion object {
+        val MIGRATION_8_9 = object : androidx.room.migration.Migration(8, 9) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_history_viewedAt_topicId` ON `history` (`viewedAt`, `topicId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_positions_updatedAt_topicId` ON `positions` (`updatedAt`, `topicId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_topic_read_states_lastReadAt_topicId` ON `topic_read_states` (`lastReadAt`, `topicId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_notifications_createdAt_id` ON `notifications` (`createdAt`, `id`)")
+            }
+        }
         val MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL(

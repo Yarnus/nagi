@@ -34,15 +34,16 @@ import dev.nagi.app.ui.theme.NagiThemeTokens
 
 internal val LocalNagiHaze = compositionLocalOf<HazeState?> { null }
 internal val LocalNagiBlurEnabled = compositionLocalOf { false }
+internal val LocalHardwareBlurAllowed = compositionLocalOf<Boolean?> { null }
 
 @Composable
-internal fun hardwareBlurAllowed(): Boolean {
+internal fun rememberHardwareBlurAllowed(): Boolean {
     val context = LocalContext.current
     val power = remember(context) { context.getSystemService(PowerManager::class.java) }
-    var powerSave by remember { mutableStateOf(power.isPowerSaveMode) }
+    var powerSave by remember { mutableStateOf(power?.isPowerSaveMode == true) }
     DisposableEffect(context, power) {
         val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) { powerSave = power.isPowerSaveMode }
+            override fun onReceive(context: Context?, intent: Intent?) { powerSave = power?.isPowerSaveMode == true }
         }
         context.registerReceiver(receiver, IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED))
         onDispose { context.unregisterReceiver(receiver) }
@@ -62,6 +63,10 @@ internal fun hardwareBlurAllowed(): Boolean {
     }
     return Build.VERSION.SDK_INT >= 31 && !powerSave && animations > 0f
 }
+
+@Composable
+internal fun hardwareBlurAllowed(): Boolean =
+    LocalHardwareBlurAllowed.current ?: rememberHardwareBlurAllowed()
 
 /**
  * Scaffold with bounded progressive edge blur for top/bottom chrome.

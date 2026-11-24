@@ -66,10 +66,13 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import dev.nagi.app.ui.components.LoadingLine
 import dev.nagi.app.ui.components.LocalAccountIdentity
+import dev.nagi.app.ui.components.LocalHardwareBlurAllowed
 import dev.nagi.app.ui.components.LocalNagiBlurEnabled
 import dev.nagi.app.ui.components.LocalNagiHaze
 import dev.nagi.app.ui.components.Notice
 import dev.nagi.app.ui.components.hardwareBlurAllowed
+import dev.nagi.app.ui.components.isPublicUserId
+import dev.nagi.app.ui.components.rememberHardwareBlurAllowed
 import dev.nagi.app.ui.forum.ForumScreen
 import dev.nagi.app.ui.library.AboutScreen
 import dev.nagi.app.ui.library.AccountsScreen
@@ -140,8 +143,14 @@ fun NagiApp(
         Box(Modifier.fillMaxSize())
         return
     }
-    CompositionLocalProvider(LocalAccountIdentity provides identity, LocalNotifications provides notifications,
-        LocalUserTags provides tagAccess, LocalAppUpdate provides appUpdate) {
+    val hardwareBlur = rememberHardwareBlurAllowed()
+    CompositionLocalProvider(
+        LocalAccountIdentity provides identity,
+        LocalNotifications provides notifications,
+        LocalUserTags provides tagAccess,
+        LocalAppUpdate provides appUpdate,
+        LocalHardwareBlurAllowed provides hardwareBlur,
+    ) {
         NagiTheme(preferences.theme) {
             val colors = NagiThemeTokens.colors
             if (!account.ready) {
@@ -156,6 +165,9 @@ fun NagiApp(
             BackHandler(account.busy) { }
             AccountReadingScope(account.revision) {
                 val library: LibraryViewModel = hiltViewModel()
+                LaunchedEffect(account.revision, account.userId, account.ready, account.busy) {
+                    if (account.ready && !account.busy) library.releaseInactiveDatabases()
+                }
                 val directory by library.forums.collectAsStateWithLifecycle()
                 val cloudForumFavorites by library.cloudFavoriteForums.collectAsStateWithLifecycle()
                 val cloudFavoriteForumKeys = remember(cloudForumFavorites.items) { cloudForumFavorites.items.map { it.key }.toSet() }
@@ -212,12 +224,16 @@ fun NagiApp(
                         shadowElevation = 0.dp,
                         tonalElevation = 0.dp,
                     ) {
+                        val openUser = remember(select) {
+                            { uid: String ->
+                                if (isPublicUserId(uid)) select("user/${Uri.encode(uid)}/topics")
+                            }
+                        }
+                        val openLogin = remember(select) { { select("login") } }
                         CompositionLocalProvider(
                             LocalUriHandler provides topicLinks,
-                            LocalOpenUser provides { uid ->
-                                if (uid.matches(Regex("[1-9][0-9]*"))) select("user/${Uri.encode(uid)}/topics")
-                            },
-                            LocalOpenLogin provides { select("login") },
+                            LocalOpenUser provides openUser,
+                            LocalOpenLogin provides openLogin,
                             dev.nagi.app.ui.components.LocalTopicReadStates provides topicReadStates,
                         ) {
                             NavHost(

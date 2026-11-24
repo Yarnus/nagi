@@ -84,6 +84,9 @@ class LibraryViewModel @Inject constructor(
         loadForums()
         if (owner.userId != null) loadCloudFavoriteForums()
     }
+    fun releaseInactiveDatabases() {
+        viewModelScope.launch(Dispatchers.IO) { daos.closeInactive(owner.userId) }
+    }
     fun loadForums() {
         if (loading?.isActive == true) return
         loading = viewModelScope.launch {

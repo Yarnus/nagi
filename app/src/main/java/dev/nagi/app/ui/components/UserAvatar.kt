@@ -24,7 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.SubcomposeAsyncImage
+import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
 import dev.nagi.app.ui.theme.NagiSemanticColors
 import dev.nagi.app.ui.theme.NagiThemeTokens
 
@@ -121,19 +122,34 @@ fun UserAvatar(
                 Fallback()
             } else {
                 var settled by remember(url, imageModel) { mutableStateOf(false) }
+                var loaded by remember(url, imageModel) { mutableStateOf(false) }
                 val trackerToken = remember(url, imageModel) { Any() }
                 TrackSlotImageReadiness(token = trackerToken, settled = settled)
-                SubcomposeAsyncImage(
+                AsyncImage(
                     model = imageModel,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
-                    onLoading = { settled = false },
-                    onSuccess = { settled = true },
-                    onError = { settled = true },
-                    loading = { Fallback() },
-                    error = { Fallback() },
+                    onState = { state ->
+                        when (state) {
+                            is AsyncImagePainter.State.Success -> {
+                                settled = true
+                                loaded = true
+                            }
+                            is AsyncImagePainter.State.Error -> {
+                                settled = true
+                                loaded = false
+                            }
+                            else -> {
+                                settled = false
+                                loaded = false
+                            }
+                        }
+                    },
                 )
+                if (!loaded) {
+                    Fallback()
+                }
             }
         }
     }

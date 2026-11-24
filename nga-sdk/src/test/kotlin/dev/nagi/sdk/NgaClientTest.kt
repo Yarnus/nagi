@@ -223,4 +223,36 @@ class NgaClientTest {
         assertEquals("01234", parsed.items.single().author)
         assertEquals("NgaSession(redacted)", NgaSession("7", "secret").toString())
     }
+    @Test fun reusedTransportAndPostFallbackPreservePerCallProfileAndHeaders() = runBlocking {
+        MockWebServer().use { server ->
+            val postJson = """{"data":{"__T":{"subject":"PostTitle","authorid":7},"__R":{"0":{"pid":9,"authorid":7,"lou":0,"content":"Body"}},"__ROWS":1,"__R__ROWS_PAGE":20}}"""
+            server.enqueue(MockResponse().setBody(topic))
+            server.enqueue(MockResponse().setBody("<root><broken"))
+            server.enqueue(MockResponse().setBody(postJson))
+            server.enqueue(MockResponse().setBody(topic))
+            val client = HttpNgaClient(server.url("/"), MemorySessionStore())
+
+            val firstTopics = client.getTopics("7")
+            val posts = client.getPosts("123")
+            val secondTopics = client.getTopics("7", page = 2)
+
+            assertEquals("测试标题", firstTopics.items.single().title)
+            assertEquals("PostTitle", posts.title)
+            assertEquals("测试标题", secondTopics.items.single().title)
+            assertEquals(4, server.requestCount)
+
+            val r1 = server.takeRequest()
+            val r2 = server.takeRequest()
+            val r3 = server.takeRequest()
+            val r4 = server.takeRequest()
+            assertEquals(ClientProfile.APPLE.userAgent, r1.getHeader("User-Agent"))
+            assertEquals(ClientProfile.WP_READER.userAgent, r2.getHeader("User-Agent"))
+            assertEquals(ClientProfile.WP_READER.userAgent, r3.getHeader("User-Agent"))
+            assertEquals(ClientProfile.APPLE.userAgent, r4.getHeader("User-Agent"))
+            listOf(r1, r2, r3, r4).forEach { req ->
+                assertEquals("UTF8", req.requestUrl!!.queryParameter("__inchst"))
+                assertEquals(server.url("/").toString(), req.getHeader("Referer"))
+            }
+        }
+    }
 }

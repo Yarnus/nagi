@@ -49,18 +49,29 @@ import dev.nagi.sdk.NgaUserLinks
 import dev.nagi.app.ui.components.LocalOpenUser
 import dev.nagi.app.ui.components.TrackSlotImageReadiness
 import dev.nagi.sdk.NgaSmile
+import java.util.concurrent.ConcurrentHashMap
+
+private val contentColorCache = ConcurrentHashMap<Pair<String, Long>, Color>()
 
 internal fun contentTextColor(name: String, background: Color): Color? {
     val rgb = ContentColors.rgb[name] ?: return null
+    val key = name to background.value.toLong()
+    contentColorCache[key]?.let { return it }
     val color = Color(rgb or 0xFF000000.toInt())
     val target = if (background.luminance() > 0.5f) Color.Black else Color.White
+    var resolved = target
     for (step in 0..100) {
         val candidate = lerp(color, target, step / 100f)
         val lighter = maxOf(candidate.luminance(), background.luminance())
         val darker = minOf(candidate.luminance(), background.luminance())
-        if ((lighter + 0.05f) / (darker + 0.05f) >= 4.5f) return candidate
+        if ((lighter + 0.05f) / (darker + 0.05f) >= 4.5f) {
+            resolved = candidate
+            break
+        }
     }
-    return target
+    if (contentColorCache.size >= 512) contentColorCache.clear()
+    contentColorCache[key] = resolved
+    return resolved
 }
 
 internal fun AnnotatedString.Builder.appendSmileText(value: String, smiles: List<InlineSmile>) {

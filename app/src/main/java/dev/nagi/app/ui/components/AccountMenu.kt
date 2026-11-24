@@ -41,7 +41,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import dev.nagi.app.data.AppUpdateState
 import dev.nagi.app.viewmodel.NotificationsState
-import coil.compose.SubcomposeAsyncImage
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
 import dev.nagi.app.viewmodel.AccountIdentity

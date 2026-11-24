@@ -27,6 +27,45 @@ object ContentParser {
     private val legacyTimestampRegex = Regex("""^[^/]*_([0-9a-fA-F]{8})[0-9a-fA-F]*\.[a-zA-Z0-9]+$""")
     private val inlineTag = Regex("""\[(/?)(b|i|u|del|color|size)(?:=([^\]]*))?\]""", RegexOption.IGNORE_CASE)
     private val positiveId = Regex("[1-9][0-9]*")
+    private val noNestingTags = setOf("img", "noimg", "code")
+    private val blockTags = setOf("p", "div", "li")
+    private val tableCellTags = setOf("td", "th")
+    private val closingTagTokens: Map<String, Regex> = listOf(
+        "img", "noimg", "album", "quote", "code", "collapse", "table", "h", "align", "list", "flash", "attach", "dice",
+    ).associateWith { tag ->
+        val tagToken = """\[(/?)$tag(?:=[^\]]*)?\]"""
+        val protectedCode = """\[code(?:=[^\]]*)?\].*?\[/code\]|<pre\b[^>]*>.*?</pre\s*>"""
+        Regex(
+            if (tag == "code") tagToken else "$protectedCode|$tagToken",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+        )
+    }
+    private val trTableTokens = Regex(
+        """\[code(?:=[^\]]*)?\].*?\[/code\]|<pre\b[^>]*>.*?</pre\s*>|\[(/?)(?:tr)(?:\s[^\]]*)?\]""",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+    )
+    private val tdTableTokens = Regex(
+        """\[code(?:=[^\]]*)?\].*?\[/code\]|<pre\b[^>]*>.*?</pre\s*>|\[(/?)(?:td\d*|th)(?:\s[^\]]*)?\]""",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+    )
+    private val listItemTokens = Regex(
+        """\[list(?:=[^\]]*)?\]|\[/list\]|\[\*\]|\[code(?:=[^\]]*)?\].*?\[/code\]|<pre\b[^>]*>.*?</pre\s*>""",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+    )
+    private val dicePartPattern = Regex("""(?:(\d{0,2})[dD](\d{1,6})|(\d{1,6}))""")
+    private val albumSeparatorPattern = Regex("""<br\s*/?>|\r?\n""", RegexOption.IGNORE_CASE)
+    private val literalPrePattern = Regex("""<nagi-literal-pre index="(\d+)"></nagi-literal-pre>""")
+    private val urlAttrPattern = Regex("""\[url=([^\]]*)\](.*?)\[/url\]""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+    private val urlSelfPattern = Regex("""(\{)?\[url\](.*?)\[/url\]""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+    private val refBbPattern = Regex("""\[(uid|tid|pid)=([^\]]*)\](.*?)\[/\1\]""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+    private val mentionPattern = Regex("""\[@\s*([^\]]+)\]""")
+    private val stripBrPattern = Regex("""\[stripbr\]""", RegexOption.IGNORE_CASE)
+    private val ignoredBbPattern = Regex("""\[/?(?:style|fixsize|randomblock)(?:\s[^\]]*)?\]""", RegexOption.IGNORE_CASE)
+    private val titledDividerPattern = Regex("""={3,}((?:(?!={3,})[^\r\n])*?)={3,}""")
+    private val plainDividerPattern = Regex("={6,}")
+    private val shanghaiZone = ZoneId.of("Asia/Shanghai")
+    private val legacyDateParser = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm[:ss]")
+    private val legacyMonthDayFormatter = DateTimeFormatter.ofPattern("yyyyMM/dd")
 
     fun parse(raw: String, attachmentBase: String = "https://img.nga.cn/attachments/", context: ContentContext = ContentContext()): List<ContentBlock> =
         Parser(attachmentBase, context, false).parse(raw)
@@ -53,14 +92,11 @@ object ContentParser {
             while (offset < raw.length) {
                 val opening = openingTag.findAll(raw, offset).firstOrNull { match -> codeRanges.none { match.range.first in it } } ?: break
                 val tag = opening.groupValues[1].lowercase()
-                val tagToken = """\[(/?)$tag(?:=[^\]]*)?\]"""
-                val protectedCode = """\[code(?:=[^\]]*)?\].*?\[/code\]|<pre\b[^>]*>.*?</pre\s*>"""
-                val tokens = Regex(if (tag == "code") tagToken else "$protectedCode|$tagToken",
-                    setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                val tokens = closingTagTokens[tag] ?: break
                 var nesting = 1
                 val closing = tokens.findAll(raw, opening.range.last + 1).firstOrNull {
                     if (!it.value.startsWith("[$tag", true) && !it.value.startsWith("[/$tag", true)) false else {
-                        if (it.groupValues[1] == "/") nesting-- else if (tag !in setOf("img", "noimg", "code")) nesting++
+                        if (it.groupValues[1] == "/") nesting-- else if (tag !in noNestingTags) nesting++
                         nesting == 0
                     }
                 } ?: break
@@ -70,7 +106,7 @@ object ContentParser {
                 blocks += when (tag) {
                     "img", "noimg" -> listOf(image(if (tag == "noimg") legacyImage(body) else body))
                     "album" -> if (body.contains("[img]", true)) parse(body, depth + 1) else
-                        body.split(Regex("""<br\s*/?>|\r?\n""", RegexOption.IGNORE_CASE)).map(String::trim).filter(String::isNotBlank).map(::image)
+                        body.split(albumSeparatorPattern).map(String::trim).filter(String::isNotBlank).map(::image)
                     "quote" -> listOf(quote(body, depth + 1))
                     "code" -> listOf(ContentBlock.Code(if (htmlEncodedCode) Jsoup.parseBodyFragment(body).body().wholeText() else body))
                     "table" -> listOf(table(body, depth + 1))
@@ -107,14 +143,14 @@ object ContentParser {
                 ?.toLongOrNull(16)
                 ?.takeIf { it in 946684800L..4102444800L }
             val localDate = filenameEpoch?.let {
-                runCatching { Instant.ofEpochSecond(it).atZone(ZoneId.of("Asia/Shanghai")).toLocalDate() }.getOrNull()
+                runCatching { Instant.ofEpochSecond(it).atZone(shanghaiZone).toLocalDate() }.getOrNull()
             } ?: run {
                 val date = context.postDate.orEmpty()
                 date.toLongOrNull()?.takeIf { it > 0 }?.let {
-                    runCatching { Instant.ofEpochSecond(it).atZone(ZoneId.of("Asia/Shanghai")).toLocalDate() }.getOrNull()
-                } ?: runCatching { LocalDateTime.parse(date, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm[:ss]")).toLocalDate() }.getOrNull()
+                    runCatching { Instant.ofEpochSecond(it).atZone(shanghaiZone).toLocalDate() }.getOrNull()
+                } ?: runCatching { LocalDateTime.parse(date, legacyDateParser).toLocalDate() }.getOrNull()
             }
-            return if (localDate == null) trimmed else "mon_${localDate.format(DateTimeFormatter.ofPattern("yyyyMM/dd"))}/$trimmed"
+            return if (localDate == null) trimmed else "mon_${localDate.format(legacyMonthDayFormatter)}/$trimmed"
         }
 
         private fun quote(body: String, depth: Int): ContentBlock.Quote {
@@ -139,13 +175,11 @@ object ContentParser {
         }
 
         private fun table(body: String, depth: Int): ContentBlock.Table = ContentBlock.Table(
-            tableParts(body, "tr").map { row -> tableParts(row, "td\\d*|th").map { parse(it, depth) } },
+            tableParts(body, trTableTokens).map { row -> tableParts(row, tdTableTokens).map { parse(it, depth) } },
         )
 
-        private fun tableParts(raw: String, tags: String): List<String> {
+        private fun tableParts(raw: String, tokens: Regex): List<String> {
             // Keep raw cell content intact, including code and nested tables.
-            val tokens = Regex("""\[code(?:=[^\]]*)?\].*?\[/code\]|<pre\b[^>]*>.*?</pre\s*>|\[(/?)(?:$tags)(?:\s[^\]]*)?\]""",
-                setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
             val parts = mutableListOf<String>()
             var nesting = 0
             var start = 0
@@ -164,10 +198,9 @@ object ContentParser {
 
         private fun listItems(body: String): List<String> {
             val items = mutableListOf<String>()
-            val tokens = Regex("""\[list(?:=[^\]]*)?\]|\[/list\]|\[\*\]|\[code(?:=[^\]]*)?\].*?\[/code\]|<pre\b[^>]*>.*?</pre\s*>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
             var nesting = 0
             var start = 0
-            for (token in tokens.findAll(body)) {
+            for (token in listItemTokens.findAll(body)) {
                 when {
                     token.value.equals("[/list]", true) -> nesting--
                     token.value.startsWith("[list", true) -> nesting++
@@ -184,8 +217,7 @@ object ContentParser {
         private fun dice(expression: String): ContentBlock.Dice {
             val parts = expression.split('+')
             if (parts.size > 20) return ContentBlock.Dice(expression)
-            val pattern = Regex("""(?:(\d{0,2})[dD](\d{1,6})|(\d{1,6}))""")
-            val parsed = parts.map { pattern.matchEntire(it.trim()) ?: return ContentBlock.Dice(expression) }
+            val parsed = parts.map { dicePartPattern.matchEntire(it.trim()) ?: return ContentBlock.Dice(expression) }
             val author = context.authorId?.toLongOrNull() ?: return ContentBlock.Dice(expression)
             val topic = context.topicId?.toLongOrNull() ?: return ContentBlock.Dice(expression)
             val post = context.postId?.toLongOrNull() ?: return ContentBlock.Dice(expression)
@@ -215,36 +247,47 @@ object ContentParser {
         private fun html(raw: String, depth: Int): List<ContentBlock> {
             if (raw.isBlank()) return emptyList()
             val preservedCode = mutableListOf<String>()
-            val protected = raw.replace(htmlCode) {
-                preservedCode += it.value
-                "<nagi-literal-pre index=\"${preservedCode.lastIndex}\"></nagi-literal-pre>"
-            }
-            fun restoreCode(markup: String): String = markup.replace(Regex("""<nagi-literal-pre index="(\d+)"></nagi-literal-pre>""")) {
-                preservedCode.getOrNull(it.groupValues[1].toIntOrNull() ?: -1).orEmpty()
-            }
-            var inline = protected.replace(inlineTag) {
-                val closing = it.groupValues[1]
-                val tag = it.groupValues[2].lowercase()
-                when (tag) {
-                    "color", "size" -> if (closing.isNotEmpty()) "</nagi-$tag>" else Element("nagi-$tag").attr("value", it.groupValues[3]).outerHtml().substringBefore("</nagi-")
-                    else -> "<$closing$tag>"
+            val protected = if ('<' in raw) {
+                raw.replace(htmlCode) {
+                    preservedCode += it.value
+                    "<nagi-literal-pre index=\"${preservedCode.lastIndex}\"></nagi-literal-pre>"
                 }
+            } else {
+                raw
             }
-            inline = inline.replace(Regex("""\[url=([^\]]*)\](.*?)\[/url\]""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))) {
-                link(resourceUrl(it.groupValues[1], base), it.groupValues[2])
-            }.replace(Regex("""(\{)?\[url\](.*?)\[/url\]""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))) {
-                val label = decodeNumericEntities(it.groupValues[2]).trim().let { value -> if (it.groupValues[1].isNotEmpty()) value.removeSuffix("}").trim() else value }
-                Element("a").attr("href", resourceUrl(label, base)).text(label).outerHtml()
+            fun restoreCode(markup: String): String =
+                if (preservedCode.isEmpty()) markup
+                else markup.replace(literalPrePattern) {
+                    preservedCode.getOrNull(it.groupValues[1].toIntOrNull() ?: -1).orEmpty()
+                }
+            var inline = if ('[' in protected) {
+                protected.replace(inlineTag) {
+                    val closing = it.groupValues[1]
+                    val tag = it.groupValues[2].lowercase()
+                    when (tag) {
+                        "color", "size" -> if (closing.isNotEmpty()) "</nagi-$tag>" else Element("nagi-$tag").attr("value", it.groupValues[3]).outerHtml().substringBefore("</nagi-")
+                        else -> "<$closing$tag>"
+                    }
+                }.replace(urlAttrPattern) {
+                    link(resourceUrl(it.groupValues[1], base), it.groupValues[2])
+                }.replace(urlSelfPattern) {
+                    val label = decodeNumericEntities(it.groupValues[2]).trim().let { value -> if (it.groupValues[1].isNotEmpty()) value.removeSuffix("}").trim() else value }
+                    Element("a").attr("href", resourceUrl(label, base)).text(label).outerHtml()
+                }.replace(refBbPattern) {
+                    link(referenceUrl(it.groupValues[1].lowercase(), it.groupValues[2]), it.groupValues[3])
+                }.replace(mentionPattern) {
+                    val who = it.groupValues[1].trim()
+                    Element("a").attr("href", userUrl(who)).text("@$who").outerHtml()
+                }.replace(stripBrPattern, "<br>")
+                    .replace(ignoredBbPattern, "")
+            } else {
+                protected
             }
-            inline = inline.replace(Regex("""\[(uid|tid|pid)=([^\]]*)\](.*?)\[/\1\]""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))) {
-                link(referenceUrl(it.groupValues[1].lowercase(), it.groupValues[2]), it.groupValues[3])
-            }.replace(Regex("""\[@\s*([^\]]+)\]""")) {
-                val who = it.groupValues[1].trim()
-                Element("a").attr("href", userUrl(who)).text("@$who").outerHtml()
-            }.replace(Regex("""\[stripbr\]""", RegexOption.IGNORE_CASE), "<br>")
-                .replace(Regex("""\[/?(?:style|fixsize|randomblock)(?:\s[^\]]*)?\]""", RegexOption.IGNORE_CASE), "")
-                .replace(Regex("""={3,}((?:(?!={3,})[^\r\n])*?)={3,}""")) { "<nagi-divider>${it.groupValues[1]}</nagi-divider>" }
-                .replace(Regex("={6,}"), "<nagi-divider></nagi-divider>")
+            if ("===" in inline) {
+                inline = inline
+                    .replace(titledDividerPattern) { "<nagi-divider>${it.groupValues[1]}</nagi-divider>" }
+                    .replace(plainDividerPattern, "<nagi-divider></nagi-divider>")
+            }
             val document = Jsoup.parseBodyFragment(inline).apply { outputSettings().prettyPrint(false) }
             document.select("script,style,iframe,object").remove()
             val blocks = mutableListOf<ContentBlock>()
@@ -280,11 +323,15 @@ object ContentParser {
             fun visit(node: Node, style: TextSpan = TextSpan(0, 0)) {
                 when (node) {
                     is TextNode -> {
-                        val value = decodeNumericEntities(referenceTags.replace(node.wholeText, ""))
+                        val rawText = node.wholeText
+                        val cleaned = if ('[' in rawText) referenceTags.replace(rawText, "") else rawText
+                        val value = decodeNumericEntities(cleaned)
                         val start = text.length
                         append(value, style)
-                        smileTag.findAll(value).forEach { match ->
-                            NgaSmiles.resolve(match.groupValues[1])?.let { smile -> smiles += InlineSmile(start + match.range.first, start + match.range.last + 1, smile) }
+                        if ('[' in value) {
+                            smileTag.findAll(value).forEach { match ->
+                                NgaSmiles.resolve(match.groupValues[1])?.let { smile -> smiles += InlineSmile(start + match.range.first, start + match.range.last + 1, smile) }
+                            }
                         }
                     }
                     is Element -> when (node.tagName()) {
@@ -310,7 +357,7 @@ object ContentParser {
                         "table" -> {
                             flush()
                             blocks += ContentBlock.Table(node.children().flatMap { if (it.tagName() == "tr") listOf(it) else it.children().filter { child -> child.tagName() == "tr" } }.map { row ->
-                                row.children().filter { it.tagName() in setOf("td", "th") }.map { parse(restoreCode(it.html()), depth + 1) }
+                                row.children().filter { it.tagName() in tableCellTags }.map { parse(restoreCode(it.html()), depth + 1) }
                             })
                         }
                         "nagi-divider", "hr" -> { flush(); blocks += ContentBlock.Divider(parse(restoreCode(node.html()), depth + 1)) }
@@ -329,7 +376,7 @@ object ContentParser {
                                 else -> style
                             }
                             node.childNodes().forEach { visit(it, childStyle) }
-                            if (node.tagName() in setOf("p", "div", "li")) text.append('\n')
+                            if (node.tagName() in blockTags) text.append('\n')
                         }
                     }
                 }

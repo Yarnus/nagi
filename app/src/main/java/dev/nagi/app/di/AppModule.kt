@@ -21,7 +21,7 @@ object AppModule {
     @Provides @Singleton fun browser(): BrowserCookies = AndroidBrowserCookies()
     @Provides @Singleton fun client(sessions: SessionStore, preferences: PreferenceStore): NgaClient =
         DynamicDomainNgaClient(sessions = sessions, preferences = preferences)
-    @Provides @Singleton fun httpClient(): OkHttpClient = OkHttpClient.Builder().retryOnConnectionFailure(true).build()
+    @Provides @Singleton fun httpClient(): OkHttpClient = NagiHttp.client
     @Provides @Singleton fun databases(@ApplicationContext context: Context): ReadingDaoProvider = AccountDatabases(context)
     @Provides @Singleton fun releaseChecker(httpClient: OkHttpClient): ReleaseChecker =
         GitHubReleaseChecker(httpClient = httpClient)

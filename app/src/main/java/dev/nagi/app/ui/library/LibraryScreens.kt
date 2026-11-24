@@ -36,6 +36,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -128,7 +129,7 @@ fun FavoritesScreen(
     val cloudBusyKeys by vm.cloudForumBusyKeys.collectAsStateWithLifecycle()
     val cloudUncertainKeys by vm.cloudForumUncertainKeys.collectAsStateWithLifecycle()
     val cloudNotice by vm.cloudForumNotice.collectAsStateWithLifecycle()
-    var selectedTab by rememberSaveable { mutableStateOf(0) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var confirmRemoveCloudForum by remember { mutableStateOf<Forum?>(null) }
     val scrollStates = rememberSaveableStateHolder()
 

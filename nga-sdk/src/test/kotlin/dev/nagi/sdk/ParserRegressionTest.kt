@@ -285,4 +285,20 @@ class ParserRegressionTest {
         assertTrue(runCatching { NgaXmlParser.topics("""<root><__F><fid>1</fid></__F></root>""", 1) }.exceptionOrNull() is NgaException.Protocol)
         assertTrue(runCatching { NgaParser.topics("""{"data":{}}""", 1) }.exceptionOrNull() is NgaException.Protocol)
     }
+
+    @Test fun singlePassEnvelopeNormalizationHandlesUnquotedValuesWithoutTouchingStrings() {
+        val raw = """{"data":{"__T":{"0":{"tid":1,"subject":+123,"author":01234,"content":"\"subject\": +999, \"author\": 0888"},"1":{"tid":2,"subject":0,"author":"normal"}}}}"""
+        val page = NgaParser.topics(raw, 1)
+        assertEquals("+123", page.items[0].title)
+        assertEquals("01234", page.items[0].author)
+        assertEquals("0", page.items[1].title)
+        assertEquals("normal", page.items[1].author)
+
+        val postsRaw = """{"data":{"__T":{"subject":+77,"authorid":7},"__R":{"0":{"pid":1,"authorid":7,"lou":0,"author":007,"content":+456},"1":{"pid":2,"authorid":7,"lou":1,"author":"A","content":"literal \"content\": +456"}}}}"""
+        val posts = NgaParser.posts(postsRaw, 1)
+        assertEquals("+77", posts.title)
+        assertEquals("007", posts.items[0].author)
+        assertEquals(listOf(ContentBlock.Text("+456")), posts.items[0].content)
+        assertEquals(listOf(ContentBlock.Text("""literal "content": +456""")), posts.items[1].content)
+    }
 }

@@ -373,13 +373,13 @@ private fun PostImageBlock(
     val density = LocalDensity.current
     val blockShape = RoundedCornerShape(12.dp)
     val candidates = remember(url) { imageFallbackCandidates(url) }
-    var candidateIndex by remember(url) { mutableStateOf(0) }
+    var candidateIndex by remember(url) { mutableIntStateOf(0) }
     val activeUrl = candidates.getOrElse(candidateIndex) { url }
     var loaded by remember(url) { mutableStateOf(false) }
     var failed by remember(url) { mutableStateOf(false) }
     var intrinsicSize by remember(url) { mutableStateOf(Size.Unspecified) }
     var containerWidthPx by remember(url) { mutableIntStateOf(0) }
-    var attempt by remember(url) { mutableStateOf(0) }
+    var attempt by remember(url) { mutableIntStateOf(0) }
     val trackerToken = remember(url) { Any() }
     TrackSlotImageReadiness(token = trackerToken, settled = loaded || failed)
 

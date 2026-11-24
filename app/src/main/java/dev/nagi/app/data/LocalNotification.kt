@@ -1,10 +1,14 @@
 package dev.nagi.app.data
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import dev.nagi.sdk.CommunityItem
 
-@Entity(tableName = "notifications")
+@Entity(
+    tableName = "notifications",
+    indices = [Index(value = ["createdAt", "id"])],
+)
 data class LocalNotification(
     @PrimaryKey val id: String,
     val title: String, val summary: String, val actor: String,

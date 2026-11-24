@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Picture
 import android.widget.Toast
+import androidx.core.graphics.createBitmap
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -218,7 +219,7 @@ internal suspend fun exportShareCardImage(
         "Card exceeds maximum supported pixel budget"
     }
     val uri = withContext(Dispatchers.Default) {
-        val bitmap = Bitmap.createBitmap(picture.width, picture.height, Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(picture.width, picture.height)
         try {
             android.graphics.Canvas(bitmap).drawPicture(picture)
             prepareShareImageUri(context, "nagi_card_${topicId}_${System.currentTimeMillis()}.jpg") { file ->

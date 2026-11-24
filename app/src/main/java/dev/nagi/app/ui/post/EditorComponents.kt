@@ -25,7 +25,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -41,7 +42,9 @@ import dev.nagi.sdk.ContentParser
 @Composable
 internal fun EditorPopup(dismiss: () -> Unit, content: @Composable () -> Unit) {
     val colors = NagiThemeTokens.colors
-    if (LocalConfiguration.current.screenWidthDp < 600) {
+    val density = LocalDensity.current
+    val containerWidthDp = with(density) { LocalWindowInfo.current.containerSize.width.toDp() }
+    if (containerWidthDp < 600.dp) {
         val sheet = rememberModalBottomSheetState(
             skipPartiallyExpanded = true,
             confirmValueChange = { it != SheetValue.Hidden },

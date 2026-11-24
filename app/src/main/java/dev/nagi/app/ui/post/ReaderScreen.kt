@@ -3,8 +3,8 @@ package dev.nagi.app.ui.post
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
+import androidx.core.net.toUri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -57,6 +57,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -168,7 +169,7 @@ fun ReaderScreen(
         ratings.feedback.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
     }
     val replySession by replies.session.collectAsStateWithLifecycle()
-    var visiblePage by remember(id) { mutableStateOf(1) }
+    var visiblePage by remember(id) { mutableIntStateOf(1) }
     LaunchedEffect(replySession?.phase) {
         if (replySession?.phase == ComposePhase.Confirmed) {
             replies.close()
@@ -200,7 +201,7 @@ fun ReaderScreen(
     val shareCard by vm.shareCard.collectAsStateWithLifecycle()
     val uriHandler = LocalUriHandler.current
     var viewerImages by rememberSaveable(id) { mutableStateOf<List<String>>(emptyList()) }
-    var viewerIndex by rememberSaveable(id) { mutableStateOf(0) }
+    var viewerIndex by rememberSaveable(id) { mutableIntStateOf(0) }
     var adjustingTypography by rememberSaveable(id) { mutableStateOf(false) }
     val canAdjustTypography = onFontSizeChange != null && onLineHeightChange != null
     val data = state.data?.takeIf { state.id == id }
@@ -312,7 +313,7 @@ fun ReaderScreen(
                                 },
                                 onOpenBrowser = {
                                     runCatching {
-                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(topicUrl)))
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, topicUrl.toUri()))
                                     }.onFailure {
                                         Toast.makeText(context, "无法打开浏览器", Toast.LENGTH_SHORT).show()
                                     }

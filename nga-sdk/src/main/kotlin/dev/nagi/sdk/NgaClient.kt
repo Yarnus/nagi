@@ -25,6 +25,7 @@ import retrofit2.http.POST
 import retrofit2.http.QueryMap
 import retrofit2.http.Multipart
 import retrofit2.http.Part
+import retrofit2.http.Tag
 import retrofit2.http.Url
 import java.io.IOException
 import java.io.InterruptedIOException
@@ -93,23 +94,32 @@ fun createNgaClient(config: NgaConfig = NgaConfig(), sessions: SessionStore = Me
 internal fun NgaDomain.readOrigin(): HttpUrl =
     (if (this == NgaDomain.ALTERNATE) NgaDomain.PRIMARY else this).baseUrl.toHttpUrl()
 
+internal class ExchangeContext(
+    val snapshot: SessionSnapshot,
+    val origin: HttpUrl,
+    val profile: ClientProfile,
+    val isWrite: Boolean,
+    val sent: AtomicBoolean = AtomicBoolean(false),
+    @Volatile var responseStatus: Int? = null,
+)
+
 internal interface NgaApi {
     @Multipart @POST
-    suspend fun upload(@Url url: String, @Part parts: List<MultipartBody.Part>): Response<String>
+    suspend fun upload(@Url url: String, @Part parts: List<MultipartBody.Part>, @Tag context: ExchangeContext): Response<String>
     @FormUrlEncoded @POST("app_api.php")
-    suspend fun forums(@QueryMap query: Map<String, String>, @FieldMap fields: Map<String, String> = emptyMap()): String
+    suspend fun forums(@QueryMap query: Map<String, String>, @FieldMap fields: Map<String, String> = emptyMap(), @Tag context: ExchangeContext): String
     @FormUrlEncoded @POST("thread.php")
-    suspend fun topicsPost(@QueryMap query: Map<String, String>, @FieldMap fields: Map<String, String> = emptyMap()): String
+    suspend fun topicsPost(@QueryMap query: Map<String, String>, @FieldMap fields: Map<String, String> = emptyMap(), @Tag context: ExchangeContext): String
     @FormUrlEncoded @POST("read.php")
-    suspend fun postsPost(@QueryMap query: Map<String, String>, @FieldMap fields: Map<String, String> = emptyMap()): String
+    suspend fun postsPost(@QueryMap query: Map<String, String>, @FieldMap fields: Map<String, String> = emptyMap(), @Tag context: ExchangeContext): String
     @FormUrlEncoded @POST("nuke.php")
-    suspend fun user(@QueryMap query: Map<String, String>, @FieldMap fields: Map<String, String> = emptyMap()): String
+    suspend fun user(@QueryMap query: Map<String, String>, @FieldMap fields: Map<String, String> = emptyMap(), @Tag context: ExchangeContext): String
     @FormUrlEncoded @POST("post.php")
-    suspend fun publish(@QueryMap query: Map<String, String>, @FieldMap fields: Map<String, String>): String
+    suspend fun publish(@QueryMap query: Map<String, String>, @FieldMap fields: Map<String, String>, @Tag context: ExchangeContext): String
     @FormUrlEncoded @POST("nuke.php")
-    suspend fun userWrite(@QueryMap query: Map<String, String>, @FieldMap fields: Map<String, String>): Response<String>
+    suspend fun userWrite(@QueryMap query: Map<String, String>, @FieldMap fields: Map<String, String>, @Tag context: ExchangeContext): Response<String>
     @FormUrlEncoded @POST("post.php")
-    suspend fun publishWrite(@QueryMap query: Map<String, String>, @FieldMap fields: Map<String, String>): Response<String>
+    suspend fun publishWrite(@QueryMap query: Map<String, String>, @FieldMap fields: Map<String, String>, @Tag context: ExchangeContext): Response<String>
 }
 
 private fun Response<String>.writeBody(): String {
@@ -138,23 +148,66 @@ internal class HttpNgaClient(
     private val xmlFormats = listOf(ReadFormat.XML_LITE, ReadFormat.XML_COMPACT)
     private val connectSeconds = timeoutSeconds.coerceAtMost(5L)
 
-    @Volatile private var readTransport = OkHttpClient.Builder()
-        .protocols(listOf(Protocol.HTTP_1_1))
-        .retryOnConnectionFailure(true)
-        .followRedirects(false).followSslRedirects(false)
-        .connectTimeout(connectSeconds, TimeUnit.SECONDS)
-        .readTimeout(timeoutSeconds, TimeUnit.SECONDS)
-        .callTimeout(timeoutSeconds, TimeUnit.SECONDS)
-        .build()
+    private data class TransportBundle(
+        val client: OkHttpClient,
+        val apis: ConcurrentHashMap<HttpUrl, NgaApi> = ConcurrentHashMap(),
+    )
 
-    private val writeTransport = OkHttpClient.Builder()
-        .protocols(listOf(Protocol.HTTP_1_1))
-        .retryOnConnectionFailure(false)
-        .followRedirects(false).followSslRedirects(false)
-        .connectTimeout(connectSeconds, TimeUnit.SECONDS)
-        .readTimeout(timeoutSeconds, TimeUnit.SECONDS)
-        .callTimeout(timeoutSeconds, TimeUnit.SECONDS)
-        .build()
+    private val stringConverter = NgaStringConverter()
+    private val readRedirectInterceptor = NgaReadRedirectInterceptor(sessions)
+
+    private fun buildTransport(pool: ConnectionPool, isWrite: Boolean): TransportBundle {
+        val client = OkHttpClient.Builder()
+            .protocols(listOf(Protocol.HTTP_1_1))
+            .retryOnConnectionFailure(!isWrite)
+            .followRedirects(false).followSslRedirects(false)
+            .connectionPool(pool)
+            .connectTimeout(connectSeconds, TimeUnit.SECONDS)
+            .readTimeout(timeoutSeconds, TimeUnit.SECONDS)
+            .callTimeout(timeoutSeconds, TimeUnit.SECONDS)
+            .addNetworkInterceptor { chain ->
+                val ctx = chain.request().tag(ExchangeContext::class.java)
+                    ?: throw IOException("Missing NGA exchange context")
+                if (ctx.isWrite && !ctx.sent.compareAndSet(false, true)) {
+                    throw IOException("Automatic request replay blocked")
+                }
+                val current = try { runBlocking { sessions.snapshot() } }
+                catch (_: Exception) { throw IOException("Unable to check NGA session") }
+                if (current.revision != ctx.snapshot.revision) {
+                    throw IOException("Account changed before transmission")
+                }
+                chain.proceed(chain.request()).also { ctx.responseStatus = it.code }
+            }
+            .addInterceptor { chain ->
+                val target = chain.request()
+                val ctx = target.tag(ExchangeContext::class.java)
+                    ?: throw IOException("Missing NGA exchange context")
+                val builder = target.newBuilder()
+                    .url(target.url.newBuilder().setQueryParameter("__inchst", "UTF8").build())
+                    .header("User-Agent", ctx.profile.userAgent)
+                    .header("Referer", ctx.origin.toString())
+                ctx.profile.xUserAgent?.let { builder.header("X-User-Agent", it) }
+                chain.proceed(if (ctx.isWrite) builder.build().withNgaSession(ctx.snapshot.session) else builder.build())
+            }
+            .apply {
+                if (!isWrite) addInterceptor(readRedirectInterceptor)
+            }
+            .build()
+        return TransportBundle(client)
+    }
+
+    private fun apiFor(bundle: TransportBundle, targetOrigin: HttpUrl): NgaApi =
+        bundle.apis.computeIfAbsent(targetOrigin) {
+            Retrofit.Builder()
+                .baseUrl(targetOrigin)
+                .client(bundle.client)
+                .addConverterFactory(stringConverter)
+                .build()
+                .create(NgaApi::class.java)
+        }
+
+    @Volatile private var readBundle = buildTransport(ConnectionPool(), isWrite = false)
+    private val writeBundle = buildTransport(ConnectionPool(), isWrite = true)
 
     private val preferredReads = ConcurrentHashMap<String, ReadAttempt>()
 
@@ -166,39 +219,20 @@ internal class HttpNgaClient(
         expectedSession: SessionSnapshot? = null,
         readStatusBody: Boolean = false,
         recordDiagnostic: ((WriteDiagnostic) -> Unit)? = null,
-        request: suspend (NgaApi) -> String,
+        request: suspend (NgaApi, ExchangeContext) -> String,
         parse: (String) -> T,
     ): T {
         val snapshot = expectedSession ?: sessions.snapshot()
         requireCurrent(snapshot)
         if (requireAuth && snapshot.session == null) throw NgaException.Authentication()
-        val sent = AtomicBoolean(false)
-        var responseStatus: Int? = null
-        val baseTransport = if (isWrite) writeTransport else readTransport
-        val client = baseTransport.newBuilder().addNetworkInterceptor { chain ->
-            if (isWrite && !sent.compareAndSet(false, true)) throw IOException("Automatic request replay blocked")
-            val current = try { runBlocking { sessions.snapshot() } }
-                catch (_: Exception) { throw IOException("Unable to check NGA session") }
-            if (current.revision != snapshot.revision) throw IOException("Account changed before transmission")
-            chain.proceed(chain.request()).also { responseStatus = it.code }
-        }.addInterceptor { chain ->
-            val target = chain.request()
-            val builder = target.newBuilder()
-                .url(target.url.newBuilder().setQueryParameter("__inchst", "UTF8").build())
-                .header("User-Agent", profile.userAgent)
-                .header("Referer", targetOrigin.toString())
-            profile.xUserAgent?.let { builder.header("X-User-Agent", it) }
-            chain.proceed(if (isWrite) builder.build().withNgaSession(snapshot.session) else builder.build())
-        }.apply {
-            if (!isWrite) addInterceptor(NgaReadRedirectInterceptor(sessions, snapshot))
-        }.build()
-        val api = Retrofit.Builder().baseUrl(targetOrigin).client(client)
-            .addConverterFactory(NgaStringConverter()).build().create(NgaApi::class.java)
+        val context = ExchangeContext(snapshot = snapshot, origin = targetOrigin, profile = profile, isWrite = isWrite)
+        val bundle = if (isWrite) writeBundle else readBundle
+        val api = apiFor(bundle, targetOrigin)
         try {
-            val raw = request(api)
+            val raw = request(api, context)
             requireCurrent(snapshot)
             val result = withContext(Dispatchers.Default) {
-                if (isWrite && writeDiagnostics) recordDiagnostic?.invoke(NgaParser.writeDiagnostic(raw, responseStatus))
+                if (isWrite && writeDiagnostics) recordDiagnostic?.invoke(NgaParser.writeDiagnostic(raw, context.responseStatus))
                 parse(raw)
             }
             requireCurrent(snapshot)
@@ -230,7 +264,7 @@ internal class HttpNgaClient(
             }
         } catch (error: IOException) {
             requireCurrent(snapshot)
-            if (isWrite && writeDiagnostics) recordDiagnostic?.invoke(WriteDiagnostic(httpStatus = responseStatus))
+            if (isWrite && writeDiagnostics) recordDiagnostic?.invoke(WriteDiagnostic(httpStatus = context.responseStatus))
             throw NgaException.Network(error)
         }
     }
@@ -240,7 +274,7 @@ internal class HttpNgaClient(
         formats: List<ReadFormat> = listOf(ReadFormat.JSON),
         cacheKey: String? = null,
         profile: ClientProfile = ClientProfile.APPLE,
-        request: suspend (NgaApi, Map<String, String>) -> String,
+        request: suspend (NgaApi, Map<String, String>, ExchangeContext) -> String,
         parse: (String, ReadFormat) -> T,
     ): T {
         val snapshot = sessions.snapshot()
@@ -261,7 +295,7 @@ internal class HttpNgaClient(
                         targetOrigin = attempt.origin,
                         profile = profile,
                         expectedSession = snapshot,
-                        request = { request(it, attempt.format.parameters) },
+                        request = { api, ctx -> request(api, attempt.format.parameters, ctx) },
                         parse = { parse(it, attempt.format) },
                     )
                     if (cacheKey != null) {
@@ -296,7 +330,7 @@ internal class HttpNgaClient(
     }
 
     override suspend fun getForums(): List<Forum> = exchangeRead(
-        request = { api, format -> api.forums(query("__lib" to "home", "__act" to "category") + format) },
+        request = { api, format, ctx -> api.forums(query("__lib" to "home", "__act" to "category") + format, context = ctx) },
         parse = { raw, _ -> NgaParser.forums(raw) },
     )
 
@@ -311,7 +345,7 @@ internal class HttpNgaClient(
             TopicSort.RECOMMENDED -> parameters["recommend"] = "1"
         }
         return exchangeRead(formats = xmlFormats, cacheKey = "topics",
-            request = { api, format -> api.topicsPost(parameters + format) },
+            request = { api, format, ctx -> api.topicsPost(parameters + format, context = ctx) },
             parse = { raw, _ -> parseStructuredTopics(raw, page) },
         )
     }
@@ -344,7 +378,7 @@ internal class HttpNgaClient(
                 try {
                     val result = exchange(
                         profile = ClientProfile.WP_READER, expectedSession = snapshot, readStatusBody = true,
-                        request = { it.postsPost(parameters + format.parameters) },
+                        request = { api, ctx -> api.postsPost(parameters + format.parameters, context = ctx) },
                         parse = { parseStructuredPosts(it, page) },
                     )
                     if (firstError != null) {
@@ -355,14 +389,14 @@ internal class HttpNgaClient(
                 } catch (error: NgaException) {
                     if (error !is NgaException.Protocol && error !is NgaException.Http) throw error
                     if (firstError == null) firstError = error
-                    readTransport = readTransport.newBuilder().connectionPool(ConnectionPool()).build()
+                    readBundle = buildTransport(ConnectionPool(), isWrite = false)
                 }
             }
             if (firstError !is NgaException.Protocol) throw firstError ?: NgaException.Protocol(ProtocolReason.UNKNOWN)
             try {
                 exchange(
                     profile = ClientProfile.WP_READER, expectedSession = snapshot, readStatusBody = true,
-                    request = { it.postsPost(parameters) },
+                    request = { api, ctx -> api.postsPost(parameters, context = ctx) },
                     parse = { NgaHtmlPostParser.posts(it, topicId, page, authorId) },
                 )
             } catch (htmlError: NgaException.Protocol) {
@@ -380,7 +414,7 @@ internal class HttpNgaClient(
         else if (forumId != null) parameters["fid"] = forumId
         parameters.remove("__output")
         return exchangeRead(formats = xmlFormats, cacheKey = "search",
-            request = { api, format -> api.topicsPost(parameters + format) },
+            request = { api, format, ctx -> api.topicsPost(parameters + format, context = ctx) },
             parse = { raw, _ -> parseStructuredTopics(raw, page) },
         )
     }
@@ -388,22 +422,23 @@ internal class HttpNgaClient(
     override suspend fun findUser(username: String): NgaUser? {
         require(username.isNotBlank())
         return try {
-            exchangeRead(request = { api, format ->
-                api.user(query("__lib" to "ucp", "__act" to "get", "username" to username.trim()) + format)
+            exchangeRead(request = { api, format, ctx ->
+                api.user(query("__lib" to "ucp", "__act" to "get", "username" to username.trim()) + format, context = ctx)
             }, parse = { raw, _ -> NgaParser.user(raw, "") })
         } catch (_: NgaException.NotFound) { null }
     }
 
     override suspend fun getUser(userId: String): NgaUser {
         require(userId.isNotBlank())
-        return exchangeRead(request = { api, format -> api.user(query("__lib" to "ucp", "__act" to "get", "uid" to userId) + format) },
-            parse = { raw, _ -> NgaParser.user(raw, userId) })
+        return exchangeRead(request = { api, format, ctx ->
+            api.user(query("__lib" to "ucp", "__act" to "get", "uid" to userId) + format, context = ctx)
+        }, parse = { raw, _ -> NgaParser.user(raw, userId) })
     }
 
     override suspend fun getUserTopics(userId: String, page: Int): TopicPage {
         require(userId.matches(Regex("[1-9][0-9]*")) && page > 0)
         return exchangeRead(formats = xmlFormats, cacheKey = "user-topics",
-            request = { api, format -> api.topicsPost(mapOf("authorid" to userId, "page" to "$page") + format) },
+            request = { api, format, ctx -> api.topicsPost(mapOf("authorid" to userId, "page" to "$page") + format, context = ctx) },
             parse = { raw, _ ->
                 if (NgaXmlParser.looksLikeXml(raw)) NgaXmlParser.topics(raw, page, 35)
                 else NgaParser.topics(raw, page, 35)
@@ -413,7 +448,7 @@ internal class HttpNgaClient(
     override suspend fun getUserReplies(userId: String, page: Int): UserReplyPage {
         require(userId.matches(Regex("[1-9][0-9]*")) && page > 0)
         return exchangeRead(formats = xmlFormats, cacheKey = "user-replies",
-            request = { api, format -> api.topicsPost(mapOf("searchpost" to "1", "authorid" to userId, "page" to "$page") + format) },
+            request = { api, format, ctx -> api.topicsPost(mapOf("searchpost" to "1", "authorid" to userId, "page" to "$page") + format, context = ctx) },
             parse = { raw, _ -> if (NgaXmlParser.looksLikeXml(raw)) NgaXmlParser.userReplies(raw, page) else NgaParser.userReplies(raw, page) })
     }
 
@@ -423,8 +458,8 @@ internal class HttpNgaClient(
 
     private suspend fun readNotifications(since: Long): NotificationFeed {
         require(since >= 0)
-        return exchangeRead(requireAuth = true, request = { api, format ->
-            api.user(query("__lib" to "noti", "__act" to "get_all", "raw" to "3", "time_limit" to "$since") + format)
+        return exchangeRead(requireAuth = true, request = { api, format, ctx ->
+            api.user(query("__lib" to "noti", "__act" to "get_all", "raw" to "3", "time_limit" to "$since") + format, context = ctx)
         }, parse = { raw, _ -> NgaParser.notifications(raw) })
     }
 
@@ -435,15 +470,15 @@ internal class HttpNgaClient(
 
     override suspend fun getMessageConversations(page: Int): MessageConversationPage {
         require(page > 0)
-        return exchangeRead(requireAuth = true, request = { api, format ->
-            api.user(query("__lib" to "message", "__act" to "message", "act" to "list", "page" to "$page") + format)
+        return exchangeRead(requireAuth = true, request = { api, format, ctx ->
+            api.user(query("__lib" to "message", "__act" to "message", "act" to "list", "page" to "$page") + format, context = ctx)
         }, parse = { raw, _ -> NgaInteractionParser.conversations(raw, page) })
     }
 
     override suspend fun getMessagePosts(conversationId: String, page: Int): MessagePostPage {
         require(conversationId.isNotBlank() && page > 0)
-        return exchangeRead(requireAuth = true, request = { api, format ->
-            api.user(query("__lib" to "message", "__act" to "message", "act" to "read", "mid" to conversationId, "page" to "$page") + format)
+        return exchangeRead(requireAuth = true, request = { api, format, ctx ->
+            api.user(query("__lib" to "message", "__act" to "message", "act" to "read", "mid" to conversationId, "page" to "$page") + format, context = ctx)
         }, parse = { raw, _ -> NgaInteractionParser.messagePosts(raw, page) })
     }
 
@@ -456,7 +491,7 @@ internal class HttpNgaClient(
         }
         exchange(requireAuth = true, isWrite = true,
             recordDiagnostic = diagnostic,
-            request = { it.userWrite(query("__lib" to "message", "__act" to "message", "act" to request.action.wireValue), fields).writeBody() },
+            request = { api, ctx -> api.userWrite(query("__lib" to "message", "__act" to "message", "act" to request.action.wireValue), fields, ctx).writeBody() },
             parse = { raw ->
                 NgaParser.writeErrorOrNull(raw)?.let { throw it }
                 WriteResult.Confirmed("私信已发送")
@@ -469,8 +504,10 @@ internal class HttpNgaClient(
         require(postId.toLongOrNull()?.let { it >= 0 } == true)
         return write { diagnostic ->
             exchange(requireAuth = true, isWrite = true, recordDiagnostic = diagnostic,
-                request = { it.userWrite(query("__lib" to "topic_recommend", "__act" to "add"),
-                    mapOf("tid" to topicId, "pid" to postId, "value" to rating.value.toString(), "raw" to "3")).writeBody() },
+                request = { api, ctx ->
+                    api.userWrite(query("__lib" to "topic_recommend", "__act" to "add"),
+                        mapOf("tid" to topicId, "pid" to postId, "value" to rating.value.toString(), "raw" to "3"), ctx).writeBody()
+                },
                 parse = { NgaParser.rating(it, rating) })
         }
     }
@@ -479,9 +516,11 @@ internal class HttpNgaClient(
         require(parentForumId.toLongOrNull() != null && filterId.toLongOrNull() != null)
         return write { diagnostic ->
             exchange(requireAuth = true, isWrite = true, recordDiagnostic = diagnostic,
-                request = { it.userWrite(query("__lib" to "user_option", "__act" to "set",
-                    (if (visible) "del" else "add") to filterId),
-                    mapOf("fid" to parentForumId, "type" to "1", "info" to "add_to_block_tids")).writeBody() },
+                request = { api, ctx ->
+                    api.userWrite(query("__lib" to "user_option", "__act" to "set",
+                        (if (visible) "del" else "add") to filterId),
+                        mapOf("fid" to parentForumId, "type" to "1", "info" to "add_to_block_tids"), ctx).writeBody()
+                },
                 parse = { raw ->
                     NgaParser.writeErrorOrNull(raw)?.let { throw it }
                     WriteResult.Confirmed("子板块设置已更新")
@@ -491,8 +530,8 @@ internal class HttpNgaClient(
 
     override suspend fun getFavoriteForums(): List<Forum> = exchangeRead(
         requireAuth = true,
-        request = { api, format ->
-            api.user(query("__lib" to "forum_favor2", "__act" to "forum_favor") + format, mapOf("action" to "get"))
+        request = { api, format, ctx ->
+            api.user(query("__lib" to "forum_favor2", "__act" to "forum_favor") + format, mapOf("action" to "get"), ctx)
         },
         parse = { raw, _ -> NgaParser.favoriteForums(raw) },
     )
@@ -502,8 +541,10 @@ internal class HttpNgaClient(
         require(target.toLongOrNull()?.let { it != 0L } == true)
         return write { diagnostic ->
             exchange(requireAuth = true, isWrite = true, recordDiagnostic = diagnostic,
-                request = { it.userWrite(query("__lib" to "forum_favor2", "__act" to "forum_favor"),
-                    mapOf("action" to if (favorite) "add" else "del", "fid" to target)).writeBody() },
+                request = { api, ctx ->
+                    api.userWrite(query("__lib" to "forum_favor2", "__act" to "forum_favor"),
+                        mapOf("action" to if (favorite) "add" else "del", "fid" to target), ctx).writeBody()
+                },
                 parse = { raw ->
                     NgaParser.writeErrorOrNull(raw)?.let { throw it }
                     WriteResult.Confirmed(if (favorite) "已加入 NGA 收藏版块" else "已取消 NGA 收藏版块")
@@ -513,7 +554,7 @@ internal class HttpNgaClient(
 
     override suspend fun preparePublish(target: PublishTarget): PublishPreparation = exchangeRead(
         requireAuth = true, formats = listOf(ReadFormat.XML_LITE),
-        request = { api, format -> api.publish(publishParameters(target) + format, emptyMap()) },
+        request = { api, format, ctx -> api.publish(publishParameters(target) + format, emptyMap(), ctx) },
         parse = { raw, _ -> NgaXmlParser.publishPreparation(raw, target) },
     )
 
@@ -522,7 +563,7 @@ internal class HttpNgaClient(
         val snapshot = sessions.snapshot()
         val userId = snapshot.session?.userId ?: throw NgaException.Authentication()
         val grant = exchange(requireAuth = true, expectedSession = snapshot,
-            request = { it.publish(publishParameters(target) + mapOf("lite" to "xml"), emptyMap()) },
+            request = { api, ctx -> api.publish(publishParameters(target) + mapOf("lite" to "xml"), emptyMap(), ctx) },
             parse = { NgaXmlParser.uploadGrant(it, target, userId) })
         val url = origin.resolve(grant.url)?.takeIf(::isTrustedUploadUrl)
             ?: throw NgaException.Restricted()
@@ -530,7 +571,7 @@ internal class HttpNgaClient(
         var attachment: UploadedAttachment? = null
         val outcome = write { diagnostic ->
             exchange(requireAuth = true, isWrite = true, expectedSession = snapshot, recordDiagnostic = diagnostic,
-                request = { it.upload(url.toString(), parts).writeBody() },
+                request = { api, ctx -> api.upload(url.toString(), parts, ctx).writeBody() },
                 parse = { raw ->
                     NgaParser.writeErrorOrNull(raw)?.let { throw it }
                     attachment = NgaXmlParser.uploadedAttachment(raw)
@@ -543,12 +584,14 @@ internal class HttpNgaClient(
     override suspend fun publish(request: PublishRequest): WriteResult = write { diagnostic ->
         exchange(
             requireAuth = true, isWrite = true, recordDiagnostic = diagnostic,
-            request = { it.publishWrite(query() + publishParameters(request.target), mapOf(
-                "step" to "2", "post_subject" to escapeNgaSubmission(request.title),
-                "post_content" to escapeNgaSubmission(request.content),
-                "attachments" to request.attachments.joinToString("\t") { it.name },
-                "attachments_check" to request.attachments.joinToString("\t") { it.check },
-            )).writeBody() },
+            request = { api, ctx ->
+                api.publishWrite(query() + publishParameters(request.target), mapOf(
+                    "step" to "2", "post_subject" to escapeNgaSubmission(request.title),
+                    "post_content" to escapeNgaSubmission(request.content),
+                    "attachments" to request.attachments.joinToString("\t") { it.name },
+                    "attachments_check" to request.attachments.joinToString("\t") { it.check },
+                ), ctx).writeBody()
+            },
             parse = { NgaParser.publish(it, request.target) },
         )
     }

@@ -14,6 +14,8 @@ import dev.nagi.sdk.SessionSnapshot
 import dev.nagi.sdk.SessionStore
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.KeyStore
@@ -32,12 +34,22 @@ class AndroidSessionStore(context: Context, fileName: String = "nga-sessions") :
         applicationContext.preferencesDataStoreFile(fileName)
     }
     private class Accounts(val revision: Long, val active: String?, val sessions: Map<String, NgaSession>)
+    private val cacheMutex = Mutex()
+    @Volatile private var cachedAccounts: Accounts? = null
 
-    override suspend fun snapshot(): SessionSnapshot = access {
-        val accounts = decode(dataStore.data.first())
-        SessionSnapshot(accounts.revision, accounts.active?.let { accounts.sessions.getValue(it) })
+    private suspend fun loadAccounts(): Accounts {
+        cachedAccounts?.let { return it }
+        return cacheMutex.withLock {
+            cachedAccounts?.let { return@withLock it }
+            access { decode(dataStore.data.first()).also { cachedAccounts = it } }
+        }
     }
-    override suspend fun getAccounts(): List<String> = access { decode(dataStore.data.first()).sessions.keys.toList() }
+
+    override suspend fun snapshot(): SessionSnapshot {
+        val accounts = loadAccounts()
+        return SessionSnapshot(accounts.revision, accounts.active?.let { accounts.sessions.getValue(it) })
+    }
+    override suspend fun getAccounts(): List<String> = loadAccounts().sessions.keys.toList()
     override suspend fun saveSession(session: NgaSession) = update { old ->
         Accounts(old.revision + 1, session.userId, old.sessions + (session.userId to session))
     }
@@ -49,7 +61,18 @@ class AndroidSessionStore(context: Context, fileName: String = "nga-sessions") :
         Accounts(old.revision + 1, null, old.sessions - listOfNotNull(old.active).toSet())
     }
     private suspend fun update(transform: (Accounts) -> Accounts) {
-        access { dataStore.edit { preferences -> preferences[encrypted] = encode(transform(decode(preferences))) } }
+        cacheMutex.withLock {
+            access {
+                var updated: Accounts? = null
+                dataStore.edit { preferences ->
+                    val current = cachedAccounts ?: decode(preferences)
+                    val next = transform(current)
+                    preferences[encrypted] = encode(next)
+                    updated = next
+                }
+                cachedAccounts = updated
+            }
+        }
     }
     private suspend fun <T> access(block: suspend () -> T): T = withContext(Dispatchers.IO) {
         try { block() }
@@ -95,7 +118,10 @@ class AndroidSessionStore(context: Context, fileName: String = "nga-sessions") :
         require(active == null || active in accounts)
         return Accounts(json.getLong("revision"), active, accounts)
     }
-    suspend fun close() { job.cancelAndJoin() }
+    suspend fun close() {
+        cachedAccounts = null
+        job.cancelAndJoin()
+    }
 }
 
 class SessionStorageException : IllegalStateException("Stored NGA credentials are unavailable")

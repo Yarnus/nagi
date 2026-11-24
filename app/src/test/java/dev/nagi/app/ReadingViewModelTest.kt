@@ -737,6 +737,7 @@ class FakeDao : ReadingDao {
     }
     val history = MutableStateFlow<List<ReadingHistory>>(emptyList())
     override fun history(): Flow<List<ReadingHistory>> = history
+    override suspend fun historyCount(): Int = history.value.size
     override suspend fun historyTitle(id: String): String? = history.value.firstOrNull { it.topicId == id }?.title
     override suspend fun upsertHistory(item: ReadingHistory) {
         history.update { old -> (old.filterNot { it.topicId == item.topicId } + item).sortedWith(compareByDescending<ReadingHistory> { it.viewedAt }.thenBy { it.topicId }) }
@@ -782,6 +783,7 @@ class FakeDao : ReadingDao {
         cloudForumFavoriteOrders.value = keys.distinct().mapIndexed { index, key -> CloudForumFavoriteOrder(key, index) }
     }
     override suspend fun position(id: String): ReadingPosition? = positions[id]
+    override suspend fun positionCount(): Int = positions.size
     override suspend fun upsertPosition(item: ReadingPosition) { positions[item.topicId] = item }
     override suspend fun prunePositions(limit: Int) {
         val favIds = favorites.value.mapTo(HashSet()) { it.topicId }
@@ -798,6 +800,7 @@ class FakeDao : ReadingDao {
         positions.keys.removeAll { it !in favIds }
     }
     override fun topicReadStates(): Flow<List<TopicReadState>> = readStates.map { it.values.toList() }
+    override suspend fun topicReadStateCount(): Int = readStates.value.size
     override suspend fun topicReadState(id: String): TopicReadState? = readStates.value[id]
     override suspend fun upsertTopicReadState(item: TopicReadState) {
         readStates.update { it + (item.topicId to item) }

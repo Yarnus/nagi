@@ -67,18 +67,27 @@ import coil.Coil
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.request.ImageRequest
+import dev.nagi.app.data.NagiHttp
 import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.ChromeIconButton
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.theme.NagiThemeTokens
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.Request
+import okhttp3.Response
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
+import java.io.IOException
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 private const val MAX_IMAGE_DOWNLOAD_BYTES = 30 * 1024 * 1024
 
@@ -137,38 +146,46 @@ private suspend fun loadImageBytes(context: Context, url: String): ByteArray? = 
         snapshot.data.toFile().takeIf { it.isFile && it.length() <= MAX_IMAGE_DOWNLOAD_BYTES }?.readBytes()
     }?.let { return@withContext it }
 
-    val parsed = runCatching { URL(url) }.getOrNull() ?: return@withContext null
-    if (!parsed.protocol.equals("https", ignoreCase = true) && !parsed.protocol.equals("http", ignoreCase = true)) {
+    val parsed = url.toHttpUrlOrNull() ?: return@withContext null
+    if (parsed.scheme != "https" && parsed.scheme != "http") {
         return@withContext null
     }
-    var connection: HttpURLConnection? = null
+    val call = NagiHttp.client.newCall(Request.Builder().url(parsed).build())
     try {
-        connection = (parsed.openConnection() as HttpURLConnection).apply {
-            instanceFollowRedirects = false
-            allowUserInteraction = false
-            connectTimeout = 10_000
-            readTimeout = 20_000
+        val response = suspendCancellableCoroutine<Response> { cont ->
+            cont.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    if (cont.isActive) cont.resumeWithException(e)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    cont.resume(response) { _, _, _ -> response.close() }
+                }
+            })
         }
-        if (connection.responseCode !in 200..299) return@withContext null
-        val contentLength = connection.contentLengthLong
-        if (contentLength > MAX_IMAGE_DOWNLOAD_BYTES) return@withContext null
-        connection.inputStream.use { input ->
-            val out = ByteArrayOutputStream()
-            val buf = ByteArray(8192)
-            var total = 0
-            while (true) {
-                val read = input.read(buf)
-                if (read <= 0) break
-                total += read
-                if (total > MAX_IMAGE_DOWNLOAD_BYTES) return@withContext null
-                out.write(buf, 0, read)
+        response.use { res ->
+            if (!res.isSuccessful) return@withContext null
+            val body = res.body ?: return@withContext null
+            if (body.contentLength() > MAX_IMAGE_DOWNLOAD_BYTES) return@withContext null
+            body.byteStream().use { input ->
+                val out = ByteArrayOutputStream()
+                val buf = ByteArray(8192)
+                var total = 0
+                while (true) {
+                    val read = input.read(buf)
+                    if (read <= 0) break
+                    total += read
+                    if (total > MAX_IMAGE_DOWNLOAD_BYTES) return@withContext null
+                    out.write(buf, 0, read)
+                }
+                out.toByteArray().takeIf { it.isNotEmpty() }
             }
-            out.toByteArray().takeIf { it.isNotEmpty() }
         }
+    } catch (error: CancellationException) {
+        throw error
     } catch (_: Exception) {
         null
-    } finally {
-        connection?.disconnect()
     }
 }
 

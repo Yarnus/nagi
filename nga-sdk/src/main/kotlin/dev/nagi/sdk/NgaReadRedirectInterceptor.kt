@@ -9,10 +9,12 @@ import java.net.ProtocolException
 
 internal class NgaReadRedirectInterceptor(
     private val sessions: SessionStore,
-    private val snapshot: SessionSnapshot,
+    private val fixedSnapshot: SessionSnapshot? = null,
 ) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         var request = chain.request()
+        val snapshot = request.tag(ExchangeContext::class.java)?.snapshot ?: fixedSnapshot
+            ?: throw IOException("Missing NGA session context")
         val visited = mutableSetOf(request.method to request.url)
         var redirects = 0
         while (true) {

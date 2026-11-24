@@ -1,7 +1,7 @@
 package dev.nagi.app.ui.topic
 
 import android.content.Intent
-import android.net.Uri
+import androidx.core.net.toUri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -489,7 +489,7 @@ fun TopicsScreen(
                                                 onClick = {
                                                     moreExpanded = false
                                                     runCatching {
-                                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(forumUrl)))
+                                                        context.startActivity(Intent(Intent.ACTION_VIEW, forumUrl.toUri()))
                                                     }
                                                 },
                                             )

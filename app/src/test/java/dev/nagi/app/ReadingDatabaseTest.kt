@@ -224,4 +224,58 @@ class ReadingDatabaseTest {
             context.deleteDatabase("${name}_7.db"); context.deleteDatabase("${name}_8.db")
         }
     }
+
+    @Test fun migration8To9CreatesIndicesAndCloseInactiveReleasesOldAccounts() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val name = "index-and-close-test"
+        context.deleteDatabase("${name}_7.db"); context.deleteDatabase("${name}_8.db")
+        var databases = AccountDatabases(context, name)
+        try {
+            databases.forUser("7").saveHistory(ReadingHistory("101", "History 7", 10L))
+            databases.forUser("7").savePosition(ReadingPosition("101", 2, 1, 0, updatedAt = 20L))
+            databases.forUser("8").saveFavorite(LocalFavorite("202", "Fav 8", 30L))
+            databases.close()
+
+            android.database.sqlite.SQLiteDatabase.openDatabase(context.getDatabasePath("${name}_7.db").path, null, 0).use { db ->
+                db.execSQL("DROP INDEX IF EXISTS `index_history_viewedAt_topicId`")
+                db.execSQL("DROP INDEX IF EXISTS `index_positions_updatedAt_topicId`")
+                db.execSQL("DROP INDEX IF EXISTS `index_topic_read_states_lastReadAt_topicId`")
+                db.execSQL("DROP INDEX IF EXISTS `index_notifications_createdAt_id`")
+                db.version = 8
+            }
+
+            databases = AccountDatabases(context, name)
+            val dao7 = databases.forUser("7")
+            assertEquals("History 7", dao7.history().first().single().title)
+            assertEquals(2, dao7.position("101")?.page)
+            databases.close()
+
+            android.database.sqlite.SQLiteDatabase.openDatabase(context.getDatabasePath("${name}_7.db").path, null, 0).use { db ->
+                fun indexNames(table: String): Set<String> {
+                    val names = mutableSetOf<String>()
+                    db.rawQuery("PRAGMA index_list(`$table`)", null).use { cursor ->
+                        val nameIdx = cursor.getColumnIndex("name")
+                        while (cursor.moveToNext()) {
+                            if (nameIdx >= 0) names += cursor.getString(nameIdx)
+                        }
+                    }
+                    return names
+                }
+                assertTrue("index_history_viewedAt_topicId" in indexNames("history"))
+                assertTrue("index_positions_updatedAt_topicId" in indexNames("positions"))
+                assertTrue("index_topic_read_states_lastReadAt_topicId" in indexNames("topic_read_states"))
+                assertTrue("index_notifications_createdAt_id" in indexNames("notifications"))
+            }
+
+            databases = AccountDatabases(context, name)
+            databases.forUser("7")
+            databases.forUser("8")
+            databases.closeInactive("8")
+            assertEquals("Fav 8", databases.forUser("8").favorite("202")?.title)
+            assertEquals("History 7", databases.forUser("7").history().first().single().title)
+        } finally {
+            databases.close()
+            context.deleteDatabase("${name}_7.db"); context.deleteDatabase("${name}_8.db")
+        }
+    }
 }

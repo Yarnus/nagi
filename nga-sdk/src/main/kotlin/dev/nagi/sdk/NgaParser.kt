@@ -6,6 +6,8 @@ import org.json.JSONObject
 import org.jsoup.Jsoup
 
 internal object NgaParser {
+    private val unquotedValueKeys = setOf("content", "subject", "author")
+
     private fun normalizeEnvelope(raw: String): String {
         val initial = raw.trim().removePrefix("\uFEFF").trim()
             .removePrefix("window.script_muti_get_var_store=").trim().removePrefix("/*\$js\$*/").trim()
@@ -13,7 +15,11 @@ internal object NgaParser {
         var quote: Char? = null
         var escaped = false
         var numericKeyEnd = -1
-        for (index in initial.indices) {
+        var stringStart = -1
+        var lastQuotedKey: String? = null
+        var expectKey = true
+        var index = 0
+        while (index < initial.length) {
             val char = initial[index]
             if (quote != null) {
                 if (escaped) {
@@ -23,7 +29,11 @@ internal object NgaParser {
                     escaped = true
                     cleaned.append(char)
                 } else if (char == quote) {
+                    if (quote == '"' && expectKey && stringStart >= 0) {
+                        lastQuotedKey = initial.substring(stringStart, index)
+                    }
                     quote = null
+                    stringStart = -1
                     cleaned.append(char)
                 } else if (char.code < 0x20) {
                     when (char) {
@@ -34,44 +44,67 @@ internal object NgaParser {
                 } else {
                     cleaned.append(char)
                 }
-            } else {
-                if (initial.startsWith("/*error fill content", index)) break
-                if (char in '0'..'9' && index >= numericKeyEnd) {
-                    var before = index - 1
-                    while (before >= 0 && initial[before].isWhitespace()) before--
-                    if (before >= 0 && initial[before] in "{,") {
-                        var end = index + 1
-                        while (end < initial.length && initial[end] in '0'..'9') end++
-                        var after = end
-                        while (after < initial.length && initial[after].isWhitespace()) after++
-                        if (after < initial.length && initial[after] == ':') {
-                            cleaned.append('"')
-                            numericKeyEnd = end
+                index++
+                continue
+            }
+
+            if (initial.startsWith("/*error fill content", index)) break
+
+            if (char == '{' || char == ',') {
+                expectKey = true
+                lastQuotedKey = null
+            } else if (char == ':') {
+                expectKey = false
+                cleaned.append(char)
+                index++
+                if (lastQuotedKey in unquotedValueKeys) {
+                    var ws = index
+                    while (ws < initial.length && initial[ws].isWhitespace()) ws++
+                    if (ws < initial.length && (initial[ws] == '+' || initial[ws] == '0')) {
+                        var numEnd = ws + 1
+                        while (numEnd < initial.length && initial[numEnd] in '0'..'9') numEnd++
+                        if (numEnd > ws + 1) {
+                            var afterWs = numEnd
+                            while (afterWs < initial.length && initial[afterWs].isWhitespace()) afterWs++
+                            if (afterWs < initial.length && (initial[afterWs] == ',' || initial[afterWs] == '}')) {
+                                cleaned.append(initial, index, ws)
+                                cleaned.append('"')
+                                cleaned.append(initial, ws, numEnd)
+                                cleaned.append('"')
+                                index = numEnd
+                                lastQuotedKey = null
+                                continue
+                            }
                         }
                     }
                 }
-                if (char == '"' || char == '\'') quote = char
-                cleaned.append(char)
-                if (index + 1 == numericKeyEnd) cleaned.append('"')
+                lastQuotedKey = null
+                continue
             }
+
+            if (char in '0'..'9' && index >= numericKeyEnd) {
+                var before = index - 1
+                while (before >= 0 && initial[before].isWhitespace()) before--
+                if (before >= 0 && initial[before] in "{,") {
+                    var end = index + 1
+                    while (end < initial.length && initial[end] in '0'..'9') end++
+                    var after = end
+                    while (after < initial.length && initial[after].isWhitespace()) after++
+                    if (after < initial.length && initial[after] == ':') {
+                        cleaned.append('"')
+                        numericKeyEnd = end
+                    }
+                }
+            }
+            if (char == '"' || char == '\'') {
+                quote = char
+                if (char == '"' && expectKey) stringStart = index + 1
+            }
+            cleaned.append(char)
+            if (index + 1 == numericKeyEnd) cleaned.append('"')
+            index++
         }
-        val text = cleaned.toString().trimEnd().removeSuffix("/*\$js\$*/").trimEnd().removeSuffix(";").trimEnd()
-        val outsideStrings = BooleanArray(text.length)
-        quote = null
-        escaped = false
-        for (index in text.indices) {
-            val char = text[index]
-            outsideStrings[index] = quote == null
-            if (quote != null) {
-                if (escaped) escaped = false
-                else if (char == '\\') escaped = true
-                else if (char == quote) quote = null
-            } else if (char == '"' || char == '\'') quote = char
-        }
-        return text.replace(Regex("""([{,]\s*)"(content|subject|author)"\s*:\s*(\+\d+|0\d+)(\s*[,}])""")) {
-            if (!outsideStrings[it.range.first]) it.value
-            else "${it.groupValues[1]}\"${it.groupValues[2]}\":\"${it.groupValues[3]}\"${it.groupValues[4]}"
-        }
+        return cleaned.toString().trimEnd().removeSuffix("/*\$js\$*/").trimEnd().removeSuffix(";").trimEnd()
     }
     fun extractErrorOrNull(raw: String): NgaException? {
         val trimmed = raw.trimStart().removePrefix("\uFEFF").trimStart()
