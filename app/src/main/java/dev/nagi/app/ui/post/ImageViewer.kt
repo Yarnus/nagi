@@ -97,6 +97,16 @@ internal data class ImageTransform(val scale: Float = 1f, val offset: Offset = O
         return ImageTransform(next, anchor - (anchor - offset) * (next / scale) + pan)
             .bounded(viewport, image)
     }
+
+    fun fitWidth(viewport: Size, image: Size): ImageTransform {
+        if (viewport.isEmpty() || image.isEmpty()) return ImageTransform()
+        val fit = minOf(viewport.width / image.width, viewport.height / image.height)
+        val fitWidth = image.width * fit
+        if (fit <= 0f || fitWidth <= 0f) return ImageTransform()
+        val targetScale = (viewport.width / fitWidth).coerceIn(1f, 5f)
+        val topOffsetY = ((image.height * fit * targetScale - viewport.height) / 2f).coerceAtLeast(0f)
+        return ImageTransform(scale = targetScale, offset = Offset(0f, topOffsetY)).bounded(viewport, image)
+    }
 }
 
 internal data class DecodedImageFormat(val mimeType: String, val extension: String)
@@ -277,7 +287,10 @@ internal fun ImageViewer(
     }
     val zoomStates = remember(urls) { mutableStateMapOf<Int, Boolean>() }
     val readyStates = remember(urls) { mutableStateMapOf<Int, Boolean>() }
+    val canFitWidthStates = remember(urls) { mutableStateMapOf<Int, Boolean>() }
+    val resolvedUrls = remember(urls) { mutableStateMapOf<Int, String>() }
     val resetSignals = remember(urls) { mutableStateMapOf<Int, Int>() }
+    val fitWidthSignals = remember(urls) { mutableStateMapOf<Int, Int>() }
     var busyAction by remember { mutableStateOf(false) }
     var pendingSaveBytes by remember { mutableStateOf<ByteArray?>(null) }
     val saveDocumentLauncher = rememberLauncherForActivityResult(
@@ -297,9 +310,10 @@ internal fun ImageViewer(
     }
 
     val currentPage = pagerState.currentPage.coerceIn(0, urls.lastIndex)
-    val currentUrl = urls[currentPage]
+    val currentUrl = resolvedUrls[currentPage] ?: urls[currentPage]
     val currentReady = readyStates[currentPage] == true
     val currentZoomed = zoomStates[currentPage] == true
+    val currentCanFitWidth = canFitWidthStates[currentPage] == true
 
     Dialog(close, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding()) {
@@ -379,6 +393,13 @@ internal fun ImageViewer(
                             },
                             style = CapsuleStyle.Neutral,
                         )
+                        if (currentCanFitWidth) {
+                            CapsuleButton(
+                                text = "适宽",
+                                onClick = { fitWidthSignals[currentPage] = (fitWidthSignals[currentPage] ?: 0) + 1 },
+                                style = CapsuleStyle.Neutral,
+                            )
+                        }
                         CapsuleButton(
                             text = "还原",
                             icon = NagiIcons.Refresh,
@@ -403,8 +424,11 @@ internal fun ImageViewer(
                     url = url,
                     isActivePage = pageIndex == currentPage,
                     resetToken = resetSignals[pageIndex] ?: 0,
+                    fitWidthToken = fitWidthSignals[pageIndex] ?: 0,
                     onReadyChanged = { readyStates[pageIndex] = it },
                     onZoomedChanged = { zoomStates[pageIndex] = it },
+                    onCanFitWidthChanged = { canFitWidthStates[pageIndex] = it },
+                    onResolvedUrlChanged = { resolvedUrls[pageIndex] = it },
                 )
             }
         }
@@ -416,8 +440,11 @@ private fun ImageViewerPage(
     url: String,
     isActivePage: Boolean,
     resetToken: Int,
+    fitWidthToken: Int,
     onReadyChanged: (Boolean) -> Unit,
     onZoomedChanged: (Boolean) -> Unit,
+    onCanFitWidthChanged: (Boolean) -> Unit,
+    onResolvedUrlChanged: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val candidates = remember(url) { imageFallbackCandidates(url) }
@@ -435,14 +462,25 @@ private fun ImageViewerPage(
     var viewport by remember { mutableStateOf(Size.Zero) }
     var imageSize by remember(url) { mutableStateOf(Size.Zero) }
     var transform by remember(url, resetToken) { mutableStateOf(ImageTransform()) }
+    var handledFitWidthToken by remember(url, resetToken) { mutableIntStateOf(fitWidthToken) }
     var loadState by remember(url) { mutableStateOf<AsyncImagePainter.State>(AsyncImagePainter.State.Empty) }
     val current by remember(url, resetToken) { derivedStateOf { transform.bounded(viewport, imageSize) } }
     val center = Offset(viewport.width / 2, viewport.height / 2)
     val ready = loadState is AsyncImagePainter.State.Success
     val zoomed = current.scale > 1.01f
+    val canFitWidth = ready && !viewport.isEmpty() && !imageSize.isEmpty() &&
+        minOf(viewport.width / imageSize.width, viewport.height / imageSize.height) * imageSize.width < viewport.width * 0.85f
 
+    androidx.compose.runtime.LaunchedEffect(activeUrl) { onResolvedUrlChanged(activeUrl) }
     androidx.compose.runtime.LaunchedEffect(ready) { onReadyChanged(ready) }
     androidx.compose.runtime.LaunchedEffect(zoomed) { onZoomedChanged(zoomed) }
+    androidx.compose.runtime.LaunchedEffect(canFitWidth) { onCanFitWidthChanged(canFitWidth) }
+    androidx.compose.runtime.LaunchedEffect(fitWidthToken, ready, viewport, imageSize) {
+        if (fitWidthToken > handledFitWidthToken && ready && !viewport.isEmpty() && !imageSize.isEmpty()) {
+            handledFitWidthToken = fitWidthToken
+            transform = current.fitWidth(viewport, imageSize)
+        }
+    }
 
     Box(
         Modifier.fillMaxSize()
@@ -451,15 +489,20 @@ private fun ImageViewerPage(
             .onSizeChanged { viewport = Size(it.width.toFloat(), it.height.toFloat()) }
             .semantics {
                 stateDescription = "缩放 ${(current.scale * 100).toInt()}%"
-                if (ready) customActions = listOf(
-                    CustomAccessibilityAction("放大图片") {
+                if (ready) customActions = buildList {
+                    if (canFitWidth) {
+                        add(CustomAccessibilityAction("适宽查看") {
+                            transform = current.fitWidth(viewport, imageSize); true
+                        })
+                    }
+                    add(CustomAccessibilityAction("放大图片") {
                         transform = current.zoom(center, Offset.Zero, 1.5f, viewport, imageSize); true
-                    },
-                    CustomAccessibilityAction("缩小图片") {
+                    })
+                    add(CustomAccessibilityAction("缩小图片") {
                         transform = current.zoom(center, Offset.Zero, 1 / 1.5f, viewport, imageSize); true
-                    },
-                    CustomAccessibilityAction("还原图片") { transform = ImageTransform(); true },
-                )
+                    })
+                    add(CustomAccessibilityAction("还原图片") { transform = ImageTransform(); true })
+                }
             }
             .pointerInput(url, ready, resetToken) {
                 detectImageZoomAndPan(

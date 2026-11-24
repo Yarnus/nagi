@@ -269,4 +269,69 @@ class ReaderUiTest {
         compose.onNodeWithText("暂不").assertIsDisplayed()
         compose.runOnIdle { org.junit.Assert.assertTrue(confirmed) }
     }
+
+    @Test fun inlineImagesAdaptToWidthWithoutCroppingSidesAndCapTallImages() {
+        val app = org.robolectric.RuntimeEnvironment.getApplication()
+        val clicked = mutableListOf<String>()
+        val loader = coil.ImageLoader.Builder(app).components {
+            add(coil.intercept.Interceptor { chain ->
+                val url = chain.request.data.toString()
+                when {
+                    url.endsWith("wide.png") -> coil.request.SuccessResult(
+                        android.graphics.drawable.BitmapDrawable(app.resources, Bitmap.createBitmap(800, 400, Bitmap.Config.ARGB_8888)),
+                        chain.request,
+                        coil.decode.DataSource.MEMORY,
+                    )
+                    url.endsWith("squareish.png") -> coil.request.SuccessResult(
+                        android.graphics.drawable.BitmapDrawable(app.resources, Bitmap.createBitmap(900, 1200, Bitmap.Config.ARGB_8888)),
+                        chain.request,
+                        coil.decode.DataSource.MEMORY,
+                    )
+                    url.endsWith("tall.png") -> coil.request.SuccessResult(
+                        android.graphics.drawable.BitmapDrawable(app.resources, Bitmap.createBitmap(600, 2400, Bitmap.Config.ARGB_8888)),
+                        chain.request,
+                        coil.decode.DataSource.MEMORY,
+                    )
+                    else -> coil.request.ErrorResult(null, chain.request, IllegalStateException("Failed"))
+                }
+            })
+        }.build()
+        coil.Coil.setImageLoader(loader)
+        try {
+            var currentUrl by mutableStateOf("https://img4.nga.cn/wide.png")
+            compose.setContent {
+                NagiTheme {
+                    Box(Modifier.width(300.dp)) {
+                        ContentBlocks(listOf(ContentBlock.Image(currentUrl)), ReadingPreferences()) { clicked += it }
+                    }
+                }
+            }
+            val wideNode = compose.onNodeWithContentDescription("帖子图片，点击查看")
+            wideNode.assertWidthIsEqualTo(300.dp)
+            wideNode.assertHeightIsEqualTo(150.dp)
+            compose.onNodeWithText("长图").assertDoesNotExist()
+            wideNode.performClick()
+
+            compose.runOnIdle { currentUrl = "https://img4.nga.cn/squareish.png" }
+            val squareishNode = compose.onNodeWithContentDescription("帖子图片，点击查看")
+            squareishNode.assertWidthIsEqualTo(300.dp)
+            squareishNode.assertHeightIsEqualTo(400.dp)
+            compose.onNodeWithText("长图").assertDoesNotExist()
+
+            compose.runOnIdle { currentUrl = "https://img4.nga.cn/tall.png" }
+            val tallNode = compose.onNodeWithContentDescription("帖子图片，点击查看")
+            tallNode.assertWidthIsEqualTo(300.dp)
+            tallNode.assertHeightIsEqualTo(460.dp)
+            compose.onNodeWithText("长图").assertIsDisplayed()
+
+            compose.runOnIdle { currentUrl = "https://img4.nga.cn/broken.png" }
+            compose.onNodeWithText("图片加载失败，点击重试").assertIsDisplayed()
+            compose.runOnIdle {
+                org.junit.Assert.assertEquals(listOf("https://img4.nga.cn/wide.png"), clicked)
+            }
+        } finally {
+            loader.shutdown()
+            coil.Coil.reset()
+        }
+    }
 }

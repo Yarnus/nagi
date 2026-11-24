@@ -117,13 +117,36 @@ class ImageViewerTest {
         assertEquals(DecodedImageFormat("image/jpeg", "jpg"), detectImageFormat(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())))
     }
 
-    private fun withLoader(failFirst: Boolean = false, test: () -> Unit) {
+    @Test fun fitWidthScalesTallImageToViewportWidthAndStartsAtTop() {
+        val fitWidth = ImageTransform().fitWidth(Size(400f, 800f), Size(200f, 1600f))
+        assertEquals(4f, fitWidth.scale, 0.001f)
+        assertEquals(Offset(0f, 1200f), fitWidth.offset)
+
+        withLoader(imageWidth = 200, imageHeight = 1600) {
+            compose.setContent { NagiTheme { ImageViewer("https://img4.nga.cn/tall.png") {} } }
+            val viewport = compose.onNodeWithTag("image-viewport")
+            viewport.assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "缩放 100%"))
+            compose.onNodeWithText("适宽").assertExists().performClick()
+            viewport.assert(SemanticsMatcher("fit width zoomed") {
+                it.config[androidx.compose.ui.semantics.SemanticsProperties.StateDescription] != "缩放 100%"
+            })
+            compose.onNodeWithText("还原").performClick()
+            viewport.assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "缩放 100%"))
+        }
+    }
+
+    private fun withLoader(
+        failFirst: Boolean = false,
+        imageWidth: Int = 200,
+        imageHeight: Int = 800,
+        test: () -> Unit,
+    ) {
         val app = RuntimeEnvironment.getApplication()
         val calls = AtomicInteger()
         val loader = ImageLoader.Builder(app).components {
             add(Interceptor { chain ->
                 if (calls.getAndIncrement() == 0 && failFirst) ErrorResult(null, chain.request, IllegalStateException("Unavailable"))
-                else SuccessResult(BitmapDrawable(app.resources, Bitmap.createBitmap(200, 800, Bitmap.Config.ARGB_8888)), chain.request, DataSource.MEMORY)
+                else SuccessResult(BitmapDrawable(app.resources, Bitmap.createBitmap(imageWidth, imageHeight, Bitmap.Config.ARGB_8888)), chain.request, DataSource.MEMORY)
             })
         }.build()
         Coil.setImageLoader(loader)

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -20,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -28,10 +30,15 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -39,6 +46,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -55,6 +63,11 @@ import dev.nagi.app.ui.theme.Space
 import dev.nagi.sdk.ContentAlignment
 import dev.nagi.sdk.ContentBlock
 import dev.nagi.sdk.MediaKind
+import kotlin.math.roundToInt
+
+private val MaxInlineImageHeight = 460.dp
+private val InlineImagePlaceholderHeight = 140.dp
+private val InlineImageFailedHeight = 120.dp
 
 internal val LocalAllowHardwareImages = staticCompositionLocalOf { true }
 
@@ -247,94 +260,7 @@ private fun RenderContentBlocks(
                     style = typography.postBody.copy(fontSize = preferences.fontSize.sp),
                 )
 
-                is ContentBlock.Image -> {
-                    val candidates = remember(block.url) { imageFallbackCandidates(block.url) }
-                    var candidateIndex by remember(block.url) { mutableStateOf(0) }
-                    val activeUrl = candidates.getOrElse(candidateIndex) { block.url }
-                    var loaded by remember(block.url) { mutableStateOf(false) }
-                    var failed by remember(block.url) { mutableStateOf(false) }
-                    var isTall by remember(block.url) { mutableStateOf(false) }
-                    var attempt by remember(block.url) { mutableStateOf(0) }
-                    val trackerToken = remember(block.url) { Any() }
-                    TrackSlotImageReadiness(token = trackerToken, settled = loaded || failed)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(
-                                min = if (loaded && !failed) 0.dp else 120.dp,
-                                max = if (failed) 120.dp else 460.dp,
-                            )
-                            .clip(blockShape)
-                            .background(colors.insetContainer)
-                            .border(1.dp, colors.cardBorder, blockShape),
-                    ) {
-                        if (failed) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 120.dp)
-                                    .clickable(onClickLabel = "重试加载图片") {
-                                        candidateIndex = 0
-                                        failed = false
-                                        attempt++
-                                    }
-                                    .padding(horizontal = Space.md),
-                                horizontalArrangement = Arrangement.spacedBy(Space.xs, Alignment.CenterHorizontally),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(
-                                    imageVector = NagiIcons.Refresh,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = colors.textSecondary,
-                                )
-                                Text(
-                                    text = "图片加载失败，点击重试",
-                                    style = typography.metadata,
-                                    color = colors.textSecondary,
-                                )
-                            }
-                        } else {
-                            AsyncImage(
-                                model = rememberPostImageModel(activeUrl, attempt),
-                                contentDescription = "帖子图片，点击查看",
-                                contentScale = ContentScale.Crop,
-                                alignment = Alignment.TopCenter,
-                                onSuccess = { state ->
-                                    loaded = true
-                                    failed = false
-                                    val size = state.painter.intrinsicSize
-                                    isTall = size.width > 0f && size.height > size.width * 1.6f
-                                },
-                                onError = { state ->
-                                    if (isHttp404Error(state.result.throwable) && candidateIndex + 1 < candidates.size) {
-                                        candidateIndex++
-                                    } else {
-                                        loaded = false
-                                        failed = true
-                                        isTall = false
-                                    }
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onImage(activeUrl) },
-                            )
-                            if (isTall) {
-                                Text(
-                                    text = "长图",
-                                    style = typography.tagBadge,
-                                    color = Color.White,
-                                    modifier = Modifier
-                                        .align(Alignment.BottomEnd)
-                                        .padding(Space.sm)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color.Black.copy(alpha = 0.62f))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                                )
-                            }
-                        }
-                    }
-                }
+                is ContentBlock.Image -> PostImageBlock(block.url, onImage)
 
                 is ContentBlock.Code -> FlatCard(
                     modifier = Modifier.fillMaxWidth(),
@@ -419,6 +345,137 @@ private fun RenderContentBlocks(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Renders an inline post image adapted to the container width while preserving aspect ratio
+ * and capping overly tall images at [MaxInlineImageHeight] without cropping horizontal edges.
+ */
+@Composable
+private fun PostImageBlock(
+    url: String,
+    onImage: (String) -> Unit,
+) {
+    val colors = NagiThemeTokens.colors
+    val typography = NagiThemeTokens.typography
+    val density = LocalDensity.current
+    val blockShape = RoundedCornerShape(12.dp)
+    val candidates = remember(url) { imageFallbackCandidates(url) }
+    var candidateIndex by remember(url) { mutableStateOf(0) }
+    val activeUrl = candidates.getOrElse(candidateIndex) { url }
+    var loaded by remember(url) { mutableStateOf(false) }
+    var failed by remember(url) { mutableStateOf(false) }
+    var intrinsicSize by remember(url) { mutableStateOf(Size.Unspecified) }
+    var containerWidthPx by remember(url) { mutableIntStateOf(0) }
+    var attempt by remember(url) { mutableStateOf(0) }
+    val trackerToken = remember(url) { Any() }
+    TrackSlotImageReadiness(token = trackerToken, settled = loaded || failed)
+
+    val maxHeightPx = with(density) { MaxInlineImageHeight.roundToPx() }
+    val placeholderHeightPx = with(density) { InlineImagePlaceholderHeight.roundToPx() }
+    val failedHeightPx = with(density) { InlineImageFailedHeight.roundToPx() }
+    val hasIntrinsic = intrinsicSize.isSpecified && intrinsicSize.width > 0f && intrinsicSize.height > 0f
+    val isTall = loaded && !failed && hasIntrinsic && containerWidthPx > 0 &&
+        (containerWidthPx * (intrinsicSize.height / intrinsicSize.width)).roundToInt() > maxHeightPx
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .layout { measurable, constraints ->
+                val width = constraints.maxWidth
+                val desiredHeight = when {
+                    failed -> failedHeightPx
+                    !loaded -> placeholderHeightPx
+                    hasIntrinsic && width != Constraints.Infinity && width > 0 ->
+                        (width * (intrinsicSize.height / intrinsicSize.width)).roundToInt()
+                            .coerceIn(1, maxHeightPx)
+                    else -> placeholderHeightPx
+                }
+                val minH = constraints.minHeight
+                val maxH = constraints.maxHeight.coerceAtLeast(minH)
+                val clamped = desiredHeight.coerceIn(minH, maxH)
+                val childConstraints = constraints.copy(
+                    minWidth = if (width != Constraints.Infinity) width else constraints.minWidth,
+                    maxWidth = width,
+                    minHeight = clamped,
+                    maxHeight = clamped,
+                )
+                val placeable = measurable.measure(childConstraints)
+                layout(placeable.width, placeable.height) {
+                    placeable.placeRelative(0, 0)
+                }
+            }
+            .onSizeChanged { containerWidthPx = it.width }
+            .clip(blockShape)
+            .background(colors.insetContainer)
+            .border(1.dp, colors.cardBorder, blockShape),
+    ) {
+        if (failed) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(onClickLabel = "重试加载图片") {
+                        candidateIndex = 0
+                        failed = false
+                        loaded = false
+                        intrinsicSize = Size.Unspecified
+                        attempt++
+                    }
+                    .padding(horizontal = Space.md),
+                horizontalArrangement = Arrangement.spacedBy(Space.xs, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = NagiIcons.Refresh,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = colors.textSecondary,
+                )
+                Text(
+                    text = "图片加载失败，点击重试",
+                    style = typography.metadata,
+                    color = colors.textSecondary,
+                )
+            }
+        } else {
+            AsyncImage(
+                model = rememberPostImageModel(activeUrl, attempt),
+                contentDescription = "帖子图片，点击查看",
+                contentScale = ContentScale.FillWidth,
+                alignment = Alignment.TopCenter,
+                onSuccess = { state ->
+                    loaded = true
+                    failed = false
+                    intrinsicSize = state.painter.intrinsicSize
+                },
+                onError = { state ->
+                    if (isHttp404Error(state.result.throwable) && candidateIndex + 1 < candidates.size) {
+                        candidateIndex++
+                    } else {
+                        loaded = false
+                        failed = true
+                        intrinsicSize = Size.Unspecified
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable { onImage(url) },
+            )
+            if (isTall) {
+                Text(
+                    text = "长图",
+                    style = typography.tagBadge,
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(Space.sm)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = 0.62f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
             }
         }
     }
