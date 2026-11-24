@@ -533,3 +533,98 @@ class NavigationFlowTest {
         }
     }
 }
+
+@HiltAndroidTest
+@RunWith(RobolectricTestRunner::class)
+@Config(application = HiltTestApplication::class, sdk = [35], qualifiers = "w1000dp-h600dp")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class TwoPaneReaderFlowTest {
+    private val quoteTarget = dev.nagi.sdk.PostReference("2", "201", 1)
+    private val base = FakeClient()
+    private val fixture = object : NgaClient by base {
+        override suspend fun getPosts(topicId: String, page: Int, authorId: String?): dev.nagi.sdk.PostPage {
+            return if (topicId == "2") {
+                dev.nagi.sdk.PostPage(
+                    items = listOf(
+                        dev.nagi.sdk.Post(
+                            id = "201",
+                            floor = 0,
+                            author = "TargetAuthor",
+                            authorId = "9",
+                            avatar = "",
+                            date = "2026-01-01",
+                            content = listOf(dev.nagi.sdk.ContentBlock.Text("Cross-topic target body")),
+                        ),
+                    ),
+                    title = "Target Topic",
+                    authorId = "9",
+                    page = page,
+                    totalPages = 1,
+                    hasMore = false,
+                    pageSize = 30,
+                    total = 1,
+                )
+            } else {
+                dev.nagi.sdk.PostPage(
+                    items = listOf(
+                        dev.nagi.sdk.Post(
+                            id = "101",
+                            floor = 0,
+                            author = "Author",
+                            authorId = "7",
+                            avatar = "",
+                            date = "2026-01-01",
+                            content = listOf(
+                                dev.nagi.sdk.ContentBlock.Quote(
+                                    children = listOf(dev.nagi.sdk.ContentBlock.Text("Quoted excerpt")),
+                                    author = "TargetAuthor",
+                                    reference = quoteTarget,
+                                ),
+                                dev.nagi.sdk.ContentBlock.Text("Post 0"),
+                            ),
+                        ),
+                    ),
+                    title = "Topic",
+                    authorId = "7",
+                    page = page,
+                    totalPages = 1,
+                    hasMore = false,
+                    pageSize = 30,
+                    total = 1,
+                )
+            }
+        }
+
+        override suspend fun getPostPage(reference: dev.nagi.sdk.PostReference): dev.nagi.sdk.PostPage =
+            getPosts(reference.topicId, reference.page, null)
+    }
+
+    @get:Rule(order = 0) val clientRule = object : org.junit.rules.ExternalResource() {
+        override fun before() { FakeAppModule.clientOverride = fixture }
+        override fun after() { FakeAppModule.clientOverride = null }
+    }
+    @get:Rule(order = 1) val hilt = HiltAndroidRule(this)
+    @get:Rule(order = 2) val compose = createAndroidComposeRule<MainActivity>()
+
+    @Test
+    fun twoPaneReaderSupportsTypographySheetAndInAppCrossTopicQuoteNavigation() {
+        compose.onNodeWithText("Forum").performClick()
+        compose.onNodeWithText("Title 1").performClick()
+        compose.onNodeWithText("Title 1").assertIsDisplayed()
+        compose.onNodeWithText("Post 0").assertIsDisplayed()
+
+        // Right-pane reader menu exposes quick typography sheet
+        compose.onNodeWithContentDescription("主题操作").performClick()
+        compose.onNodeWithText("阅读排版").assertIsDisplayed().performClick()
+        compose.onNodeWithText("正文字号 16 sp · 行高 26 sp").assertExists()
+        compose.onNodeWithContentDescription("关闭面板").performClick()
+
+        // Cross-topic quote location navigates in-app and back returns to two-pane list
+        compose.onNodeWithText("Quoted excerpt").performClick()
+        compose.onNodeWithText("定位到原楼层").performClick()
+        compose.onNodeWithText("Cross-topic target body").assertIsDisplayed()
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNodeWithText("Title 1").assertIsDisplayed()
+        compose.onNodeWithText("Post 0").assertIsDisplayed()
+    }
+}

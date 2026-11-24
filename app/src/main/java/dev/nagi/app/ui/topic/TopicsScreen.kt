@@ -114,6 +114,7 @@ import dev.nagi.app.ui.theme.Space
 import dev.nagi.app.viewmodel.ComposerViewModel
 import dev.nagi.app.viewmodel.TopicsViewModel
 import dev.nagi.sdk.Forum
+import dev.nagi.sdk.PostReference
 import dev.nagi.sdk.PublishAction
 import dev.nagi.sdk.PublishTarget
 import dev.nagi.sdk.Topic
@@ -148,6 +149,10 @@ fun TopicsScreen(
     onToggleCloudForumFavorite: ((Forum) -> Unit)? = null,
     onRefreshCloudFavorites: (() -> Unit)? = null,
     onSwitchForum: ((Forum) -> Unit)? = null,
+    onOpenReference: ((PostReference) -> Unit)? = null,
+    onFontSizeChange: ((Int) -> Unit)? = null,
+    onLineHeightChange: ((Int) -> Unit)? = null,
+    onResetTypography: (() -> Unit)? = null,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
@@ -720,6 +725,10 @@ fun TopicsScreen(
                                 preferences = preferences,
                                 back = { selected = null },
                                 vm = hiltViewModel(key = "reader"),
+                                onOpenReference = onOpenReference,
+                                onFontSizeChange = onFontSizeChange,
+                                onLineHeightChange = onLineHeightChange,
+                                onResetTypography = onResetTypography,
                             )
                         }
                     }

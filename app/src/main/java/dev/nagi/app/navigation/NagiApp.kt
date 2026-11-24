@@ -188,6 +188,10 @@ fun NagiApp(
                             current.arguments?.getString("id") == topicId
                     }
                 }
+                val openPostReference: (dev.nagi.sdk.PostReference) -> Unit = { target ->
+                    openTopic(target.topicId)
+                    nav.currentBackStackEntry?.savedStateHandle?.set("postReference", "${target.postId},${target.page}")
+                }
                 val topicLinks = rememberTopicLinkHandler(openTopic)
                 val navigateToForum: (Forum) -> Unit = { forum ->
                     nav.navigate(
@@ -263,6 +267,10 @@ fun NagiApp(
                                                 putString("name", targetForum.name)
                                             }
                                         },
+                                        onOpenReference = openPostReference,
+                                        onFontSizeChange = library::font,
+                                        onLineHeightChange = library::lineHeight,
+                                        onResetTypography = library::resetTypography,
                                     )
                                 }
                                 composable(
@@ -368,10 +376,7 @@ fun NagiApp(
                                         referenceConsumed = { backStack.savedStateHandle["postReference"] = null },
                                         initialPage = pendingPage,
                                         initialPageConsumed = { backStack.savedStateHandle["initialPage"] = null },
-                                        onOpenReference = { target ->
-                                            openTopic(target.topicId)
-                                            nav.currentBackStackEntry?.savedStateHandle?.set("postReference", "${target.postId},${target.page}")
-                                        },
+                                        onOpenReference = openPostReference,
                                         onFontSizeChange = library::font,
                                         onLineHeightChange = library::lineHeight,
                                         onResetTypography = library::resetTypography,
