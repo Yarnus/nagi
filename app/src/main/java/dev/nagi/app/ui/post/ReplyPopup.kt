@@ -1,5 +1,7 @@
 package dev.nagi.app.ui.post
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,8 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,7 +63,7 @@ internal fun ReplyPopup(
             }
         }
     }
-    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     val editable = session.phase in setOf(ComposePhase.Editing, ComposePhase.Rejected)
 
     EditorPopup(dismiss) {
@@ -190,7 +191,10 @@ internal fun ReplyPopup(
                             )
                             CapsuleButton(
                                 text = "复制内容",
-                                onClick = { clipboard.setText(AnnotatedString(session.content)) },
+                                onClick = {
+                                    context.getSystemService(ClipboardManager::class.java)
+                                        ?.setPrimaryClip(ClipData.newPlainText("回复内容", session.content))
+                                },
                                 icon = NagiIcons.Copy,
                                 style = CapsuleStyle.Neutral,
                             )

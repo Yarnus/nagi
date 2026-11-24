@@ -2,6 +2,7 @@ package dev.nagi.app.ui.library
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Checkbox
@@ -113,18 +115,32 @@ fun HistoryScreen(vm: LibraryViewModel, back: () -> Unit, read: (String) -> Unit
                 ChromeIconButton(NagiIcons.Trash, "清空浏览历史", onClick = { confirmingClear = true })
             }
         }
-        if (history.isNotEmpty() || query.isNotEmpty()) {
-            NagiSearchTextField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = "筛选历史标题或主题 ID",
-                clearDescription = "清除筛选",
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Space.lg, vertical = Space.sm),
-            )
-        }
-        LazyColumn(contentPadding = PaddingValues(top = Space.lg, bottom = Space.lg + safeBottomPadding())) {
+                    .widthIn(max = 760.dp)
+                    .fillMaxSize(),
+            ) {
+                if (history.isNotEmpty() || query.isNotEmpty()) {
+                    NagiSearchTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = "筛选历史标题或主题 ID",
+                        clearDescription = "清除筛选",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Space.lg, vertical = Space.sm),
+                    )
+                }
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentPadding = PaddingValues(top = Space.lg, bottom = Space.lg + safeBottomPadding()),
+                ) {
             itemsIndexed(visibleHistory, key = { _, item -> item.topicId }) { index, item ->
                 SectionCardItem(CardGroupPosition.at(index, visibleHistory.size)) {
                     Row(
@@ -178,6 +194,8 @@ fun HistoryScreen(vm: LibraryViewModel, back: () -> Unit, read: (String) -> Unit
             } else if (visibleHistory.isEmpty()) {
                 item(key = "empty-filter") {
                     Notice("没有匹配的浏览历史")
+                }
+            }
                 }
             }
         }

@@ -2,6 +2,7 @@ package dev.nagi.app.ui.library
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -17,6 +19,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -28,6 +34,7 @@ import dev.nagi.app.ui.components.CardGroupPosition
 import dev.nagi.app.ui.components.FlatCard
 import dev.nagi.app.ui.components.GoldTagBadge
 import dev.nagi.app.ui.components.LoadingLine
+import dev.nagi.app.ui.components.NagiConfirmDialog
 import dev.nagi.app.ui.components.NagiHeader
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.Notice
@@ -47,12 +54,40 @@ fun AccountsScreen(
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
+    var confirmingLogout by rememberSaveable { mutableStateOf(false) }
+
+    if (confirmingLogout && account.userId != null) {
+        NagiConfirmDialog(
+            onDismissRequest = { confirmingLogout = false },
+            title = "退出当前账号？",
+            message = "退出后将切换为访客模式，当前账号的本地收藏与浏览历史仍会独立保留。",
+            confirmLabel = "退出",
+            confirmStyle = CapsuleStyle.Destructive,
+            confirmEnabled = !account.busy,
+            onConfirm = {
+                confirmingLogout = false
+                vm.logout()
+            },
+            dismissLabel = "取消",
+            onDismiss = { confirmingLogout = false },
+        )
+    }
+
     Column(Modifier.fillMaxSize()) {
         NagiHeader("账号管理", back = back)
-        LazyColumn(
-            contentPadding = PaddingValues(top = Space.lg, bottom = Space.lg + safeBottomPadding()),
-            verticalArrangement = Arrangement.spacedBy(Space.md),
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.TopCenter,
         ) {
+            LazyColumn(
+                modifier = Modifier
+                    .widthIn(max = 760.dp)
+                    .fillMaxSize(),
+                contentPadding = PaddingValues(top = Space.lg, bottom = Space.lg + safeBottomPadding()),
+                verticalArrangement = Arrangement.spacedBy(Space.md),
+            ) {
             item(key = "current-status") {
                 FlatCard(
                     modifier = Modifier
@@ -119,7 +154,7 @@ fun AccountsScreen(
                     if (account.userId != null) {
                         CapsuleButton(
                             text = "退出当前账号",
-                            onClick = vm::logout,
+                            onClick = { confirmingLogout = true },
                             icon = NagiIcons.Logout,
                             enabled = !account.busy,
                             style = CapsuleStyle.Destructive,
@@ -127,6 +162,7 @@ fun AccountsScreen(
                     }
                 }
             }
+        }
         }
     }
 }
@@ -144,14 +180,20 @@ fun OwnProfileScreen(
         NagiHeader("我的档案", back = back)
         if (identity.loading) LoadingLine()
         identity.error?.let { Notice(it, retry) }
-        Column(
+        Box(
             modifier = Modifier
                 .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .fillMaxWidth()
-                .padding(top = Space.lg, bottom = Space.lg + safeBottomPadding()),
-            verticalArrangement = Arrangement.spacedBy(Space.md),
+                .fillMaxWidth(),
+            contentAlignment = Alignment.TopCenter,
         ) {
+            Column(
+                modifier = Modifier
+                    .widthIn(max = 760.dp)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(top = Space.lg, bottom = Space.lg + safeBottomPadding()),
+                verticalArrangement = Arrangement.spacedBy(Space.md),
+            ) {
             FlatCard(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -216,6 +258,7 @@ fun OwnProfileScreen(
                         Icon(NagiIcons.ChevronRight, null, Modifier.size(18.dp), tint = colors.textSecondary)
                     }
                 }
+            }
             }
         }
     }

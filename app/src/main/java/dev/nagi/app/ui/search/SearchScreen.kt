@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -105,10 +106,12 @@ fun SearchScreen(
     val matchingForums = remember(directory.items, state.submitted) {
         directory.items.filter { it.name.contains(state.submitted, ignoreCase = true) }
     }
-    ProgressiveBlurScaffold(
-        topBar = {},
-        topVisible = { 0f },
-        bottomEdgeBlur = false,
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        ProgressiveBlurScaffold(
+            modifier = Modifier.widthIn(max = 760.dp),
+            topBar = {},
+            topVisible = { 0f },
+            bottomEdgeBlur = false,
         bottomBar = {
             Row(
                 modifier = Modifier
@@ -283,6 +286,7 @@ fun SearchScreen(
                 }
             }
         }
+    }
     }
 
     if (choosingScope) {

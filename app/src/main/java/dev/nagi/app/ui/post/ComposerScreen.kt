@@ -1,5 +1,7 @@
 package dev.nagi.app.ui.post
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,8 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
@@ -124,7 +125,7 @@ internal fun ComposerScreen(
             }
         }
     }
-    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     val editable = state.phase in setOf(ComposePhase.Editing, ComposePhase.Rejected)
 
     val body: @Composable () -> Unit = {
@@ -223,7 +224,10 @@ internal fun ComposerScreen(
                         message = state.error ?: "暂未收到提交确认，可${if (state.privateMessage) "查看会话" else "查看帖子"}核对，请勿重复发送。",
                         actionLabel = "复制内容",
                         actionIcon = NagiIcons.Copy,
-                        onAction = { clipboard.setText(AnnotatedString(state.content)) },
+                        onAction = {
+                            context.getSystemService(ClipboardManager::class.java)
+                                ?.setPrimaryClip(ClipData.newPlainText("帖子内容", state.content))
+                        },
                         tone = ComposerNoticeTone.Neutral,
                     )
                 }
