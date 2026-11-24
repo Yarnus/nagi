@@ -15,9 +15,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -49,6 +52,7 @@ import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.CardGroupPosition
 import dev.nagi.app.ui.components.ChromeIconButton
 import dev.nagi.app.ui.components.ForumScopePickerSheet
+import dev.nagi.app.ui.components.InlineStatusBanner
 import dev.nagi.app.ui.components.LoadingLine
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.NagiSearchTextField
@@ -64,6 +68,7 @@ import dev.nagi.app.viewmodel.SearchViewModel
 import dev.nagi.sdk.Forum
 import dev.nagi.sdk.Topic
 import dev.nagi.sdk.TopicSort
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,6 +110,34 @@ fun SearchScreen(
     }
     val matchingForums = remember(directory.items, state.submitted) {
         directory.items.filter { it.name.contains(state.submitted, ignoreCase = true) }
+    }
+    val listState = rememberLazyListState()
+    var loadingMore by remember(state.mode, state.submitted, state.forumId, state.collectionId) { mutableStateOf(false) }
+    LaunchedEffect(state.loading, state.error) {
+        if (!state.loading && state.error == null) {
+            loadingMore = false
+        }
+    }
+    LaunchedEffect(listState, state.mode, state.submitted, state.forumId, state.collectionId) {
+        var armed = true
+        snapshotFlow {
+            val lastTopic = listState.layoutInfo.visibleItemsInfo.lastOrNull { it.contentType == "topic" }?.index ?: -1
+            val scrolled = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
+            val nearEnd = (scrolled || !listState.canScrollForward) && state.topics.isNotEmpty() && lastTopic >= state.topics.size - 3
+            Triple(
+                nearEnd,
+                state.mode == SearchMode.TOPICS && state.page > 0 && state.hasMore && !state.loading && state.error == null,
+                state.loading && !loadingMore,
+            )
+        }.distinctUntilChanged().collect { (nearEnd, eligible, refreshing) ->
+            if (!nearEnd || refreshing) {
+                armed = true
+            } else if (armed && eligible) {
+                armed = false
+                loadingMore = true
+                vm.loadMore()
+            }
+        }
     }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         ProgressiveBlurScaffold(
@@ -152,6 +185,7 @@ fun SearchScreen(
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
+            state = listState,
             contentPadding = padding,
         ) {
             item(key = "heading") {
@@ -217,8 +251,17 @@ fun SearchScreen(
                     ) { submit(SearchMode.USERS) }
                 }
             } else {
-                if (state.loading) item(key = "loading") { LoadingLine() }
-                state.error?.let { error -> item(key = "error") { Notice(error, vm::retry) } }
+                if (state.loading && !loadingMore) item(key = "loading") { LoadingLine() }
+                if (!loadingMore || !state.hasMore) {
+                    state.error?.let { error ->
+                        item(key = "error") {
+                            Notice(error) {
+                                loadingMore = false
+                                vm.retry()
+                            }
+                        }
+                    }
+                }
                 when (requireNotNull(state.mode)) {
                     SearchMode.FORUMS -> {
                         if (directory.loading) item(key = "directory-loading") { LoadingLine() }
@@ -237,7 +280,11 @@ fun SearchScreen(
                         }
                     }
                     SearchMode.TOPICS -> {
-                        itemsIndexed(state.topics, key = { _, topic -> topic.id }) { _, topic ->
+                        itemsIndexed(
+                            items = state.topics,
+                            key = { _, topic -> topic.id },
+                            contentType = { _, _ -> "topic" },
+                        ) { _, topic ->
                             FlatTopicCard(
                                 topic = topic,
                                 sort = TopicSort.NEWEST,
@@ -249,19 +296,42 @@ fun SearchScreen(
                             )
                         }
                         if (state.hasMore) {
-                            item(key = "more") {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = Space.md),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    CapsuleButton(
-                                        text = "加载更多",
-                                        onClick = vm::loadMore,
-                                        enabled = !state.loading,
-                                        style = CapsuleStyle.Neutral,
+                            item(key = "pagination-footer", contentType = "footer") {
+                                if (state.error != null && loadingMore) {
+                                    InlineStatusBanner(
+                                        message = state.error!!,
+                                        retry = {
+                                            loadingMore = true
+                                            vm.loadMore()
+                                        },
+                                        horizontalPadding = Space.lg,
                                     )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = Space.lg, vertical = Space.sm),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.heightIn(min = 48.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                                        ) {
+                                            if (state.loading) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(16.dp),
+                                                    strokeWidth = 2.dp,
+                                                    color = colors.goldAccent,
+                                                )
+                                            }
+                                            Text(
+                                                text = if (state.loading) "正在加载更多主题…" else "上滑继续浏览",
+                                                style = typography.metadata,
+                                                color = colors.textSecondary,
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }

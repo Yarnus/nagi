@@ -10,7 +10,10 @@ import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.ui.post.MessagesContent
 import dev.nagi.app.ui.theme.NagiTheme
 import dev.nagi.app.viewmodel.MessagesState
+import dev.nagi.sdk.ContentBlock
 import dev.nagi.sdk.MessageConversation
+import dev.nagi.sdk.MessageParticipant
+import dev.nagi.sdk.MessagePost
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -45,15 +48,55 @@ class MessagesUiTest {
     }
     @Test fun detailShowsAuthorContentAndPagination() {
         val state = MessagesState(conversationId = "1", hasMore = true,
-            participants = listOf(dev.nagi.sdk.MessageParticipant("7", "测试读者")),
-            posts = listOf(dev.nagi.sdk.MessagePost("90", "7", "测试标题", listOf(dev.nagi.sdk.ContentBlock.Text("合成私信正文")), 1700000000)))
+            participants = listOf(MessageParticipant("7", "测试读者")),
+            posts = listOf(MessagePost("90", "7", "测试标题", listOf(ContentBlock.Text("合成私信正文")), 1700000000)))
         var loaded = false
         compose.setContent { NagiTheme { MessagesContent(state, ReadingPreferences(), {}, {}, {}, { loaded = true }, {}) } }
         compose.onNodeWithText("测试读者").assertExists()
         compose.onNodeWithText("合成私信正文").assertExists()
         compose.onNodeWithContentDescription("回复私信").assertIsEnabled()
-        compose.onNodeWithText("加载更多").performClick()
+        compose.onNodeWithText("加载更多").assertDoesNotExist()
+        compose.onNodeWithText("上滑继续浏览").assertExists()
         compose.runOnIdle { assertEquals(true, loaded) }
+    }
+    @Test fun scrollableDetailAutoPagesAndOpensImageViewer() {
+        val longPosts = (1..20).map { idx ->
+            val content = if (idx == 1) {
+                listOf(
+                    ContentBlock.Text("私信图片内容"),
+                    ContentBlock.Image("https://img.nga.178.com/attachments/test-pm.jpg"),
+                )
+            } else {
+                listOf(ContentBlock.Text("第 $idx 条合成私信"))
+            }
+            MessagePost("$idx", "7", if (idx == 1) "首条标题" else "", content, 1700000000L + idx)
+        }
+        var loadMoreCalls = 0
+        compose.setContent {
+            NagiTheme {
+                MessagesContent(
+                    state = MessagesState(
+                        conversationId = "1",
+                        hasMore = true,
+                        participants = listOf(MessageParticipant("7", "测试读者")),
+                        posts = longPosts,
+                    ),
+                    preferences = ReadingPreferences(),
+                    back = {},
+                    onConversation = {},
+                    refresh = {},
+                    loadMore = { loadMoreCalls++ },
+                    compose = {},
+                )
+            }
+        }
+        compose.onNodeWithText("加载更多").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(0, loadMoreCalls) }
+        compose.onNodeWithContentDescription("帖子图片，点击查看").performClick()
+        compose.onNodeWithContentDescription("关闭").assertIsDisplayed().performClick()
+        compose.onNodeWithContentDescription("关闭").assertDoesNotExist()
+        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(19)
+        compose.runOnIdle { assertEquals(1, loadMoreCalls) }
     }
     @Test fun lightInbox() = capture("light", 1f)
     @Test fun darkInbox() = capture("dark", 1f)

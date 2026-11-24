@@ -7,6 +7,7 @@ import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,13 +64,18 @@ fun LoginScreen(back: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
     var loading by remember { mutableStateOf(true) }
     var webError by remember { mutableStateOf(false) }
     var webView by remember { mutableStateOf<WebView?>(null) }
+    var canGoBack by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = canGoBack) {
+        webView?.goBack()
+    }
 
     Column(
         Modifier
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
     ) {
-        NagiHeader("登录 NGA", "请先在nga内嵌网页完成登陆", back = back) {
+        NagiHeader("登录 NGA", "请先在 NGA 内嵌网页完成登录", back = back) {
             ChromeIconButton(
                 icon = NagiIcons.Refresh,
                 description = "刷新",
@@ -114,14 +120,20 @@ fun LoginScreen(back: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
                                 override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                                     webError = false
                                     loading = true
+                                    canGoBack = view?.canGoBack() == true
                                     if (url != null && isTrustedLoginUrl(url)) currentUrl = url
                                 }
                                 override fun onPageFinished(view: WebView?, url: String?) {
                                     loading = false
+                                    canGoBack = view?.canGoBack() == true
                                     if (url != null && isTrustedLoginUrl(url)) {
                                         currentUrl = url
                                         vm.onPageLoaded(url)
                                     }
+                                }
+                                override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                                    super.doUpdateVisitedHistory(view, url, isReload)
+                                    canGoBack = view?.canGoBack() == true
                                 }
                                 override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                                     if (request?.isForMainFrame == true) {
@@ -135,6 +147,7 @@ fun LoginScreen(back: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
                     },
                     onRelease = { view ->
                         webView = null
+                        canGoBack = false
                         view.stopLoading()
                         view.onPause()
                         view.clearHistory()

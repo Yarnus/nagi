@@ -18,6 +18,7 @@ import org.robolectric.annotation.GraphicsMode
 private class PagingClient : NgaClient by FakeClient() {
     val pages = mutableListOf<Int>()
     val sorts = mutableListOf<TopicSort>()
+    val searchPages = mutableListOf<Int>()
     var failSecond = false
     var emptyRecommended = false
     var secondGate: CompletableDeferred<Unit>? = null
@@ -36,6 +37,14 @@ private class PagingClient : NgaClient by FakeClient() {
             Topic("$id", if (sort == TopicSort.RECOMMENDED) "精华 $id" else "主题 $id", "测试作者", "7",
                 recommended = sort == TopicSort.RECOMMENDED)
         }, page, 90, page < 3)
+    }
+
+    override suspend fun searchTopics(keyword: String, forumId: String?, page: Int, collectionId: String?): TopicPage {
+        searchPages += page
+        return TopicPage((1..30).map { offset ->
+            val id = (page - 1) * 30 + offset
+            Topic("search-$id", "搜索主题 $id", "测试作者", "7")
+        }, page, 60, page < 2)
     }
 }
 
@@ -111,5 +120,17 @@ class TopicAutoPagingTest {
         compose.onNodeWithText("主题 1").assertIsDisplayed()
         compose.onNodeWithContentDescription("排序方式").performClick()
         compose.onAllNodesWithText("精华区").assertCountEquals(0)
+    }
+
+    @Test fun searchTopicsAutoPagesWithoutLoadMoreButton() {
+        compose.onNodeWithContentDescription("搜索").performClick()
+        compose.onNode(hasSetTextAction()).performTextInput("测试")
+        compose.onNodeWithText("所有话题").performClick()
+        compose.onNodeWithText("搜索主题 1").assertIsDisplayed()
+        compose.onNodeWithText("加载更多").assertDoesNotExist()
+        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(27)
+        compose.waitUntil { client.searchPages == listOf(1, 2) }
+        compose.waitForIdle()
+        compose.onNodeWithText("搜索主题 31").assertExists()
     }
 }

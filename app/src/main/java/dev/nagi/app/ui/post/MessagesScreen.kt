@@ -17,20 +17,28 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,11 +49,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.nagi.app.data.ReadingPreferences
-import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.CardGroupPosition
 import dev.nagi.app.ui.components.ChromeIconButton
 import dev.nagi.app.ui.components.FlatCard
+import dev.nagi.app.ui.components.InlineStatusBanner
 import dev.nagi.app.ui.components.LoadingLine
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.Notice
@@ -57,6 +65,7 @@ import dev.nagi.app.ui.topic.formatTime
 import dev.nagi.app.viewmodel.ComposePhase
 import dev.nagi.app.viewmodel.MessagesState
 import dev.nagi.app.viewmodel.MessagesViewModel
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 private fun messageDate(seconds: Long): String = formatTime(seconds)
 
@@ -174,6 +183,44 @@ internal fun MessagesContent(
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
     val inbox = state.conversationId == null
+    val activeCount = if (inbox) state.conversations.size else state.posts.size
+    val latestState by rememberUpdatedState(state)
+    val latestLoadMore by rememberUpdatedState(loadMore)
+    val listState = key(state.conversationId) { rememberLazyListState() }
+    var loadingMore by remember(state.conversationId) { mutableStateOf(false) }
+    var viewerImages by rememberSaveable(state.conversationId) { mutableStateOf<List<String>>(emptyList()) }
+    var viewerIndex by rememberSaveable(state.conversationId) { mutableIntStateOf(0) }
+    LaunchedEffect(state.loading, state.error) {
+        if (!state.loading && state.error == null) {
+            loadingMore = false
+        }
+    }
+    LaunchedEffect(listState, state.conversationId) {
+        var armed = true
+        snapshotFlow {
+            val current = latestState
+            val currentInbox = current.conversationId == null
+            val currentCount = if (currentInbox) current.conversations.size else current.posts.size
+            val targetType = if (currentInbox) "conversation" else "message-post"
+            val info = listState.layoutInfo
+            val lastItem = info.visibleItemsInfo.lastOrNull { it.contentType == targetType }?.index ?: -1
+            val scrolled = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
+            val nearEnd = (scrolled || !listState.canScrollForward) && currentCount > 0 && lastItem >= currentCount - 3
+            Triple(
+                nearEnd,
+                current.hasMore && !current.loading && current.error == null,
+                current.loading && !loadingMore,
+            )
+        }.distinctUntilChanged().collect { (nearEnd, eligible, refreshing) ->
+            if (!nearEnd || refreshing) {
+                armed = true
+            } else if (armed && eligible) {
+                armed = false
+                loadingMore = true
+                latestLoadMore()
+            }
+        }
+    }
     CompositionLocalProvider(LocalContentColor provides colors.textPrimary) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val gutter = if (maxWidth < 600.dp) Space.lg else maxOf(Space.xl, (maxWidth - 760.dp) / 2)
@@ -201,7 +248,10 @@ internal fun MessagesContent(
                         ChromeIconButton(
                             icon = NagiIcons.Refresh,
                             description = "刷新短消息",
-                            onClick = refresh,
+                            onClick = {
+                                loadingMore = false
+                                refresh()
+                            },
                             enabled = !state.loading,
                         )
                         ChromeIconButton(
@@ -213,23 +263,28 @@ internal fun MessagesContent(
                     }
                 },
             ) { padding ->
-                LazyColumn(Modifier.fillMaxSize(), contentPadding = padding) {
-                    if (state.loading) {
+                LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = padding) {
+                    if (state.loading && !loadingMore) {
                         item(key = "loading") {
                             Box(Modifier.padding(horizontal = gutter, vertical = Space.xs)) {
                                 LoadingLine()
                             }
                         }
                     }
-                    state.error?.let { error ->
-                        item(key = "error") {
-                            FlatCard(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = gutter, vertical = Space.xs),
-                                shape = NagiThemeTokens.shapes.topicCard,
-                            ) {
-                                Notice(error, refresh)
+                    if (!loadingMore || activeCount == 0) {
+                        state.error?.let { error ->
+                            item(key = "error") {
+                                FlatCard(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = gutter, vertical = Space.xs),
+                                    shape = NagiThemeTokens.shapes.topicCard,
+                                ) {
+                                    Notice(error) {
+                                        loadingMore = false
+                                        refresh()
+                                    }
+                                }
                             }
                         }
                     }
@@ -316,6 +371,7 @@ internal fun MessagesContent(
                             contentType = { _, _ -> "message-post" },
                         ) { index, post ->
                             SectionCardItem(CardGroupPosition.at(index, state.posts.size), gutter) {
+                                val postImages = remember(post.id, post.content) { collectContentImages(post.content) }
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -334,7 +390,18 @@ internal fun MessagesContent(
                                             color = colors.textPrimary,
                                         )
                                     }
-                                    SelectionContainer { ContentBlocks(post.content, preferences, {}) }
+                                    SelectionContainer {
+                                        ContentBlocks(post.content, preferences) { clickedUrl ->
+                                            val matched = postImages.indexOf(clickedUrl)
+                                            if (matched >= 0) {
+                                                viewerImages = postImages
+                                                viewerIndex = matched
+                                            } else {
+                                                viewerImages = listOf(clickedUrl)
+                                                viewerIndex = 0
+                                            }
+                                        }
+                                    }
                                     if (post.createdAt > 0) {
                                         Text(
                                             text = messageDate(post.createdAt),
@@ -359,24 +426,54 @@ internal fun MessagesContent(
                         }
                     }
                     if (state.hasMore) {
-                        item(key = "more") {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(Space.md),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                CapsuleButton(
-                                    text = "加载更多",
-                                    onClick = loadMore,
-                                    enabled = !state.loading,
-                                    style = CapsuleStyle.Neutral,
+                        item(key = "pagination-footer", contentType = "footer") {
+                            if (state.error != null && loadingMore) {
+                                InlineStatusBanner(
+                                    message = state.error,
+                                    retry = {
+                                        loadingMore = true
+                                        loadMore()
+                                    },
+                                    horizontalPadding = gutter,
                                 )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = gutter, vertical = Space.sm),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Row(
+                                        modifier = Modifier.heightIn(min = 48.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                                    ) {
+                                        if (state.loading) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(16.dp),
+                                                strokeWidth = 2.dp,
+                                                color = colors.goldAccent,
+                                            )
+                                        }
+                                        Text(
+                                            text = if (state.loading) "正在加载更多…" else "上滑继续浏览",
+                                            style = typography.metadata,
+                                            color = colors.textSecondary,
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
+        }
+        if (viewerImages.isNotEmpty()) {
+            ImageViewer(
+                urls = viewerImages,
+                initialIndex = viewerIndex,
+                close = { viewerImages = emptyList() },
+            )
         }
     }
 }

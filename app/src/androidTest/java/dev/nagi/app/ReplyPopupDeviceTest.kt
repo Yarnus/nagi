@@ -54,7 +54,7 @@ class ReplyPopupDeviceTest {
                 { text, cursor -> state = state.copy(content = text, selection = cursor) }, {}, {}, {},
                 { title, recipients -> state = state.copy(title = title, recipients = recipients) })
         } }
-        compose.onNodeWithText("收件人完整用户名（空格分隔）").performTextInput("SyntheticUser")
+        compose.onNodeWithText("收件人").performTextInput("SyntheticUser")
         compose.onNodeWithText("标题").performTextInput("Synthetic title")
         compose.onNodeWithText("写下私信…").performClick().performTextInput("Mock message body")
         compose.onNodeWithText("发送").assertIsDisplayed().assertIsEnabled()
