@@ -243,6 +243,35 @@ class AppUpdateLogicTest {
         repo.checkIfNeeded()
         assertFalse(repo.state.value.hasUpdate)
     }
+
+    @Test fun checkIfNeededWithoutNetworkSkipsRemoteRequestButClearsStaleBadge() = runTest {
+        var now = 10_000_000L
+        var installedVersion = "0.3.2"
+        var networkCalls = 0
+        val cache = InMemoryUpdateCacheStore(
+            UpdateCheckCache(lastCheckedAtMillis = 0L, latestTag = "v0.4.0"),
+        )
+        val repo = ReleaseUpdateRepository(
+            checker = ReleaseChecker {
+                networkCalls++
+                "v0.5.0"
+            },
+            cacheStore = cache,
+            currentVersion = { installedVersion },
+            nowMillis = { now },
+        )
+
+        repo.checkIfNeeded(allowNetwork = false)
+        assertEquals(0, networkCalls)
+        assertTrue(repo.state.value.hasUpdate)
+        assertEquals("v0.4.0", repo.state.value.latestTag)
+
+        installedVersion = "0.4.0"
+        repo.checkIfNeeded(allowNetwork = false)
+        assertEquals(0, networkCalls)
+        assertFalse(repo.state.value.hasUpdate)
+        assertNull(repo.state.value.latestTag)
+    }
 }
 
 @HiltAndroidTest

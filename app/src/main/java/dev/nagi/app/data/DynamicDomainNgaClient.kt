@@ -1,0 +1,114 @@
+package dev.nagi.app.data
+
+import dev.nagi.sdk.CommunityItem
+import dev.nagi.sdk.Forum
+import dev.nagi.sdk.ImageUpload
+import dev.nagi.sdk.ImageUploadResult
+import dev.nagi.sdk.MessageConversationPage
+import dev.nagi.sdk.MessagePostPage
+import dev.nagi.sdk.MessageRequest
+import dev.nagi.sdk.NgaClient
+import dev.nagi.sdk.NgaConfig
+import dev.nagi.sdk.NgaDomain
+import dev.nagi.sdk.NgaUser
+import dev.nagi.sdk.NotificationFeed
+import dev.nagi.sdk.PostPage
+import dev.nagi.sdk.PostRating
+import dev.nagi.sdk.PostReference
+import dev.nagi.sdk.PublishPreparation
+import dev.nagi.sdk.PublishRequest
+import dev.nagi.sdk.PublishTarget
+import dev.nagi.sdk.SessionStore
+import dev.nagi.sdk.TopicPage
+import dev.nagi.sdk.TopicSort
+import dev.nagi.sdk.UserReplyPage
+import dev.nagi.sdk.WriteResult
+import dev.nagi.sdk.createNgaClient
+import kotlinx.coroutines.flow.first
+
+/**
+ * [NgaClient] delegator that follows the user's preferred [NgaDomain] without restarting the app
+ * while keeping each in-flight call bound to a single client instance.
+ */
+internal class DynamicDomainNgaClient(
+    private val sessions: SessionStore,
+    private val preferences: PreferenceStore,
+    private val factory: (NgaDomain, SessionStore) -> NgaClient = { domain, store ->
+        createNgaClient(config = NgaConfig(domain = domain), sessions = store)
+    },
+) : NgaClient {
+    private val lock = Any()
+    @Volatile private var cachedDomain: NgaDomain? = null
+    @Volatile private var cachedClient: NgaClient? = null
+
+    private suspend fun delegate(): NgaClient {
+        val domain = preferences.preferences.first().ngaDomain
+        cachedClient?.takeIf { cachedDomain == domain }?.let { return it }
+        return synchronized(lock) {
+            cachedClient?.takeIf { cachedDomain == domain } ?: factory(domain, sessions).also {
+                cachedDomain = domain
+                cachedClient = it
+            }
+        }
+    }
+
+    override suspend fun getForums(): List<Forum> = delegate().getForums()
+
+    override suspend fun getTopics(forumId: String, page: Int, collectionId: String?, sort: TopicSort): TopicPage =
+        delegate().getTopics(forumId, page, collectionId, sort)
+
+    override suspend fun getPosts(topicId: String, page: Int, authorId: String?): PostPage =
+        delegate().getPosts(topicId, page, authorId)
+
+    override suspend fun getPostPage(reference: PostReference): PostPage =
+        delegate().getPostPage(reference)
+
+    override suspend fun searchTopics(keyword: String, forumId: String?, page: Int, collectionId: String?): TopicPage =
+        delegate().searchTopics(keyword, forumId, page, collectionId)
+
+    override suspend fun findUser(username: String): NgaUser? = delegate().findUser(username)
+
+    override suspend fun getUser(userId: String): NgaUser = delegate().getUser(userId)
+
+    override suspend fun getUserTopics(userId: String, page: Int): TopicPage =
+        delegate().getUserTopics(userId, page)
+
+    override suspend fun getUserReplies(userId: String, page: Int): UserReplyPage =
+        delegate().getUserReplies(userId, page)
+
+    override suspend fun getNotifications(since: Long): List<CommunityItem> =
+        delegate().getNotifications(since)
+
+    override suspend fun getNotificationFeed(): NotificationFeed = delegate().getNotificationFeed()
+
+    override suspend fun getPrivateMessages(page: Int): List<CommunityItem> =
+        delegate().getPrivateMessages(page)
+
+    override suspend fun getMessageConversations(page: Int): MessageConversationPage =
+        delegate().getMessageConversations(page)
+
+    override suspend fun getMessagePosts(conversationId: String, page: Int): MessagePostPage =
+        delegate().getMessagePosts(conversationId, page)
+
+    override suspend fun sendMessage(request: MessageRequest): WriteResult =
+        delegate().sendMessage(request)
+
+    override suspend fun ratePost(topicId: String, postId: String, rating: PostRating): WriteResult =
+        delegate().ratePost(topicId, postId, rating)
+
+    override suspend fun preparePublish(target: PublishTarget): PublishPreparation =
+        delegate().preparePublish(target)
+
+    override suspend fun setSubforumVisibility(parentForumId: String, filterId: String, visible: Boolean): WriteResult =
+        delegate().setSubforumVisibility(parentForumId, filterId, visible)
+
+    override suspend fun getFavoriteForums(): List<Forum> = delegate().getFavoriteForums()
+
+    override suspend fun setForumFavorite(forum: Forum, favorite: Boolean): WriteResult =
+        delegate().setForumFavorite(forum, favorite)
+
+    override suspend fun publish(request: PublishRequest): WriteResult = delegate().publish(request)
+
+    override suspend fun uploadImage(target: PublishTarget, image: ImageUpload): ImageUploadResult =
+        delegate().uploadImage(target, image)
+}

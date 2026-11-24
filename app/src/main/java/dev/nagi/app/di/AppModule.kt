@@ -9,7 +9,6 @@ import dagger.hilt.components.SingletonComponent
 import dev.nagi.app.data.*
 import dev.nagi.sdk.NgaClient
 import dev.nagi.sdk.SessionStore
-import dev.nagi.sdk.createNgaClient
 import okhttp3.OkHttpClient
 import javax.inject.Singleton
 
@@ -20,7 +19,8 @@ object AppModule {
     @Provides @Singleton fun messageWrites(@ApplicationContext context: Context) =
         MessageWriteGuard(context.getSharedPreferences("message_write_guard", Context.MODE_PRIVATE))
     @Provides @Singleton fun browser(): BrowserCookies = AndroidBrowserCookies()
-    @Provides @Singleton fun client(sessions: SessionStore): NgaClient = createNgaClient(sessions = sessions)
+    @Provides @Singleton fun client(sessions: SessionStore, preferences: PreferenceStore): NgaClient =
+        DynamicDomainNgaClient(sessions = sessions, preferences = preferences)
     @Provides @Singleton fun httpClient(): OkHttpClient = OkHttpClient.Builder().retryOnConnectionFailure(true).build()
     @Provides @Singleton fun databases(@ApplicationContext context: Context): ReadingDaoProvider = AccountDatabases(context)
     @Provides @Singleton fun releaseChecker(httpClient: OkHttpClient): ReleaseChecker =

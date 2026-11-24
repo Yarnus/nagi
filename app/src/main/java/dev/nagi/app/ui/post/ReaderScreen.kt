@@ -85,6 +85,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import dev.nagi.app.data.MAX_FONT_SIZE
+import dev.nagi.app.data.MAX_LINE_HEIGHT
+import dev.nagi.app.data.MIN_FONT_SIZE
 import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
@@ -97,7 +100,14 @@ import dev.nagi.app.ui.components.FrostedDropdownItem
 import dev.nagi.app.ui.components.FrostedDropdownMenu
 import dev.nagi.app.ui.components.FrostedSurface
 import dev.nagi.app.ui.components.GoldTagBadge
+import dev.nagi.app.ui.components.NagiSheetHeader
+import dev.nagi.app.ui.components.TypographyStepperRowContent
 import dev.nagi.app.ui.components.UserTagBadge
+import dev.nagi.app.ui.components.lineHeightValueLabel
+import dev.nagi.app.ui.components.stepDownFontSize
+import dev.nagi.app.ui.components.stepDownLineHeight
+import dev.nagi.app.ui.components.stepUpFontSize
+import dev.nagi.app.ui.components.stepUpLineHeight
 import dev.nagi.app.ui.components.InlineStatusBanner
 import dev.nagi.app.ui.components.LoadingLine
 import dev.nagi.app.ui.components.NagiDialog
@@ -144,6 +154,9 @@ fun ReaderScreen(
     initialPage: Int? = null,
     initialPageConsumed: () -> Unit = {},
     onOpenReference: ((PostReference) -> Unit)? = null,
+    onFontSizeChange: ((Int) -> Unit)? = null,
+    onLineHeightChange: ((Int) -> Unit)? = null,
+    onResetTypography: (() -> Unit)? = null,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
@@ -188,6 +201,8 @@ fun ReaderScreen(
     val uriHandler = LocalUriHandler.current
     var viewerImages by rememberSaveable(id) { mutableStateOf<List<String>>(emptyList()) }
     var viewerIndex by rememberSaveable(id) { mutableStateOf(0) }
+    var adjustingTypography by rememberSaveable(id) { mutableStateOf(false) }
+    val canAdjustTypography = onFontSizeChange != null && onLineHeightChange != null
     val data = state.data?.takeIf { state.id == id }
     val favorite = favorites.any { it.topicId == id }
     CompositionLocalProvider(LocalPostReferences provides PostReferences(referenceStates, vm::resolveReference) { target ->
@@ -275,6 +290,7 @@ fun ReaderScreen(
                                     else vm.load(page = 1, authorOnly = true)
                                 },
                                 onRefresh = { vm.load(page = currentPage) },
+                                onTypography = if (canAdjustTypography) ({ adjustingTypography = true }) else null,
                                 onShareCard = vm::openShareCard,
                                 onShare = {
                                     runCatching {
@@ -443,6 +459,15 @@ fun ReaderScreen(
                         },
                     )
                 }
+                if (adjustingTypography && onFontSizeChange != null && onLineHeightChange != null) {
+                    ReaderTypographySheet(
+                        preferences = preferences,
+                        onFontSizeChange = onFontSizeChange,
+                        onLineHeightChange = onLineHeightChange,
+                        onReset = onResetTypography,
+                        dismiss = { adjustingTypography = false },
+                    )
+                }
             }
         } else {
             ProgressiveBlurScaffold(
@@ -545,6 +570,7 @@ internal fun ReaderTopBar(
     onFavorite: () -> Unit,
     onFilter: () -> Unit,
     onRefresh: () -> Unit,
+    onTypography: (() -> Unit)? = null,
     onShareCard: () -> Unit = {},
     onShare: () -> Unit = {},
     onCopyLink: () -> Unit = {},
@@ -692,6 +718,16 @@ internal fun ReaderTopBar(
                         onRefresh()
                     },
                 )
+                if (onTypography != null) {
+                    FrostedDropdownItem(
+                        text = "阅读排版",
+                        leadingIcon = NagiIcons.Tuning,
+                        onClick = {
+                            menu = false
+                            onTypography()
+                        },
+                    )
+                }
                 FrostedDropdownDivider()
                 FrostedDropdownItem(
                     text = "分享主楼卡片",
@@ -1283,6 +1319,76 @@ private fun PageJumpSheet(
                 confirmEnabled = valid,
                 confirmStyle = CapsuleStyle.SolidGold,
             )
+        }
+    }
+}
+
+@Composable
+private fun ReaderTypographySheet(
+    preferences: ReadingPreferences,
+    onFontSizeChange: (Int) -> Unit,
+    onLineHeightChange: (Int) -> Unit,
+    onReset: (() -> Unit)?,
+    dismiss: () -> Unit,
+) {
+    val colors = NagiThemeTokens.colors
+    val dividerColor = colors.cardBorder.copy(alpha = 0.55f)
+    NagiFrostedSheet(
+        onDismissRequest = dismiss,
+        maxWidth = 480.dp,
+    ) {
+        NagiSheetHeader(
+            title = "阅读排版",
+            subtitle = "正文字号 ${preferences.fontSize} sp · 行高 ${preferences.effectiveLineHeight} sp",
+            onClose = dismiss,
+        )
+        HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
+        TypographyStepperRowContent(
+            title = "正文字号",
+            valueLabel = "${preferences.fontSize} sp",
+            decreaseDescription = "减小字号",
+            onDecrease = { stepDownFontSize(preferences, onFontSizeChange) },
+            decreaseEnabled = preferences.fontSize > MIN_FONT_SIZE,
+            increaseDescription = "增大字号",
+            onIncrease = { stepUpFontSize(preferences, onFontSizeChange) },
+            increaseEnabled = preferences.fontSize < MAX_FONT_SIZE,
+        )
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = Space.lg),
+            thickness = 0.5.dp,
+            color = dividerColor,
+        )
+        TypographyStepperRowContent(
+            title = "正文行高",
+            valueLabel = lineHeightValueLabel(preferences),
+            decreaseDescription = "紧凑",
+            onDecrease = { stepDownLineHeight(preferences, onLineHeightChange) },
+            decreaseEnabled = preferences.effectiveLineHeight > preferences.minLineHeight,
+            increaseDescription = "宽松",
+            onIncrease = { stepUpLineHeight(preferences, onLineHeightChange) },
+            increaseEnabled = preferences.effectiveLineHeight < MAX_LINE_HEIGHT,
+        )
+        if (onReset != null) {
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = Space.lg),
+                thickness = 0.5.dp,
+                color = dividerColor,
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Space.lg, vertical = Space.md),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                CapsuleButton(
+                    text = "恢复默认",
+                    onClick = onReset,
+                    enabled = !preferences.isDefaultTypography,
+                    style = CapsuleStyle.Neutral,
+                )
+            }
+        } else {
+            Spacer(Modifier.height(Space.sm))
         }
     }
 }

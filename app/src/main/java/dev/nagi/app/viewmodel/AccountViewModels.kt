@@ -13,7 +13,10 @@ import javax.inject.Inject
 @HiltViewModel
 class AccountViewModel @Inject constructor(private val manager: AccountManager, prefs: PreferenceStore) : ViewModel() {
     val account = manager.state
-    val preferences = prefs.preferences.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ReadingPreferences())
+    val loadedPreferences: StateFlow<ReadingPreferences?> = prefs.preferences
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val preferences: StateFlow<ReadingPreferences> = prefs.preferences
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ReadingPreferences())
     init { initialize() }
     fun initialize() = viewModelScope.launch { manager.initialize() }
     fun switchAccount(id: String) = action { manager.switchAccount(id) }

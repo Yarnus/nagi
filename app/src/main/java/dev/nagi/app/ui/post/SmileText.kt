@@ -136,7 +136,7 @@ internal fun PostParagraph(
         color = colors.textPrimary,
         style = NagiThemeTokens.typography.postBody.copy(
             fontSize = fontSize.sp,
-            lineHeight = (preferences.lineHeight.coerceAtLeast(fontSize + 6) * largestScale).sp,
+            lineHeight = (preferences.effectiveLineHeight * largestScale).sp,
             fontWeight = if (heading) FontWeight.SemiBold else FontWeight.Normal,
             textAlign = textAlign,
         ),

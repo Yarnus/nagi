@@ -2,11 +2,13 @@ package dev.nagi.app.data
 
 import android.content.Context
 import androidx.room.*
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.nagi.sdk.NgaDomain
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -286,15 +288,113 @@ abstract class ReadingDatabase : RoomDatabase() {
     }
 }
 
+const val DEFAULT_FONT_SIZE = 16
+const val MIN_FONT_SIZE = 14
+const val MAX_FONT_SIZE = 24
+const val DEFAULT_LINE_HEIGHT = 26
+const val MIN_LINE_HEIGHT = 24
+const val MAX_LINE_HEIGHT = 40
+const val LINE_HEIGHT_STEP = 2
+const val MIN_LINE_HEIGHT_GAP = 6
+
+val SUPPORTED_NGA_DOMAINS: List<NgaDomain> = listOf(
+    NgaDomain.PRIMARY,
+    NgaDomain.APP,
+    NgaDomain.LEGACY,
+)
+
+fun NgaDomain.displayName(): String = when (this) {
+    NgaDomain.PRIMARY -> "主站"
+    NgaDomain.APP -> "客户端线路"
+    NgaDomain.ALTERNATE -> "备用主站"
+    NgaDomain.LEGACY -> "旧版线路"
+}
+
+fun NgaDomain.hostLabel(): String =
+    baseUrl.removePrefix("https://").trimEnd('/')
+
 private val Context.readingPreferences by preferencesDataStore("reading")
-data class ReadingPreferences(val fontSize: Int = 16, val lineHeight: Int = 26, val theme: String = "system")
+
+data class ReadingPreferences(
+    val fontSize: Int = DEFAULT_FONT_SIZE,
+    val lineHeight: Int = DEFAULT_LINE_HEIGHT,
+    val theme: String = "system",
+    val clipboardLinkDetection: Boolean = true,
+    val autoCheckUpdates: Boolean = true,
+    val ngaDomain: NgaDomain = NgaDomain.PRIMARY,
+) {
+    val minLineHeight: Int
+        get() = maxOf(MIN_LINE_HEIGHT, fontSize + MIN_LINE_HEIGHT_GAP)
+
+    val effectiveLineHeight: Int
+        get() = lineHeight.coerceIn(minLineHeight, MAX_LINE_HEIGHT)
+
+    val isDefaultTypography: Boolean
+        get() = fontSize == DEFAULT_FONT_SIZE && lineHeight == DEFAULT_LINE_HEIGHT
+}
 
 @Singleton
 class PreferenceStore @Inject constructor(@param:ApplicationContext private val context: Context) {
+    private val fontKey = intPreferencesKey("font")
+    private val lineKey = intPreferencesKey("line")
+    private val themeKey = stringPreferencesKey("theme")
+    private val clipboardLinkKey = booleanPreferencesKey("clipboard_link_detection")
+    private val autoCheckUpdatesKey = booleanPreferencesKey("auto_check_updates")
+    private val ngaDomainKey = stringPreferencesKey("nga_domain")
+
     val preferences = context.readingPreferences.data.map {
-        ReadingPreferences(it[intPreferencesKey("font")] ?: 16, it[intPreferencesKey("line")] ?: 26, it[stringPreferencesKey("theme")] ?: "system")
+        val fontSize = (it[fontKey] ?: DEFAULT_FONT_SIZE).coerceIn(MIN_FONT_SIZE, MAX_FONT_SIZE)
+        val lineHeight = (it[lineKey] ?: DEFAULT_LINE_HEIGHT).coerceIn(MIN_LINE_HEIGHT, MAX_LINE_HEIGHT)
+        val theme = it[themeKey]?.takeIf { value -> value in setOf("system", "light", "dark") } ?: "system"
+        val clipboardDetection = it[clipboardLinkKey] ?: true
+        val autoUpdates = it[autoCheckUpdatesKey] ?: true
+        val domainName = it[ngaDomainKey]
+        val domain = SUPPORTED_NGA_DOMAINS.firstOrNull { candidate -> candidate.name == domainName }
+            ?: NgaDomain.PRIMARY
+        ReadingPreferences(
+            fontSize = fontSize,
+            lineHeight = lineHeight,
+            theme = theme,
+            clipboardLinkDetection = clipboardDetection,
+            autoCheckUpdates = autoUpdates,
+            ngaDomain = domain,
+        )
     }
-    suspend fun font(size: Int) = context.readingPreferences.edit { it[intPreferencesKey("font")] = size.coerceIn(14, 24) }
-    suspend fun lineHeight(size: Int) = context.readingPreferences.edit { it[intPreferencesKey("line")] = size.coerceIn(24, 40) }
-    suspend fun theme(value: String) = context.readingPreferences.edit { it[stringPreferencesKey("theme")] = value }
+
+    suspend fun font(size: Int) {
+        context.readingPreferences.edit { it[fontKey] = size.coerceIn(MIN_FONT_SIZE, MAX_FONT_SIZE) }
+    }
+
+    suspend fun lineHeight(size: Int) {
+        context.readingPreferences.edit { prefs ->
+            val currentFont = (prefs[fontKey] ?: DEFAULT_FONT_SIZE).coerceIn(MIN_FONT_SIZE, MAX_FONT_SIZE)
+            val minAllowed = maxOf(MIN_LINE_HEIGHT, currentFont + MIN_LINE_HEIGHT_GAP)
+            prefs[lineKey] = size.coerceIn(minAllowed, MAX_LINE_HEIGHT)
+        }
+    }
+
+    suspend fun resetTypography() {
+        context.readingPreferences.edit {
+            it[fontKey] = DEFAULT_FONT_SIZE
+            it[lineKey] = DEFAULT_LINE_HEIGHT
+        }
+    }
+
+    suspend fun theme(value: String) {
+        val normalized = if (value in setOf("system", "light", "dark")) value else "system"
+        context.readingPreferences.edit { it[themeKey] = normalized }
+    }
+
+    suspend fun clipboardLinkDetection(enabled: Boolean) {
+        context.readingPreferences.edit { it[clipboardLinkKey] = enabled }
+    }
+
+    suspend fun autoCheckUpdates(enabled: Boolean) {
+        context.readingPreferences.edit { it[autoCheckUpdatesKey] = enabled }
+    }
+
+    suspend fun ngaDomain(domain: NgaDomain) {
+        val normalized = if (domain in SUPPORTED_NGA_DOMAINS) domain else NgaDomain.PRIMARY
+        context.readingPreferences.edit { it[ngaDomainKey] = normalized.name }
+    }
 }

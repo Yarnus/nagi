@@ -225,7 +225,11 @@ class LibraryViewModel @Inject constructor(
     }
     fun font(size: Int) = viewModelScope.launch { prefs.font(size) }
     fun lineHeight(size: Int) = viewModelScope.launch { prefs.lineHeight(size) }
+    fun resetTypography() = viewModelScope.launch { prefs.resetTypography() }
     fun theme(value: String) = viewModelScope.launch { prefs.theme(value) }
+    fun setClipboardLinkDetection(enabled: Boolean) = viewModelScope.launch { prefs.clipboardLinkDetection(enabled) }
+    fun setAutoCheckUpdates(enabled: Boolean) = viewModelScope.launch { prefs.autoCheckUpdates(enabled) }
+    fun setNgaDomain(domain: NgaDomain) = viewModelScope.launch { prefs.ngaDomain(domain) }
     suspend fun resolveExternalTargetTitle(target: NgaExternalTarget): String? = when (target) {
         is NgaExternalTarget.Topic -> {
             val cached = favorites.value.firstOrNull { it.topicId == target.topicId }?.title?.trim()?.takeIf { it.isNotEmpty() }

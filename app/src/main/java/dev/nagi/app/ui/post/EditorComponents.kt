@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.nagi.app.data.ReadingPreferences
@@ -98,6 +99,10 @@ internal fun ComposerInput(
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
+    val editorBodyStyle = typography.postBody.copy(
+        fontSize = preferences.fontSize.sp,
+        lineHeight = preferences.effectiveLineHeight.sp,
+    )
     if (preview) {
         Column(
             modifier = modifier
@@ -121,14 +126,14 @@ internal fun ComposerInput(
             placeholder = {
                 Text(
                     text = placeholder,
-                    style = typography.postBody,
+                    style = editorBodyStyle,
                     color = colors.textSecondary,
                 )
             },
             minLines = minLines,
             maxLines = 12,
             readOnly = readOnly,
-            textStyle = typography.postBody.copy(color = colors.textPrimary),
+            textStyle = editorBodyStyle.copy(color = colors.textPrimary),
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = colors.cardSurface,
                 unfocusedContainerColor = colors.cardSurface,

@@ -105,7 +105,7 @@ fun NagiApp(
     clipboardLink: ExtractedExternalLink? = null,
     onClipboardLinkHandled: (ExtractedExternalLink) -> Unit = {},
 ) {
-    val preferences by accountVm.preferences.collectAsStateWithLifecycle()
+    val loadedPreferences by accountVm.loadedPreferences.collectAsStateWithLifecycle()
     val account by accountVm.account.collectAsStateWithLifecycle()
     val identityVm: AccountIdentityViewModel = hiltViewModel()
     val loadedIdentity by identityVm.identity.collectAsStateWithLifecycle()
@@ -134,6 +134,11 @@ fun NagiApp(
         lifecycle.addObserver(observer)
         notificationsVm.setForeground(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
         onDispose { lifecycle.removeObserver(observer); notificationsVm.setForeground(false) }
+    }
+    val preferences = loadedPreferences
+    if (preferences == null) {
+        Box(Modifier.fillMaxSize())
+        return
     }
     CompositionLocalProvider(LocalAccountIdentity provides identity, LocalNotifications provides notifications,
         LocalUserTags provides tagAccess, LocalAppUpdate provides appUpdate) {
@@ -289,7 +294,13 @@ fun NagiApp(
                                     HistoryScreen(library, back = { popBackFrom(entry) }, read = openTopic)
                                 }
                                 composable("settings") { entry ->
-                                    SettingsScreen(library, preferences, back = { popBackFrom(entry) }, onSelect = select)
+                                    SettingsScreen(
+                                        vm = library,
+                                        preferences = preferences,
+                                        accountLabel = account.userId?.let { "当前 UID：$it" } ?: "当前：访客模式",
+                                        back = { popBackFrom(entry) },
+                                        onSelect = select,
+                                    )
                                 }
                                 composable("accounts") { entry ->
                                     AccountsScreen(account, accountVm, back = { popBackFrom(entry) }, login = { select("login") })
@@ -361,6 +372,9 @@ fun NagiApp(
                                             openTopic(target.topicId)
                                             nav.currentBackStackEntry?.savedStateHandle?.set("postReference", "${target.postId},${target.page}")
                                         },
+                                        onFontSizeChange = library::font,
+                                        onLineHeightChange = library::lineHeight,
+                                        onResetTypography = library::resetTypography,
                                     )
                                 }
                             }

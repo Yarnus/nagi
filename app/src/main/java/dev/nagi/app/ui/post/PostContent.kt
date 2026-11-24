@@ -229,8 +229,14 @@ private fun RenderContentBlocks(
                 is ContentBlock.ListBlock -> Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                     block.items.forEachIndexed { index, item ->
                         Row(Modifier.fillMaxWidth()) {
-                            Text(if (block.ordered) "${index + 1}. " else "• ", color = colors.textPrimary,
-                                style = typography.postBody.copy(fontSize = preferences.fontSize.sp))
+                            Text(
+                                text = if (block.ordered) "${index + 1}. " else "• ",
+                                color = colors.textPrimary,
+                                style = typography.postBody.copy(
+                                    fontSize = preferences.fontSize.sp,
+                                    lineHeight = preferences.effectiveLineHeight.sp,
+                                ),
+                            )
                             Box(Modifier.weight(1f)) {
                                 RenderContentBlocks(item, preferences, onImage, textAlign, isHeading)
                             }
@@ -257,7 +263,10 @@ private fun RenderContentBlocks(
                         else "骰子：${block.expression} = ${block.total}" +
                             if (block.rolls.isEmpty()) "" else "（投掷 ${block.rolls.joinToString(" + ")}）",
                     color = colors.textPrimary,
-                    style = typography.postBody.copy(fontSize = preferences.fontSize.sp),
+                    style = typography.postBody.copy(
+                        fontSize = preferences.fontSize.sp,
+                        lineHeight = preferences.effectiveLineHeight.sp,
+                    ),
                 )
 
                 is ContentBlock.Image -> PostImageBlock(block.url, onImage)

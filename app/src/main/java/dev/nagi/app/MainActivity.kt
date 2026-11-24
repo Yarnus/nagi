@@ -11,17 +11,26 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
+import dev.nagi.app.data.PreferenceStore
 import dev.nagi.app.navigation.ClipboardLinkTracker
 import dev.nagi.app.navigation.NagiApp
 import dev.nagi.sdk.ExtractedExternalLink
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject lateinit var preferenceStore: PreferenceStore
     private var pendingDeepLink by mutableStateOf<String?>(null)
     private var pendingClipboardLink by mutableStateOf<ExtractedExternalLink?>(null)
     private var pendingClipboardTimestamp: Long = 0L
     private var needsClipboardCheck: Boolean = false
+    private var clipboardPreferenceReady: Boolean = false
+    private var clipboardDetectionEnabled: Boolean = true
     private var clipboardRetryCount: Int = 0
     private val clipboardCheckRunnable = Runnable { runPendingClipboardCheck() }
 
@@ -30,6 +39,23 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) {
             pendingDeepLink = extractDeepLink(intent)
+        }
+        lifecycleScope.launch {
+            preferenceStore.preferences
+                .map { it.clipboardLinkDetection }
+                .distinctUntilChanged()
+                .collect { enabled ->
+                    clipboardPreferenceReady = true
+                    clipboardDetectionEnabled = enabled
+                    if (!enabled) {
+                        needsClipboardCheck = false
+                        pendingClipboardLink = null
+                        pendingClipboardTimestamp = 0L
+                        window?.decorView?.removeCallbacks(clipboardCheckRunnable)
+                    } else if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && needsClipboardCheck) {
+                        scheduleClipboardCheck()
+                    }
+                }
         }
         enableEdgeToEdge()
         setContent {
@@ -54,7 +80,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        needsClipboardCheck = pendingDeepLink == null
+        needsClipboardCheck = pendingDeepLink == null && (!clipboardPreferenceReady || clipboardDetectionEnabled)
         clipboardRetryCount = 0
     }
 
@@ -76,7 +102,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun scheduleClipboardCheck(delayMs: Long = 0L) {
-        if (!needsClipboardCheck || pendingDeepLink != null) return
+        if (!needsClipboardCheck || pendingDeepLink != null || !clipboardPreferenceReady || !clipboardDetectionEnabled) return
         val decor = window?.decorView ?: return
         decor.removeCallbacks(clipboardCheckRunnable)
         if (delayMs > 0L) decor.postDelayed(clipboardCheckRunnable, delayMs)
@@ -84,7 +110,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun runPendingClipboardCheck() {
-        if (!needsClipboardCheck || pendingDeepLink != null) return
+        if (!needsClipboardCheck || pendingDeepLink != null || !clipboardPreferenceReady || !clipboardDetectionEnabled) return
         val focused = hasWindowFocus()
         if (!focused && clipboardRetryCount < MAX_CLIPBOARD_RETRIES) {
             clipboardRetryCount++

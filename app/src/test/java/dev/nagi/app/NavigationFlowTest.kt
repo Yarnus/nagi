@@ -201,7 +201,7 @@ class NavigationFlowTest {
         openAccountItem("设置")
         compose.onNodeWithText("退出当前账号").assertDoesNotExist()
         compose.onNodeWithText("当前登录 UID：77").assertDoesNotExist()
-        compose.onNodeWithText("关于与反馈").performClick()
+        compose.onNodeWithText("关于与反馈").performScrollTo().performClick()
         compose.onNodeWithText("前往 GitHub 反馈").assertIsDisplayed()
     }
 

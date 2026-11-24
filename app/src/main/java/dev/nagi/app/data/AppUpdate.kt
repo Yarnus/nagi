@@ -223,7 +223,7 @@ class ReleaseUpdateRepository(
     private val mutex = Mutex()
     private var lastAttemptMillis: Long? = null
 
-    suspend fun checkIfNeeded() {
+    suspend fun checkIfNeeded(allowNetwork: Boolean = true) {
         mutex.withLock {
             val current = currentVersion()
             val cache = try {
@@ -238,6 +238,7 @@ class ReleaseUpdateRepository(
                 latestTag = cache.latestTag.takeIf { cachedHasUpdate },
                 hasUpdate = cachedHasUpdate,
             )
+            if (!allowNetwork) return
 
             val now = nowMillis()
             val checkedRecently = cache.lastCheckedAtMillis > 0L &&
