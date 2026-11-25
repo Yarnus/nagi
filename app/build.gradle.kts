@@ -32,8 +32,8 @@ android {
         applicationId = "dev.nagi.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 23
-        versionName = "0.7.0"
+        versionCode = 24
+        versionName = "0.8.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     splits {
