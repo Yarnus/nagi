@@ -15,8 +15,11 @@ import coil.intercept.Interceptor
 import coil.request.ErrorResult
 import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.ui.post.ComposerScreen
+import dev.nagi.app.ui.post.EditorDockController
+import dev.nagi.app.ui.post.EditorDockPanel
 import dev.nagi.app.ui.post.ReplyPopup
 import dev.nagi.app.ui.post.insertSmile
+import dev.nagi.app.ui.post.rememberEditorDockController
 import dev.nagi.app.ui.theme.NagiTheme
 import dev.nagi.app.viewmodel.ComposePhase
 import dev.nagi.app.viewmodel.ComposerState
@@ -145,6 +148,48 @@ class SmilePickerTest {
             compose.runOnIdle { state = state.copy(phase = phase) }
             compose.onNodeWithContentDescription("选择表情").assertDoesNotExist()
             compose.onNodeWithText("表情").assertIsNotEnabled()
+        }
+    }
+
+    @Test fun editorDockControllerIsMutuallyExclusiveWithImeForSmileAndColor() {
+        var imeVisible by mutableStateOf(true)
+        lateinit var controller: EditorDockController
+        compose.setContent {
+            NagiTheme {
+                controller = rememberEditorDockController(
+                    editable = true,
+                    preview = false,
+                    imeVisibleOverride = imeVisible,
+                )
+            }
+        }
+        compose.runOnIdle {
+            // Requesting smile while IME is open waits until IME hides before displaying dock.
+            controller.togglePanel(EditorDockPanel.SMILE)
+            assertEquals(EditorDockPanel.SMILE, controller.activeToolbarPanel)
+            assertEquals(EditorDockPanel.NONE, controller.visiblePanel)
+            imeVisible = false
+        }
+        compose.runOnIdle {
+            assertEquals(EditorDockPanel.SMILE, controller.visiblePanel)
+            // Re-opening IME automatically closes the inline smile dock.
+            imeVisible = true
+        }
+        compose.runOnIdle {
+            assertEquals(EditorDockPanel.NONE, controller.visiblePanel)
+            assertEquals(EditorDockPanel.NONE, controller.activeToolbarPanel)
+            // Same mutual exclusion applies to the color dock.
+            controller.togglePanel(EditorDockPanel.COLOR)
+            assertEquals(EditorDockPanel.NONE, controller.visiblePanel)
+            imeVisible = false
+        }
+        compose.runOnIdle {
+            assertEquals(EditorDockPanel.COLOR, controller.visiblePanel)
+            imeVisible = true
+        }
+        compose.runOnIdle {
+            assertEquals(EditorDockPanel.NONE, controller.visiblePanel)
+            assertEquals(EditorDockPanel.NONE, controller.activeToolbarPanel)
         }
     }
 

@@ -1,5 +1,7 @@
 package dev.nagi.app.ui.post
 
+import android.view.inputmethod.InputMethodManager
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -7,14 +9,18 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
@@ -31,17 +37,27 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -54,6 +70,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.FlatCard
@@ -70,6 +87,130 @@ internal enum class EditorDockPanel {
     NONE,
     SMILE,
     COLOR,
+}
+
+/**
+ * Coordinates the inline emoji/color dock inside the active editor window (`Dialog` /
+ * `ModalBottomSheet`) so it and the system IME are never visible at the same time.
+ */
+@Stable
+internal class EditorDockController(
+    val focusRequester: FocusRequester,
+    private val requestedPanelState: MutableState<EditorDockPanel>,
+    private val imeVisibleState: State<Boolean>,
+    private val editableState: State<Boolean>,
+    private val previewState: State<Boolean>,
+    private val showKeyboard: () -> Unit,
+    private val hideKeyboard: () -> Unit,
+) {
+    private var requestedPanel: EditorDockPanel by requestedPanelState
+
+    val visiblePanel: EditorDockPanel
+        get() = if (editableState.value && !imeVisibleState.value) requestedPanel else EditorDockPanel.NONE
+
+    val activeToolbarPanel: EditorDockPanel
+        get() = if (editableState.value) requestedPanel else EditorDockPanel.NONE
+
+    fun openPanel(panel: EditorDockPanel) {
+        if (!editableState.value) return
+        hideKeyboard()
+        requestedPanel = panel
+    }
+
+    fun togglePanel(panel: EditorDockPanel) {
+        if (requestedPanel == panel) {
+            returnToKeyboard()
+        } else {
+            openPanel(panel)
+        }
+    }
+
+    fun closePanel() {
+        requestedPanel = EditorDockPanel.NONE
+    }
+
+    fun returnToKeyboard() {
+        requestedPanel = EditorDockPanel.NONE
+        if (!previewState.value) {
+            runCatching { focusRequester.requestFocus() }
+            showKeyboard()
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun rememberEditorDockController(
+    editable: Boolean,
+    preview: Boolean,
+    imeVisibleOverride: Boolean? = null,
+): EditorDockController {
+    val focusRequester = remember { FocusRequester() }
+    val requestedPanelState = remember { mutableStateOf(EditorDockPanel.NONE) }
+    val editableState = rememberUpdatedState(editable)
+    val previewState = rememberUpdatedState(preview)
+
+    // Must be resolved inside the popup/dialog window so hide/show and insets target that window.
+    val keyboard = LocalSoftwareKeyboardController.current
+    val view = LocalView.current
+    val focusManager = LocalFocusManager.current
+    val density = LocalDensity.current
+    val currentImeVisible = imeVisibleOverride
+        ?: (WindowInsets.isImeVisible || WindowInsets.ime.getBottom(density) > 0)
+    val imeVisibleState = rememberUpdatedState(currentImeVisible)
+
+    val hideKeyboardAction = remember(focusManager, keyboard, view) {
+        {
+            focusManager.clearFocus(force = true)
+            keyboard?.hide()
+            view.context.getSystemService(InputMethodManager::class.java)
+                ?.hideSoftInputFromWindow(view.windowToken, 0)
+            Unit
+        }
+    }
+    val showKeyboardAction = remember(keyboard, view) {
+        {
+            keyboard?.show()
+            Unit
+        }
+    }
+
+    LaunchedEffect(editable, preview) {
+        if (!editable || (preview && requestedPanelState.value == EditorDockPanel.COLOR)) {
+            requestedPanelState.value = EditorDockPanel.NONE
+        }
+    }
+
+    var wasImeVisible by remember { mutableStateOf(currentImeVisible) }
+    val requestedPanel = requestedPanelState.value
+    LaunchedEffect(currentImeVisible, requestedPanel) {
+        val justOpenedIme = !wasImeVisible && currentImeVisible
+        wasImeVisible = currentImeVisible
+        if (justOpenedIme && requestedPanel != EditorDockPanel.NONE) {
+            requestedPanelState.value = EditorDockPanel.NONE
+        } else if (requestedPanel != EditorDockPanel.NONE && currentImeVisible) {
+            delay(120)
+            if (requestedPanelState.value != EditorDockPanel.NONE && imeVisibleState.value) {
+                hideKeyboardAction()
+            }
+        }
+    }
+
+    BackHandler(enabled = requestedPanel != EditorDockPanel.NONE) {
+        requestedPanelState.value = EditorDockPanel.NONE
+    }
+
+    return remember(focusRequester, showKeyboardAction, hideKeyboardAction) {
+        EditorDockController(
+            focusRequester = focusRequester,
+            requestedPanelState = requestedPanelState,
+            imeVisibleState = imeVisibleState,
+            editableState = editableState,
+            previewState = previewState,
+            showKeyboard = showKeyboardAction,
+            hideKeyboard = hideKeyboardAction,
+        )
+    }
 }
 
 @Immutable

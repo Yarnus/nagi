@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -250,7 +251,14 @@ internal fun ComposerInput(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f, fill = fillArea)
-                    .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+                    .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                    .then(
+                        if (onInputTap != null) {
+                            Modifier.onFocusChanged { if (it.isFocused) onInputTap() }
+                        } else {
+                            Modifier
+                        },
+                    ),
                 interactionSource = interactionSource,
                 placeholder = {
                     Text(

@@ -2,7 +2,6 @@ package dev.nagi.app.ui.post
 
 import android.content.ClipData
 import android.content.ClipboardManager
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,16 +16,13 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -61,18 +57,7 @@ internal fun ReplyPopup(
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
     var discard by remember { mutableStateOf(false) }
-    var dockPanel by remember { mutableStateOf(EditorDockPanel.NONE) }
-    val focusRequester = remember { FocusRequester() }
-    val keyboard = LocalSoftwareKeyboardController.current
     val editable = session.phase in setOf(ComposePhase.Editing, ComposePhase.Rejected)
-    LaunchedEffect(editable) {
-        if (!editable) dockPanel = EditorDockPanel.NONE
-    }
-    LaunchedEffect(session.preview) {
-        if (session.preview && dockPanel == EditorDockPanel.COLOR) {
-            dockPanel = EditorDockPanel.NONE
-        }
-    }
     val dismiss = {
         if (session.phase != ComposePhase.Submitting && !session.images.uploading) {
             if (!session.comment && session.input.text.isNotEmpty()) {
@@ -82,19 +67,10 @@ internal fun ReplyPopup(
             }
         }
     }
-    val returnToKeyboard = {
-        dockPanel = EditorDockPanel.NONE
-        if (!session.preview) {
-            runCatching { focusRequester.requestFocus() }
-            keyboard?.show()
-        }
-    }
     val context = LocalContext.current
 
     EditorPopup(dismiss) {
-        BackHandler(enabled = dockPanel != EditorDockPanel.NONE) {
-            dockPanel = EditorDockPanel.NONE
-        }
+        val dock = rememberEditorDockController(editable = editable, preview = session.preview)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -268,10 +244,10 @@ internal fun ReplyPopup(
                             preview = session.preview,
                             previewContent = session.content,
                             preferences = preferences,
-                            modifier = Modifier.heightIn(max = if (dockPanel != EditorDockPanel.NONE) 180.dp else 260.dp),
+                            modifier = Modifier.heightIn(max = if (dock.visiblePanel != EditorDockPanel.NONE) 180.dp else 260.dp),
                             minLines = if (session.comment) 3 else 4,
-                            focusRequester = focusRequester,
-                            onInputTap = { dockPanel = EditorDockPanel.NONE },
+                            focusRequester = dock.focusRequester,
+                            onInputTap = dock::closePanel,
                             onTogglePreview = preview,
                             anonymous = session.anonymous,
                             onAnonymousChange = onAnonymousChange,
@@ -303,19 +279,12 @@ internal fun ReplyPopup(
                             visualSize = 40.dp,
                         )
                         SmilePickerButton(
-                            open = dockPanel == EditorDockPanel.SMILE,
+                            open = dock.activeToolbarPanel == EditorDockPanel.SMILE,
                             enabled = editable,
                             iconOnly = true,
                             iconSize = 22.dp,
                             visualSize = 40.dp,
-                            onClick = {
-                                if (dockPanel == EditorDockPanel.SMILE) {
-                                    returnToKeyboard()
-                                } else {
-                                    keyboard?.hide()
-                                    dockPanel = EditorDockPanel.SMILE
-                                }
-                            },
+                            onClick = { dock.togglePanel(EditorDockPanel.SMILE) },
                         )
                         NagiIconAction(
                             icon = NagiIcons.Bold,
@@ -338,19 +307,12 @@ internal fun ReplyPopup(
                         NagiIconAction(
                             icon = NagiIcons.Palette,
                             description = "字体颜色",
-                            onClick = {
-                                if (dockPanel == EditorDockPanel.COLOR) {
-                                    returnToKeyboard()
-                                } else {
-                                    keyboard?.hide()
-                                    dockPanel = EditorDockPanel.COLOR
-                                }
-                            },
+                            onClick = { dock.togglePanel(EditorDockPanel.COLOR) },
                             enabled = !session.preview && editable,
-                            selected = dockPanel == EditorDockPanel.COLOR,
+                            selected = dock.activeToolbarPanel == EditorDockPanel.COLOR,
                             iconSize = 22.dp,
                             visualSize = 40.dp,
-                            tint = if (dockPanel == EditorDockPanel.COLOR) colors.goldAccent else colors.textSecondary,
+                            tint = if (dock.activeToolbarPanel == EditorDockPanel.COLOR) colors.goldAccent else colors.textSecondary,
                         )
                     }
                     CapsuleButton(
@@ -367,10 +329,10 @@ internal fun ReplyPopup(
                     )
                 }
 
-                if (dockPanel != EditorDockPanel.NONE && editable) {
+                if (dock.visiblePanel != EditorDockPanel.NONE) {
                     InlineEditorDock(
-                        panel = dockPanel,
-                        onReturnToKeyboard = returnToKeyboard,
+                        panel = dock.visiblePanel,
+                        onReturnToKeyboard = dock::returnToKeyboard,
                         onSelectSmile = { smile -> if (editable) edit(insertSmile(session.input, smile)) },
                         onSelectColor = { colorName -> if (!session.preview && editable) edit(colorSelection(session.input, colorName)) },
                     )

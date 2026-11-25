@@ -2,8 +2,9 @@ package dev.nagi.app.ui.post
 
 import android.content.ClipData
 import android.content.ClipboardManager
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,10 +36,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
@@ -88,16 +88,7 @@ internal fun ComposerScreen(
     val preview = if (togglePreview != null) state.preview else localPreview
     var showFormatChips by remember { mutableStateOf(false) }
     var confirmClose by remember { mutableStateOf(false) }
-    var dockPanel by remember { mutableStateOf(EditorDockPanel.NONE) }
-    val focusRequester = remember { FocusRequester() }
-    val keyboard = LocalSoftwareKeyboardController.current
     val editable = state.phase in setOf(ComposePhase.Editing, ComposePhase.Rejected)
-    LaunchedEffect(editable) {
-        if (!editable) dockPanel = EditorDockPanel.NONE
-    }
-    LaunchedEffect(preview) {
-        if (preview && dockPanel == EditorDockPanel.COLOR) dockPanel = EditorDockPanel.NONE
-    }
     var field by remember {
         mutableStateOf(TextFieldValue(state.content, TextRange(state.selectionStart, state.selection)))
     }
@@ -126,13 +117,6 @@ internal fun ComposerScreen(
             if (togglePreview != null) togglePreview() else localPreview = target
         }
     }
-    val returnToKeyboard = {
-        dockPanel = EditorDockPanel.NONE
-        if (!preview) {
-            runCatching { focusRequester.requestFocus() }
-            keyboard?.show()
-        }
-    }
     val dismiss = {
         if (state.phase != ComposePhase.Submitting && !state.images.uploading) {
             if (
@@ -149,9 +133,7 @@ internal fun ComposerScreen(
     val context = LocalContext.current
 
     val body: @Composable () -> Unit = {
-        BackHandler(enabled = dockPanel != EditorDockPanel.NONE) {
-            dockPanel = EditorDockPanel.NONE
-        }
+        val dock = rememberEditorDockController(editable = editable, preview = preview)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -210,6 +192,7 @@ internal fun ComposerScreen(
                                 placeholder = "完整用户名（空格分隔）",
                                 label = "收件人",
                                 phase = state.phase,
+                                onInputTap = dock::closePanel,
                             ) { details(state.title, it) }
                             HorizontalDivider(
                                 modifier = Modifier.padding(horizontal = Space.lg),
@@ -222,6 +205,7 @@ internal fun ComposerScreen(
                             placeholder = if (state.privateMessage) "填写私信标题" else "标题",
                             label = if (state.privateMessage) "标题" else null,
                             phase = state.phase,
+                            onInputTap = dock::closePanel,
                         ) { details(it, state.recipients) }
                     }
                 }
@@ -288,8 +272,8 @@ internal fun ComposerScreen(
                     preferences = preferences,
                     modifier = if (shortForm) Modifier.heightIn(max = 260.dp) else Modifier.fillMaxSize(),
                     fillArea = !shortForm,
-                    focusRequester = focusRequester,
-                    onInputTap = { dockPanel = EditorDockPanel.NONE },
+                    focusRequester = dock.focusRequester,
+                    onInputTap = dock::closePanel,
                     onTogglePreview = { setPreviewMode(!preview) },
                     anonymous = state.anonymous,
                     onAnonymousChange = if (!state.privateMessage && state.target?.action != PublishAction.MODIFY) {
@@ -299,7 +283,7 @@ internal fun ComposerScreen(
             }
 
             state.images.error?.let { Text(it, style = typography.metadata, color = colors.destructive) }
-            if (!preview || dockPanel == EditorDockPanel.SMILE) {
+            if (!preview || dock.activeToolbarPanel == EditorDockPanel.SMILE) {
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(Space.sm),
@@ -310,16 +294,9 @@ internal fun ComposerScreen(
                         scopeKey = state.target.toString(), upload = uploadImage,
                     )
                     SmilePickerButton(
-                        open = dockPanel == EditorDockPanel.SMILE,
+                        open = dock.activeToolbarPanel == EditorDockPanel.SMILE,
                         enabled = editable,
-                        onClick = {
-                            if (dockPanel == EditorDockPanel.SMILE) {
-                                returnToKeyboard()
-                            } else {
-                                keyboard?.hide()
-                                dockPanel = EditorDockPanel.SMILE
-                            }
-                        },
+                        onClick = { dock.togglePanel(EditorDockPanel.SMILE) },
                     )
                     if (!preview && showFormatChips) {
                         CapsuleButton(
@@ -338,17 +315,10 @@ internal fun ComposerScreen(
                         )
                         CapsuleButton(
                             text = "颜色",
-                            onClick = {
-                                if (dockPanel == EditorDockPanel.COLOR) {
-                                    returnToKeyboard()
-                                } else {
-                                    keyboard?.hide()
-                                    dockPanel = EditorDockPanel.COLOR
-                                }
-                            },
+                            onClick = { dock.togglePanel(EditorDockPanel.COLOR) },
                             icon = NagiIcons.Palette,
                             enabled = editable,
-                            style = if (dockPanel == EditorDockPanel.COLOR) CapsuleStyle.SelectedGold else CapsuleStyle.Neutral,
+                            style = if (dock.activeToolbarPanel == EditorDockPanel.COLOR) CapsuleStyle.SelectedGold else CapsuleStyle.Neutral,
                         )
                         CapsuleButton(
                             text = "引用",
@@ -405,10 +375,10 @@ internal fun ComposerScreen(
                 },
             )
 
-            if (dockPanel != EditorDockPanel.NONE && editable) {
+            if (dock.visiblePanel != EditorDockPanel.NONE) {
                 InlineEditorDock(
-                    panel = dockPanel,
-                    onReturnToKeyboard = returnToKeyboard,
+                    panel = dock.visiblePanel,
+                    onReturnToKeyboard = dock::returnToKeyboard,
                     onSelectSmile = { smile -> if (editable) update(insertSmile(field, smile)) },
                     onSelectColor = { colorName -> if (!preview && editable) update(colorSelection(field, colorName)) },
                 )
@@ -527,14 +497,32 @@ private fun EditorDetail(
     placeholder: String,
     phase: ComposePhase,
     label: String? = null,
+    onInputTap: (() -> Unit)? = null,
     edit: (String) -> Unit,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
+    val interactionSource = remember { MutableInteractionSource() }
+    LaunchedEffect(interactionSource, onInputTap) {
+        if (onInputTap != null) {
+            interactionSource.interactions.collect { interaction ->
+                if (interaction is PressInteraction.Press) onInputTap()
+            }
+        }
+    }
     TextField(
         value = value,
         onValueChange = edit,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (onInputTap != null) {
+                    Modifier.onFocusChanged { if (it.isFocused) onInputTap() }
+                } else {
+                    Modifier
+                },
+            ),
+        interactionSource = interactionSource,
         label = label?.let { title -> { Text(title, style = typography.metadata, color = colors.textSecondary) } },
         placeholder = {
             Text(

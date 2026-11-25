@@ -180,6 +180,24 @@ class ReplyPopupTest {
         assertTrue("Toolbar buttons should stay on a single row", maxCenterY - minCenterY < 8f)
     }
 
+    @Test fun tappingInputFieldClosesOpenSmileOrColorDock() {
+        val state = session()
+        compose.setContent {
+            NagiTheme {
+                ReplyPopup(state, ReadingPreferences(), {}, {}, {}, {}, {})
+            }
+        }
+        compose.onNodeWithContentDescription("表情").performClick()
+        compose.onNodeWithContentDescription("选择表情").assertExists()
+        compose.onNodeWithText("写下你的回复…").performClick()
+        compose.onNodeWithContentDescription("选择表情").assertDoesNotExist()
+
+        compose.onNodeWithContentDescription("字体颜色").performClick()
+        compose.onNodeWithContentDescription("选择字体颜色").assertExists()
+        compose.onNodeWithText("写下你的回复…").performClick()
+        compose.onNodeWithContentDescription("选择字体颜色").assertDoesNotExist()
+    }
+
     @Config(qualifiers = "w900dp-h850dp")
     @Test fun captureExpanded() = capture("dark", 1f)
     private fun capture(theme: String, scale: Float, quote: Boolean = false, uncertain: Boolean = false) {
