@@ -52,15 +52,50 @@ class ReplyPopupTest {
         compose.onNodeWithText("放弃回复").performClick()
         compose.runOnIdle { assertTrue(closed) }
     }
-    @Test fun commentClosesWithoutDraftPromptOrToolbar() {
+    @Test fun commentClosesWithoutDraftPromptAndSupportsPreview() {
         var state by mutableStateOf(session(true))
         var closed = false
-        compose.setContent { NagiTheme { ReplyPopup(state, ReadingPreferences(), { state = state.copy(input = it) }, {}, {}, {}, { closed = true }) } }
-        compose.onNodeWithText("写下贴条评论…").performTextInput("评论")
-        compose.onNodeWithContentDescription("预览").assertDoesNotExist()
+        compose.setContent { NagiTheme { ReplyPopup(state, ReadingPreferences(), { state = state.copy(input = it) }, {}, {},
+            { state = state.copy(preview = !state.preview) }, { closed = true }, uploadImage = {}) } }
+        compose.onNodeWithContentDescription("图片").assertDoesNotExist()
+        compose.onNodeWithText("写下贴条评论…").performTextInput("评论 [del]删除线[/del]")
+        compose.onNodeWithContentDescription("预览").performClick()
+        compose.onNodeWithText("评论 删除线").assertExists()
         compose.onNodeWithContentDescription("关闭贴条评论").performClick()
         compose.runOnIdle { assertTrue(closed) }
         compose.onNodeWithText("放弃这次回复？").assertDoesNotExist()
+    }
+
+    @Test fun replySupportsStrikethroughColorDockAndAnonymousSwitch() {
+        var state by mutableStateOf(session().copy(
+            input = androidx.compose.ui.text.input.TextFieldValue("重点", androidx.compose.ui.text.TextRange(0, 2)),
+        ))
+        compose.setContent { NagiTheme {
+            ReplyPopup(
+                session = state,
+                preferences = ReadingPreferences(),
+                edit = { state = state.copy(input = it) },
+                send = {},
+                retry = {},
+                preview = { state = state.copy(preview = !state.preview) },
+                close = {},
+                onAnonymousChange = { state = state.copy(anonymous = it) },
+            )
+        } }
+        compose.onNodeWithContentDescription("删除线").performClick()
+        compose.runOnIdle { assertEquals("[del]重点[/del]", state.input.text) }
+
+        compose.runOnIdle {
+            state = state.copy(input = androidx.compose.ui.text.input.TextFieldValue("高亮", androidx.compose.ui.text.TextRange(0, 2)))
+        }
+        compose.onNodeWithContentDescription("字体颜色").performClick()
+        compose.onNodeWithContentDescription("选择字体颜色").assertIsDisplayed()
+        compose.onNodeWithContentDescription("字体颜色：红色").performClick()
+        compose.runOnIdle { assertEquals("[color=red]高亮[/color]", state.input.text) }
+
+        compose.onNodeWithContentDescription("匿名发布").assertIsOff().performClick().assertIsOn()
+        compose.runOnIdle { assertTrue(state.anonymous) }
+        compose.onNodeWithText("匿名发送").assertIsDisplayed()
     }
     @Test fun quoteContextIsReadOnlyAndUserInputStartsEmpty() {
         var state by mutableStateOf(session().copy(target = session().target.copy(action = PublishAction.QUOTE),
@@ -122,18 +157,23 @@ class ReplyPopupTest {
         val image = compose.onNodeWithContentDescription("图片").assertIsDisplayed()
         val smile = compose.onNodeWithContentDescription("表情").assertIsDisplayed()
         val bold = compose.onNodeWithContentDescription("加粗").assertIsDisplayed()
+        val strike = compose.onNodeWithContentDescription("删除线").assertIsDisplayed()
+        val color = compose.onNodeWithContentDescription("字体颜色").assertIsDisplayed()
         val preview = compose.onNodeWithContentDescription("预览").assertIsDisplayed()
         val send = compose.onNodeWithText("发送").assertIsDisplayed()
 
-        listOf("图片", "表情", "加粗", "预览").forEach { label ->
+        listOf("图片", "表情", "加粗", "删除线", "字体颜色").forEach { label ->
             compose.onNodeWithText(label).assertDoesNotExist()
         }
 
-        val actionBounds = listOf(image, smile, bold, preview).map { it.getUnclippedBoundsInRoot() }
+        val actionBounds = listOf(image, smile, bold, strike, color).map { it.getUnclippedBoundsInRoot() }
         actionBounds.forEach { bounds ->
             assertTrue((bounds.right - bounds.left).value >= 48f)
             assertTrue((bounds.bottom - bounds.top).value >= 48f)
         }
+        val previewBounds = preview.getUnclippedBoundsInRoot()
+        assertTrue((previewBounds.right - previewBounds.left).value >= 48f)
+        assertTrue((previewBounds.bottom - previewBounds.top).value >= 48f)
         val sendBounds = send.getUnclippedBoundsInRoot()
         val minCenterY = (actionBounds + sendBounds).minOf { (it.top.value + it.bottom.value) / 2f }
         val maxCenterY = (actionBounds + sendBounds).maxOf { (it.top.value + it.bottom.value) / 2f }

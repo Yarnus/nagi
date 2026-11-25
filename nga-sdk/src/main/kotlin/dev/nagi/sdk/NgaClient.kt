@@ -585,12 +585,16 @@ internal class HttpNgaClient(
         exchange(
             requireAuth = true, isWrite = true, recordDiagnostic = diagnostic,
             request = { api, ctx ->
-                api.publishWrite(query() + publishParameters(request.target), mapOf(
-                    "step" to "2", "post_subject" to escapeNgaSubmission(request.title),
-                    "post_content" to escapeNgaSubmission(request.content),
-                    "attachments" to request.attachments.joinToString("\t") { it.name },
-                    "attachments_check" to request.attachments.joinToString("\t") { it.check },
-                ), ctx).writeBody()
+                api.publishWrite(query() + publishParameters(request.target), buildMap {
+                    put("step", "2")
+                    put("post_subject", escapeNgaSubmission(request.title))
+                    put("post_content", escapeNgaSubmission(request.content))
+                    put("attachments", request.attachments.joinToString("\t") { it.name })
+                    put("attachments_check", request.attachments.joinToString("\t") { it.check })
+                    if (request.anonymous && request.target.action != PublishAction.MODIFY) {
+                        put("anony", "1")
+                    }
+                }, ctx).writeBody()
             },
             parse = { NgaParser.publish(it, request.target) },
         )

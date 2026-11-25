@@ -206,6 +206,7 @@ enum class CapsuleStyle {
     FrostedGold,
     SelectedGold,
     SolidGold,
+    WarmGold,
     Destructive,
 }
 
@@ -231,6 +232,11 @@ fun CapsuleButton(
         CapsuleStyle.FrostedGold -> Triple(tokens.frostedChrome, tokens.goldText, tokens.cardBorder)
         CapsuleStyle.SelectedGold -> Triple(tokens.goldContainer, tokens.goldText, tokens.goldBorder)
         CapsuleStyle.SolidGold -> Triple(tokens.goldSolidFill, tokens.goldSolidContent, tokens.goldSolidFill)
+        CapsuleStyle.WarmGold -> if (tokens.isDark) {
+            Triple(tokens.goldAccent, tokens.goldSolidText, tokens.goldText)
+        } else {
+            Triple(Color(0xFF966B1F), Color.White, tokens.goldText)
+        }
         CapsuleStyle.Destructive -> Triple(tokens.destructiveContainer, tokens.destructive, tokens.destructive.copy(alpha = 0.35f))
     }
 
@@ -265,7 +271,7 @@ fun CapsuleButton(
                     enabled = enabled,
                     pressedScale = 0.965f,
                     shape = CircleShape,
-                    overlayColor = if (style == CapsuleStyle.SolidGold) {
+                    overlayColor = if (style == CapsuleStyle.SolidGold || style == CapsuleStyle.WarmGold) {
                         if (tokens.isDark) Color.Black.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.14f)
                     } else null,
                 )
@@ -291,7 +297,7 @@ fun CapsuleButton(
                 text = text,
                 modifier = if (contentDescription != null) Modifier.clearAndSetSemantics {} else Modifier,
                 style = NagiThemeTokens.typography.capsuleButton.copy(
-                    fontWeight = if (style == CapsuleStyle.SelectedGold || style == CapsuleStyle.SolidGold) FontWeight.SemiBold else FontWeight.Medium,
+                    fontWeight = if (style in setOf(CapsuleStyle.SelectedGold, CapsuleStyle.SolidGold, CapsuleStyle.WarmGold)) FontWeight.SemiBold else FontWeight.Medium,
                 ),
                 color = if (enabled && style == CapsuleStyle.SolidGold) tokens.goldSolidText else effectiveFg,
                 maxLines = 1,

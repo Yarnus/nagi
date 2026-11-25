@@ -40,6 +40,16 @@ data class CloudForumFavoriteOrder(
 const val MAX_HISTORY_ENTRIES = 100
 const val MAX_UNFAVORITED_POSITIONS = 500
 const val MAX_UNFAVORITED_READ_STATES = 2000
+const val MAX_RECENT_SMILES = 24
+
+@Entity(
+    tableName = "recent_smiles",
+    indices = [Index(value = ["usedAt", "smileKey"])],
+)
+data class RecentSmileEntity(
+    @PrimaryKey val smileKey: String,
+    val usedAt: Long,
+)
 
 @Entity(
     tableName = "topic_read_states",
@@ -221,6 +231,22 @@ interface ReadingDao {
     }
     @Query("DELETE FROM topic_read_states WHERE topicId NOT IN (SELECT topicId FROM favorites)")
     suspend fun clearUnfavoritedReadStates()
+    @Query("SELECT * FROM recent_smiles ORDER BY usedAt DESC, smileKey ASC LIMIT :limit")
+    fun recentSmiles(limit: Int = MAX_RECENT_SMILES): kotlinx.coroutines.flow.Flow<List<RecentSmileEntity>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertRecentSmile(item: RecentSmileEntity)
+    @Query(
+        "DELETE FROM recent_smiles WHERE smileKey NOT IN " +
+            "(SELECT smileKey FROM recent_smiles ORDER BY usedAt DESC, smileKey ASC LIMIT :limit)",
+    )
+    suspend fun pruneRecentSmiles(limit: Int = MAX_RECENT_SMILES)
+    @Query("DELETE FROM recent_smiles")
+    suspend fun clearRecentSmiles()
+    @Transaction
+    suspend fun recordRecentSmile(smileKey: String, usedAt: Long) {
+        upsertRecentSmile(RecentSmileEntity(smileKey, usedAt))
+        pruneRecentSmiles()
+    }
 }
 
 @Database(
@@ -233,13 +259,20 @@ interface ReadingDao {
         LocalNotification::class,
         LocalUserTag::class,
         TopicReadState::class,
+        RecentSmileEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = false,
 )
 abstract class ReadingDatabase : RoomDatabase() {
     abstract fun readingDao(): ReadingDao
     companion object {
+        val MIGRATION_9_10 = object : androidx.room.migration.Migration(9, 10) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `recent_smiles` (`smileKey` TEXT NOT NULL, `usedAt` INTEGER NOT NULL, PRIMARY KEY(`smileKey`))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_recent_smiles_usedAt_smileKey` ON `recent_smiles` (`usedAt`, `smileKey`)")
+            }
+        }
         val MIGRATION_8_9 = object : androidx.room.migration.Migration(8, 9) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_history_viewedAt_topicId` ON `history` (`viewedAt`, `topicId`)")

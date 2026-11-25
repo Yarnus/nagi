@@ -76,10 +76,10 @@ class SmileDeviceTest {
         } }
         compose.onNodeWithText("before after").performClick().performTextInputSelection(TextRange(7, 6))
         compose.onNodeWithText("表情").performClick()
-        compose.onNodeWithText("选择表情").assertIsDisplayed()
+        compose.onNodeWithContentDescription("选择表情").assertIsDisplayed()
         compose.onNodeWithContentDescription("插入表情：blink").performClick()
         capture("picker")
-        compose.onNodeWithText("返回输入").performClick()
+        compose.onNodeWithContentDescription("返回输入").performClick()
         compose.onNodeWithText("before[s:ac:blink]after").assertIsDisplayed().performTextInput("!")
         compose.runOnIdle { assertEquals("before[s:ac:blink]!after", state.content) }
         compose.onNodeWithText("发送").assertIsDisplayed()

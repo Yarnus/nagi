@@ -1,18 +1,30 @@
 package dev.nagi.app.ui.post
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.SheetValue
@@ -22,21 +34,81 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.nagi.app.data.ReadingPreferences
+import dev.nagi.app.ui.components.GoldSwitch
+import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
 import dev.nagi.sdk.ContentParser
+import dev.nagi.sdk.NgaSmile
+import dev.nagi.sdk.NgaSmiles
+
+private val INLINE_SMILE_TAG = Regex("""\[s:([^\]\s]+)\]""")
+
+private class SmileHighlightVisualTransformation(
+    private val smileColor: Color,
+    private val smileBackground: Color,
+) : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val raw = text.text
+        if ('[' !in raw) return TransformedText(text, OffsetMapping.Identity)
+        val styled = buildAnnotatedString {
+            append(raw)
+            INLINE_SMILE_TAG.findAll(raw).forEach { match ->
+                if (NgaSmiles.resolve(match.groupValues[1]) != null) {
+                    addStyle(
+                        SpanStyle(
+                            color = smileColor,
+                            background = smileBackground,
+                            fontWeight = FontWeight.Medium,
+                        ),
+                        match.range.first,
+                        match.range.last + 1,
+                    )
+                }
+            }
+        }
+        return TransformedText(styled, OffsetMapping.Identity)
+    }
+}
+
+internal fun extractInsertedSmiles(text: String): List<NgaSmile> {
+    if ('[' !in text) return emptyList()
+    val seen = LinkedHashSet<String>()
+    val result = mutableListOf<NgaSmile>()
+    INLINE_SMILE_TAG.findAll(text).forEach { match ->
+        val smile = NgaSmiles.resolve(match.groupValues[1]) ?: return@forEach
+        if (seen.add(smile.key)) result += smile
+    }
+    return result
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,7 +131,7 @@ internal fun EditorPopup(dismiss: () -> Unit, content: @Composable () -> Unit) {
             scrimColor = Color.Black.copy(alpha = 0.32f),
             properties = ModalBottomSheetProperties(shouldDismissOnBackPress = false),
         ) {
-            BackHandler { dismiss() }
+            androidx.activity.compose.BackHandler { dismiss() }
             content()
         }
     } else {
@@ -99,6 +171,12 @@ internal fun ComposerInput(
     preferences: ReadingPreferences,
     modifier: Modifier = Modifier,
     minLines: Int = 5,
+    fillArea: Boolean = false,
+    focusRequester: FocusRequester? = null,
+    onInputTap: (() -> Unit)? = null,
+    onTogglePreview: (() -> Unit)? = null,
+    anonymous: Boolean = false,
+    onAnonymousChange: ((Boolean) -> Unit)? = null,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
@@ -106,47 +184,176 @@ internal fun ComposerInput(
         fontSize = preferences.fontSize.sp,
         lineHeight = preferences.effectiveLineHeight.sp,
     )
-    if (preview) {
-        Column(
-            modifier = modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(Space.lg),
-        ) {
-            SelectionContainer {
-                ContentBlocks(
-                    blocks = remember(previewContent) { ContentParser.parse(previewContent) },
-                    preferences = preferences,
-                    onImage = {},
+    val insertedSmiles = remember(value.text) { extractInsertedSmiles(value.text) }
+    val showSubrow = (!preview && insertedSmiles.isNotEmpty()) || onAnonymousChange != null
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        if (preview) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = fillArea)
+                    .verticalScroll(rememberScrollState())
+                    .padding(Space.lg),
+            ) {
+                SelectionContainer {
+                    ContentBlocks(
+                        blocks = remember(previewContent) { ContentParser.parse(previewContent) },
+                        preferences = preferences,
+                        onImage = {},
+                    )
+                }
+            }
+        } else {
+            val interactionSource = remember { MutableInteractionSource() }
+            LaunchedEffect(interactionSource, onInputTap) {
+                if (onInputTap != null) {
+                    interactionSource.interactions.collect { interaction ->
+                        if (interaction is PressInteraction.Press) onInputTap()
+                    }
+                }
+            }
+            val highlightTransformation = remember(colors.goldText, colors.goldContainer) {
+                SmileHighlightVisualTransformation(colors.goldText, colors.goldContainer)
+            }
+            TextField(
+                value = value,
+                onValueChange = edit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = fillArea)
+                    .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+                interactionSource = interactionSource,
+                placeholder = {
+                    Text(
+                        text = placeholder,
+                        style = editorBodyStyle,
+                        color = colors.textSecondary,
+                    )
+                },
+                minLines = minLines,
+                maxLines = 12,
+                readOnly = readOnly,
+                visualTransformation = highlightTransformation,
+                textStyle = editorBodyStyle.copy(color = colors.textPrimary),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = colors.cardSurface,
+                    unfocusedContainerColor = colors.cardSurface,
+                    disabledContainerColor = colors.cardSurface,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
+                    cursorColor = colors.goldAccent,
+                ),
+            )
+        }
+
+        if (showSubrow) {
+            ComposerCardSubrow(
+                smiles = if (preview) emptyList() else insertedSmiles,
+                onPreview = onTogglePreview,
+                anonymous = anonymous,
+                onAnonymousChange = onAnonymousChange,
+                anonymousEnabled = !readOnly,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ComposerCardSubrow(
+    smiles: List<NgaSmile>,
+    onPreview: (() -> Unit)?,
+    anonymous: Boolean,
+    onAnonymousChange: ((Boolean) -> Unit)?,
+    anonymousEnabled: Boolean,
+) {
+    val colors = NagiThemeTokens.colors
+    val typography = NagiThemeTokens.typography
+    HorizontalDivider(thickness = 0.5.dp, color = colors.cardBorder)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.cardSurface)
+            .padding(horizontal = Space.md, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Space.sm),
+    ) {
+        if (smiles.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .then(
+                        if (onPreview != null) {
+                            Modifier
+                                .heightIn(min = 48.dp)
+                                .clickable(
+                                    role = Role.Button,
+                                    onClickLabel = "预览已插入的表情",
+                                    onClick = onPreview,
+                                )
+                                .semantics(mergeDescendants = true) {
+                                    contentDescription = "已插入 ${smiles.size} 个表情，点击预览"
+                                }
+                        } else {
+                            Modifier.semantics(mergeDescendants = true) {
+                                contentDescription = "已插入 ${smiles.size} 个表情"
+                            }
+                        },
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = "回显",
+                    style = typography.metadata,
+                    color = colors.textSecondary,
+                    modifier = Modifier.clearAndSetSemantics {},
+                )
+                Row(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .horizontalScroll(rememberScrollState())
+                        .clearAndSetSemantics {},
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    smiles.take(8).forEach { smile ->
+                        SmileImage(
+                            smile = smile,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+            }
+        } else {
+            Box(Modifier.weight(1f))
+        }
+
+        if (onAnonymousChange != null) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Icon(
+                    imageVector = NagiIcons.AnonymousMask,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = if (anonymous) colors.goldText else colors.textSecondary,
+                )
+                Text(
+                    text = "匿名",
+                    style = typography.metadata,
+                    color = if (anonymous) colors.goldText else colors.textSecondary,
+                )
+                GoldSwitch(
+                    checked = anonymous,
+                    onCheckedChange = onAnonymousChange,
+                    enabled = anonymousEnabled,
+                    contentDescription = "匿名发布",
                 )
             }
         }
-    } else {
-        TextField(
-            value = value,
-            onValueChange = edit,
-            modifier = modifier.fillMaxWidth(),
-            placeholder = {
-                Text(
-                    text = placeholder,
-                    style = editorBodyStyle,
-                    color = colors.textSecondary,
-                )
-            },
-            minLines = minLines,
-            maxLines = 12,
-            readOnly = readOnly,
-            textStyle = editorBodyStyle.copy(color = colors.textPrimary),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = colors.cardSurface,
-                unfocusedContainerColor = colors.cardSurface,
-                disabledContainerColor = colors.cardSurface,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                disabledIndicatorColor = Color.Transparent,
-                cursorColor = colors.goldAccent,
-            ),
-        )
     }
 }
 
@@ -163,3 +370,9 @@ internal fun wrapBbcodeSelection(field: TextFieldValue, openTag: String, closeTa
 
 internal fun boldSelection(field: TextFieldValue): TextFieldValue =
     wrapBbcodeSelection(field, "[b]", "[/b]")
+
+internal fun strikeSelection(field: TextFieldValue): TextFieldValue =
+    wrapBbcodeSelection(field, "[del]", "[/del]")
+
+internal fun colorSelection(field: TextFieldValue, colorName: String): TextFieldValue =
+    wrapBbcodeSelection(field, "[color=$colorName]", "[/color]")

@@ -533,6 +533,7 @@ fun ReaderScreen(
             close = replies::close,
             expandContext = replies::expandContext,
             uploadImage = replies::uploadImage,
+            onAnonymousChange = replies::setAnonymous,
         )
     }
     if (viewerImages.isNotEmpty()) {

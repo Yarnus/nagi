@@ -337,6 +337,65 @@ object NagiIcons {
         lineTo(6.5f, 19.5f); lineTo(6.5f, 4.5f)
     }
 
+    val Strikethrough: ImageVector = strokeIcon("Strikethrough") {
+        moveTo(16.2f, 7.2f)
+        curveTo(15.6f, 5.8f, 14.1f, 5f, 12.1f, 5f)
+        curveTo(9.7f, 5f, 8f, 6.2f, 8f, 8.1f)
+        curveTo(8f, 9.5f, 8.8f, 10.3f, 10.4f, 10.9f)
+        moveTo(4.5f, 12f); lineTo(19.5f, 12f)
+        moveTo(15.8f, 13.6f)
+        curveTo(16.3f, 14.1f, 16.6f, 14.8f, 16.6f, 15.6f)
+        curveTo(16.6f, 17.6f, 14.8f, 19f, 12.1f, 19f)
+        curveTo(9.8f, 19f, 8.1f, 18.1f, 7.4f, 16.6f)
+    }
+
+    val Palette: ImageVector = strokeIcon("Palette") {
+        moveTo(12f, 3.8f)
+        arcTo(8.2f, 8.2f, 0f, isMoreThanHalf = true, isPositiveArc = false, 12f, 20.2f)
+        curveTo(13.2f, 20.2f, 14f, 19.4f, 14f, 18.3f)
+        curveTo(14f, 17.7f, 13.8f, 17.2f, 13.4f, 16.8f)
+        curveTo(13f, 16.4f, 13.2f, 15.7f, 13.8f, 15.6f)
+        lineTo(15.4f, 15.6f)
+        arcTo(4.6f, 4.6f, 0f, isMoreThanHalf = false, isPositiveArc = false, 20f, 11f)
+        curveTo(20f, 6.8f, 16.4f, 3.8f, 12f, 3.8f)
+        moveTo(8.2f, 10.2f); lineTo(8.2f, 10.4f)
+        moveTo(11.5f, 7.8f); lineTo(11.5f, 8f)
+        moveTo(15.3f, 9.4f); lineTo(15.3f, 9.6f)
+    }
+
+    val Keyboard: ImageVector = strokeIcon("Keyboard") {
+        moveTo(4.5f, 6f); lineTo(19.5f, 6f)
+        curveTo(20.6f, 6f, 21.5f, 6.9f, 21.5f, 8f)
+        lineTo(21.5f, 16f)
+        curveTo(21.5f, 17.1f, 20.6f, 18f, 19.5f, 18f)
+        lineTo(4.5f, 18f)
+        curveTo(3.4f, 18f, 2.5f, 17.1f, 2.5f, 16f)
+        lineTo(2.5f, 8f)
+        curveTo(2.5f, 6.9f, 3.4f, 6f, 4.5f, 6f); close()
+        moveTo(6.8f, 10f); lineTo(6.9f, 10f)
+        moveTo(10.3f, 10f); lineTo(10.4f, 10f)
+        moveTo(13.7f, 10f); lineTo(13.8f, 10f)
+        moveTo(17.2f, 10f); lineTo(17.3f, 10f)
+        moveTo(8f, 14f); lineTo(16f, 14f)
+    }
+
+    val AnonymousMask: ImageVector = strokeIcon("AnonymousMask") {
+        moveTo(4.5f, 6.5f)
+        curveTo(7f, 5.1f, 10f, 5.1f, 12f, 6.5f)
+        lineTo(12f, 13.7f)
+        curveTo(12f, 16.9f, 9.8f, 19.1f, 8.25f, 19.8f)
+        curveTo(6.7f, 19.1f, 4.5f, 16.9f, 4.5f, 13.7f)
+        close()
+        moveTo(12f, 8.2f)
+        curveTo(14f, 7.1f, 16.9f, 7.1f, 19.5f, 8.2f)
+        lineTo(19.5f, 13.7f)
+        curveTo(19.5f, 16.9f, 17.3f, 19.1f, 15.75f, 19.8f)
+        curveTo(14.95f, 19.44f, 14.05f, 18.75f, 13.35f, 17.8f)
+        moveTo(7.2f, 10.6f); lineTo(8.8f, 10.6f)
+        moveTo(15f, 11.4f); lineTo(16.6f, 11.4f)
+        moveTo(7.2f, 14.3f); curveTo(7.9f, 14.9f, 8.7f, 14.9f, 9.4f, 14.3f)
+    }
+
     val Quote: ImageVector = strokeIcon("Quote") {
         moveTo(9.5f, 7.5f); lineTo(6.5f, 12f); lineTo(6.5f, 16.5f); lineTo(10.5f, 16.5f); lineTo(10.5f, 12f); lineTo(7.5f, 12f)
         moveTo(17.5f, 7.5f); lineTo(14.5f, 12f); lineTo(14.5f, 16.5f); lineTo(18.5f, 16.5f); lineTo(18.5f, 12f); lineTo(15.5f, 12f)

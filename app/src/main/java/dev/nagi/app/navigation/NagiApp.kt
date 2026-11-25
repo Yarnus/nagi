@@ -123,6 +123,15 @@ fun NagiApp(
     val tags = loadedTags.takeIf { !account.busy && it.revision == account.revision && it.userId == account.userId }
         ?: UserTagsState(account.revision, account.userId)
     val tagAccess = UserTagAccess(tags) { userId, text, done -> tagsVm.save(tags, userId, text, done) }
+    val recentSmilesVm: dev.nagi.app.viewmodel.RecentSmilesViewModel = hiltViewModel()
+    val loadedRecentSmiles by recentSmilesVm.state.collectAsStateWithLifecycle()
+    val recentSmiles = loadedRecentSmiles.takeIf { !account.busy && it.revision == account.revision && it.userId == account.userId }
+        ?: dev.nagi.app.viewmodel.RecentSmilesState(account.revision, account.userId)
+    val recentSmilesAccess = dev.nagi.app.ui.post.RecentSmilesAccess(
+        smiles = recentSmiles.smiles,
+        record = recentSmilesVm::record,
+        isBackedByStore = true,
+    )
     val updateVm: AppUpdateViewModel = hiltViewModel()
     val appUpdate by updateVm.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -148,6 +157,7 @@ fun NagiApp(
         LocalAccountIdentity provides identity,
         LocalNotifications provides notifications,
         LocalUserTags provides tagAccess,
+        dev.nagi.app.ui.post.LocalRecentSmiles provides recentSmilesAccess,
         LocalAppUpdate provides appUpdate,
         LocalHardwareBlurAllowed provides hardwareBlur,
     ) {

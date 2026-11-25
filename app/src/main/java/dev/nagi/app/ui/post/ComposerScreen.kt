@@ -2,6 +2,7 @@ package dev.nagi.app.ui.post
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,8 +35,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
@@ -71,6 +74,7 @@ internal fun ComposerScreen(
     togglePreview: (() -> Unit)? = null,
     initialRecipients: String = "",
     uploadImage: ((suspend () -> dev.nagi.sdk.ImageUpload) -> Unit)? = null,
+    onAnonymousChange: ((Boolean) -> Unit)? = null,
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
@@ -84,6 +88,16 @@ internal fun ComposerScreen(
     val preview = if (togglePreview != null) state.preview else localPreview
     var showFormatChips by remember { mutableStateOf(false) }
     var confirmClose by remember { mutableStateOf(false) }
+    var dockPanel by remember { mutableStateOf(EditorDockPanel.NONE) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val editable = state.phase in setOf(ComposePhase.Editing, ComposePhase.Rejected)
+    LaunchedEffect(editable) {
+        if (!editable) dockPanel = EditorDockPanel.NONE
+    }
+    LaunchedEffect(preview) {
+        if (preview && dockPanel == EditorDockPanel.COLOR) dockPanel = EditorDockPanel.NONE
+    }
     var field by remember {
         mutableStateOf(TextFieldValue(state.content, TextRange(state.selectionStart, state.selection)))
     }
@@ -112,6 +126,13 @@ internal fun ComposerScreen(
             if (togglePreview != null) togglePreview() else localPreview = target
         }
     }
+    val returnToKeyboard = {
+        dockPanel = EditorDockPanel.NONE
+        if (!preview) {
+            runCatching { focusRequester.requestFocus() }
+            keyboard?.show()
+        }
+    }
     val dismiss = {
         if (state.phase != ComposePhase.Submitting && !state.images.uploading) {
             if (
@@ -126,9 +147,11 @@ internal fun ComposerScreen(
         }
     }
     val context = LocalContext.current
-    val editable = state.phase in setOf(ComposePhase.Editing, ComposePhase.Rejected)
 
     val body: @Composable () -> Unit = {
+        BackHandler(enabled = dockPanel != EditorDockPanel.NONE) {
+            dockPanel = EditorDockPanel.NONE
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -159,11 +182,11 @@ internal fun ComposerScreen(
                 CapsuleButton(
                     text = if (state.target?.action == PublishAction.MODIFY) {
                         if (state.phase == ComposePhase.Submitting) "保存中…" else "保存修改"
-                    } else if (state.phase == ComposePhase.Submitting) "发送中…" else "发送",
+                    } else if (state.phase == ComposePhase.Submitting) "发送中…" else if (state.anonymous) "匿名发送" else "发送",
                     onClick = send,
                     icon = if (state.target?.action == PublishAction.MODIFY) NagiIcons.Check else NagiIcons.Send,
                     enabled = state.canSend,
-                    style = CapsuleStyle.SolidGold,
+                    style = CapsuleStyle.WarmGold,
                 )
             }
 
@@ -264,28 +287,68 @@ internal fun ComposerScreen(
                     previewContent = state.content,
                     preferences = preferences,
                     modifier = if (shortForm) Modifier.heightIn(max = 260.dp) else Modifier.fillMaxSize(),
+                    fillArea = !shortForm,
+                    focusRequester = focusRequester,
+                    onInputTap = { dockPanel = EditorDockPanel.NONE },
+                    onTogglePreview = { setPreviewMode(!preview) },
+                    anonymous = state.anonymous,
+                    onAnonymousChange = if (!state.privateMessage && state.target?.action != PublishAction.MODIFY) {
+                        onAnonymousChange
+                    } else null,
                 )
             }
 
             state.images.error?.let { Text(it, style = typography.metadata, color = colors.destructive) }
-            if (!preview) {
+            if (!preview || dockPanel == EditorDockPanel.SMILE) {
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(Space.sm),
                     verticalArrangement = Arrangement.spacedBy(Space.xs),
                 ) {
-                    if (uploadImage != null && state.target?.action == PublishAction.NEW_TOPIC) ImageUploadButton(
+                    if (!preview && uploadImage != null && state.target?.action == PublishAction.NEW_TOPIC) ImageUploadButton(
                         enabled = editable && !state.images.blocked, busy = state.images.uploading,
                         scopeKey = state.target.toString(), upload = uploadImage,
                     )
-                    SmilePickerButton(value = field, edit = update, enabled = editable)
-                    if (showFormatChips) {
+                    SmilePickerButton(
+                        open = dockPanel == EditorDockPanel.SMILE,
+                        enabled = editable,
+                        onClick = {
+                            if (dockPanel == EditorDockPanel.SMILE) {
+                                returnToKeyboard()
+                            } else {
+                                keyboard?.hide()
+                                dockPanel = EditorDockPanel.SMILE
+                            }
+                        },
+                    )
+                    if (!preview && showFormatChips) {
                         CapsuleButton(
                             text = "加粗",
                             onClick = { update(boldSelection(field)) },
                             icon = NagiIcons.Bold,
                             enabled = editable,
                             style = CapsuleStyle.Neutral,
+                        )
+                        CapsuleButton(
+                            text = "删除线",
+                            onClick = { update(strikeSelection(field)) },
+                            icon = NagiIcons.Strikethrough,
+                            enabled = editable,
+                            style = CapsuleStyle.Neutral,
+                        )
+                        CapsuleButton(
+                            text = "颜色",
+                            onClick = {
+                                if (dockPanel == EditorDockPanel.COLOR) {
+                                    returnToKeyboard()
+                                } else {
+                                    keyboard?.hide()
+                                    dockPanel = EditorDockPanel.COLOR
+                                }
+                            },
+                            icon = NagiIcons.Palette,
+                            enabled = editable,
+                            style = if (dockPanel == EditorDockPanel.COLOR) CapsuleStyle.SelectedGold else CapsuleStyle.Neutral,
                         )
                         CapsuleButton(
                             text = "引用",
@@ -341,6 +404,15 @@ internal fun ComposerScreen(
                     }
                 },
             )
+
+            if (dockPanel != EditorDockPanel.NONE && editable) {
+                InlineEditorDock(
+                    panel = dockPanel,
+                    onReturnToKeyboard = returnToKeyboard,
+                    onSelectSmile = { smile -> if (editable) update(insertSmile(field, smile)) },
+                    onSelectColor = { colorName -> if (!preview && editable) update(colorSelection(field, colorName)) },
+                )
+            }
         }
     }
 

@@ -828,6 +828,25 @@ class FakeDao : ReadingDao {
         val favIds = favorites.value.mapTo(HashSet()) { it.topicId }
         readStates.update { current -> current.filterKeys { it in favIds } }
     }
+    private val recentSmiles = MutableStateFlow<List<RecentSmileEntity>>(emptyList())
+    override fun recentSmiles(limit: Int): Flow<List<RecentSmileEntity>> =
+        recentSmiles.map { list ->
+            list.sortedWith(compareByDescending<RecentSmileEntity> { it.usedAt }.thenBy { it.smileKey }).take(limit)
+        }
+    override suspend fun upsertRecentSmile(item: RecentSmileEntity) {
+        recentSmiles.update { old ->
+            (old.filterNot { it.smileKey == item.smileKey } + item)
+                .sortedWith(compareByDescending<RecentSmileEntity> { it.usedAt }.thenBy { it.smileKey })
+        }
+    }
+    override suspend fun pruneRecentSmiles(limit: Int) {
+        recentSmiles.update { old ->
+            old.sortedWith(compareByDescending<RecentSmileEntity> { it.usedAt }.thenBy { it.smileKey }).take(limit)
+        }
+    }
+    override suspend fun clearRecentSmiles() {
+        recentSmiles.value = emptyList()
+    }
 }
 
 class FakeDaoProvider : ReadingDaoProvider {

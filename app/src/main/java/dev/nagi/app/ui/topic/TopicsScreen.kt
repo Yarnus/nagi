@@ -200,6 +200,7 @@ fun TopicsScreen(
             editValue = composer::editValue,
             togglePreview = composer::preview,
             uploadImage = composer::uploadImage,
+            onAnonymousChange = composer::setAnonymous,
         )
     }
 

@@ -60,8 +60,8 @@ class SmilePickerTest {
         assertEquals("${result.text}${smile.code}", insertSmile(result.copy(selection = TextRange(result.text.length)), smile).text)
     }
 
-    @Test fun fullEditorInsertsAtSelectionAndKeepsRemainingDraft() = composer("light", 1f, false)
-    @Test fun messageEditorUsesTheSamePicker() = composer("dark", 1f, true)
+    @Test fun fullEditorInsertsAtSelectionKeepsInputVisibleAndRecordsRecent() = composer("light", 1f, false)
+    @Test fun messageEditorUsesTheSameInlinePicker() = composer("dark", 1f, true)
     @Config(qualifiers = "w320dp-h850dp")
     @Test fun pickerWorksAtNarrowWidthAndTwoTimesFontScale() = composer("light", 2f, false)
 
@@ -76,42 +76,62 @@ class SmilePickerTest {
             })
         } }
         compose.onNodeWithText("表情").performClick()
-        compose.onNodeWithText("选择表情").assertExists()
+        compose.onNodeWithContentDescription("选择表情").assertExists()
+        // Input box stays visible above the inline picker instead of being obscured.
+        compose.onNodeWithText("前选中后").assertIsDisplayed()
         val entry = compose.onNodeWithContentDescription("插入表情：blink")
         entry.assertIsDisplayed()
         val bounds = entry.getUnclippedBoundsInRoot()
         assertTrue((bounds.right - bounds.left).value >= 48f); assertTrue((bounds.bottom - bounds.top).value >= 48f)
         entry.performClick()
         compose.runOnIdle { assertEquals("前[s:ac:blink]后", state.content) }
+        compose.onNodeWithText(state.content).assertIsDisplayed()
         compose.onNodeWithContentDescription("表情分类").performScrollToNode(hasText("默认"))
         compose.onNodeWithText("默认").performClick()
         compose.onNodeWithContentDescription("插入表情：1").performClick()
         compose.runOnIdle { assertEquals("前[s:ac:blink][s:0:1]后", state.content) }
+        compose.onNodeWithContentDescription("已插入 2 个表情，点击预览").assertIsDisplayed()
+
+        // Recent tab records both inserted smiles in most-recent-first order.
+        compose.onNodeWithContentDescription("表情分类").performScrollToNode(hasText("最近"))
+        compose.onNodeWithText("最近").performClick()
+        compose.onNodeWithContentDescription("插入表情：1").assertIsDisplayed()
+        compose.onNodeWithContentDescription("插入表情：blink").assertIsDisplayed()
+
         capture("smile-picker-$theme-$scale")
-        compose.onNodeWithText("返回输入").performClick()
+        compose.onNodeWithContentDescription("返回输入").performClick()
         compose.onNodeWithText(state.content).assertExists()
-        compose.onNodeWithText("选择表情").assertDoesNotExist()
+        compose.onNodeWithContentDescription("选择表情").assertDoesNotExist()
         compose.onNodeWithText("预览").performClick()
         compose.onNodeWithContentDescription("表情：blink").assertExists()
     }
 
-    @Test fun replyPickerNeverChangesServerQuotePrefix() = reply(PublishAction.QUOTE)
-    @Test fun commentPickerUsesTheSameInsertion() = reply(PublishAction.COMMENT)
+    @Test fun replyPickerKeepsInputVisibleAndNeverChangesServerQuotePrefix() = reply(PublishAction.QUOTE)
+    @Test fun commentPickerSupportsInlineEchoAndPreview() = reply(PublishAction.COMMENT)
 
     private fun reply(action: PublishAction) {
         var session by mutableStateOf(ReplySession(PublishTarget(action, topicId = "123", postId = "12"), "回复",
             prefill = "[quote]服务器原文[/quote]", input = TextFieldValue("前后", TextRange(1)), phase = ComposePhase.Editing))
         compose.setContent { NagiTheme {
-            ReplyPopup(session, ReadingPreferences(), { session = session.copy(input = it) }, {}, {}, {}, {})
+            ReplyPopup(session, ReadingPreferences(), { session = session.copy(input = it) }, {}, {},
+                { session = session.copy(preview = !session.preview) }, {})
         } }
         compose.onNodeWithContentDescription("表情").performClick()
+        compose.onNodeWithContentDescription("选择表情").assertExists()
+        compose.onNodeWithText("前后").assertIsDisplayed()
         compose.onNodeWithContentDescription("插入表情：blink").performClick()
-        compose.onNodeWithText("返回输入").performClick()
         compose.runOnIdle {
             assertEquals("[quote]服务器原文[/quote]", session.prefill)
             assertEquals("前[s:ac:blink]后", session.input.text)
             assertTrue(session.content.startsWith(session.prefill))
         }
+        compose.onNodeWithText("前[s:ac:blink]后").assertIsDisplayed()
+        // Switch straight to preview while keeping the inline emoji dock visible.
+        compose.onNodeWithContentDescription("预览").performClick()
+        compose.onNodeWithContentDescription("表情：blink").assertIsDisplayed()
+        compose.onNodeWithContentDescription("选择表情").assertExists()
+        compose.onNodeWithContentDescription("返回输入").performClick()
+        compose.onNodeWithContentDescription("选择表情").assertDoesNotExist()
     }
 
     @Test fun unavailableEditorStatesDisablePickerAndCloseAnOpenPanel() {
@@ -120,10 +140,10 @@ class SmilePickerTest {
             ComposerScreen(state, ReadingPreferences(), { _, _ -> }, {}, {}, {})
         } }
         compose.onNodeWithText("表情").performClick()
-        compose.onNodeWithText("选择表情").assertExists()
+        compose.onNodeWithContentDescription("选择表情").assertExists()
         listOf(ComposePhase.Submitting, ComposePhase.Unconfirmed, ComposePhase.Preparing, ComposePhase.Confirmed).forEach { phase ->
             compose.runOnIdle { state = state.copy(phase = phase) }
-            compose.onNodeWithText("选择表情").assertDoesNotExist()
+            compose.onNodeWithContentDescription("选择表情").assertDoesNotExist()
             compose.onNodeWithText("表情").assertIsNotEnabled()
         }
     }

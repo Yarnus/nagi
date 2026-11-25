@@ -229,4 +229,21 @@ Next line</content><subject>Title</subject></root>"""))
             assertTrue(runCatching { call.await() }.exceptionOrNull() is CancellationException)
         }
     }
+
+    @Test fun anonymousPublishSendsAnonyFieldExceptWhenModifying() = runBlocking {
+        MockWebServer().use { server ->
+            val client = HttpNgaClient(server.url("/"), store())
+            server.enqueue(MockResponse().setBody("""{"data":{"0":0,"1":"回复成功"}}"""))
+            assertTrue(client.publish(PublishRequest(PublishAction.REPLY, "", "Anon reply", topicId = "123", anonymous = true)) is WriteResult.Confirmed)
+            assertEquals("1", form(server.takeRequest())["anony"])
+
+            server.enqueue(MockResponse().setBody("""{"data":{"0":0,"1":"回复成功"}}"""))
+            assertTrue(client.publish(PublishRequest(PublishAction.REPLY, "", "Normal reply", topicId = "123", anonymous = false)) is WriteResult.Confirmed)
+            assertFalse(form(server.takeRequest()).containsKey("anony"))
+
+            server.enqueue(MockResponse().setBody("""{"data":{"0":0,"1":"修改已保存"}}"""))
+            assertTrue(client.publish(PublishRequest(PublishAction.MODIFY, "", "Edited body", topicId = "123", postId = "12", anonymous = true)) is WriteResult.Confirmed)
+            assertFalse(form(server.takeRequest()).containsKey("anony"))
+        }
+    }
 }

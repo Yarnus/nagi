@@ -217,4 +217,24 @@ class ReplySessionViewModelTest {
         accounts.logout(); runCurrent()
         assertNull(vm.session.value)
     }
+
+    @Test fun anonymousToggleForwardsFlagToPublishRequestAndResetsOnConfirm() = runTest(dispatcher) {
+        val requests = mutableListOf<PublishRequest>()
+        val client = object : NgaClient by FakeClient() {
+            override suspend fun preparePublish(target: PublishTarget) = PublishPreparation("", "")
+            override suspend fun publish(request: PublishRequest): WriteResult {
+                requests += request
+                return WriteResult.Confirmed("回复已发送")
+            }
+        }
+        val vm = ReplySessionViewModel(client, accounts(), SavedStateHandle())
+        vm.open(target, "回复"); runCurrent()
+        assertFalse(vm.session.value!!.anonymous)
+        vm.setAnonymous(true)
+        assertTrue(vm.session.value!!.anonymous)
+        vm.edit(TextFieldValue("匿名回复"))
+        vm.send(); runCurrent()
+        assertTrue(requests.single().anonymous)
+        assertEquals(ComposePhase.Confirmed, vm.session.value!!.phase)
+    }
 }

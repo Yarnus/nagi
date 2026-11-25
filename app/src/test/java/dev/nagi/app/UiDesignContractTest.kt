@@ -145,6 +145,22 @@ class UiDesignContractTest {
         }
     }
 
+    @Test fun warmGoldSendButtonTextMeetsNormalTextContrastInBothThemes() {
+        var theme by mutableStateOf("light")
+        var background = Color.Unspecified
+        compose.setContent { NagiTheme(theme) {
+            background = if (NagiThemeTokens.colors.isDark) NagiThemeTokens.colors.goldAccent else Color(0xFF966B1F)
+            CapsuleButton("发送", {}, style = CapsuleStyle.WarmGold)
+        } }
+        for (appearance in listOf("light", "dark")) {
+            compose.runOnIdle { theme = appearance }
+            val foreground = textLayout("发送").layoutInput.style.color
+            val first = foreground.luminance()
+            val second = background.luminance()
+            assertTrue("$appearance warm gold button text needs 4.5:1", (maxOf(first, second) + 0.05f) / (minOf(first, second) + 0.05f) >= 4.5f)
+        }
+    }
+
     @Test fun shortCapsuleHasAnIndependent48dpTouchTarget() {
         var clicks = 0
         compose.setContent { NagiTheme { CapsuleButton("1", { clicks++ }) } }

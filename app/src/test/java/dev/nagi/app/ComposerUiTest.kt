@@ -173,4 +173,61 @@ class ComposerUiTest {
         compose.onNodeWithText("暂未收到修改确认，可查看帖子核对，请勿重复提交。").assertExists()
         compose.onNodeWithText("修改已确认").assertDoesNotExist()
     }
+
+    @Test fun formattingSupportsStrikethroughColorAndAnonymousSwitchVisibility() {
+        var state by mutableStateOf(
+            ComposerState(
+                target = PublishTarget(PublishAction.NEW_TOPIC, forumId = "7"),
+                title = "标题",
+                content = "测试文本",
+                selectionStart = 0,
+                selection = 4,
+            ),
+        )
+        compose.setContent {
+            NagiTheme {
+                ComposerScreen(
+                    state = state,
+                    preferences = ReadingPreferences(),
+                    edit = { text, cursor -> state = state.copy(content = text, selection = cursor) },
+                    send = {},
+                    retry = {},
+                    close = {},
+                    editValue = { value ->
+                        state = state.copy(
+                            content = value.text,
+                            selectionStart = value.selection.start,
+                            selection = value.selection.end,
+                            composition = value.composition,
+                        )
+                    },
+                    onAnonymousChange = { state = state.copy(anonymous = it) },
+                )
+            }
+        }
+        compose.onNodeWithContentDescription("匿名发布").assertIsOff().performClick().assertIsOn()
+        compose.runOnIdle { assertTrue(state.anonymous) }
+
+        compose.onNodeWithText("排版").performClick()
+        compose.onNodeWithText("删除线").performClick()
+        compose.runOnIdle { assertEquals("[del]测试文本[/del]", state.content) }
+
+        compose.runOnIdle {
+            state = state.copy(content = "彩字", selectionStart = 0, selection = 2)
+        }
+        compose.onNodeWithText("颜色").performClick()
+        compose.onNodeWithContentDescription("选择字体颜色").assertIsDisplayed()
+        compose.onNodeWithContentDescription("字体颜色：红色").performClick()
+        compose.runOnIdle { assertEquals("[color=red]彩字[/color]", state.content) }
+
+        // Modify and private messages do not expose the anonymous toggle.
+        compose.runOnIdle {
+            state = state.copy(target = PublishTarget(PublishAction.MODIFY, topicId = "123", postId = "12"))
+        }
+        compose.onNodeWithContentDescription("匿名发布").assertDoesNotExist()
+        compose.runOnIdle {
+            state = state.copy(target = null, privateMessage = true)
+        }
+        compose.onNodeWithContentDescription("匿名发布").assertDoesNotExist()
+    }
 }

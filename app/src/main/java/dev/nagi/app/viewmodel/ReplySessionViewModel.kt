@@ -26,6 +26,7 @@ data class ReplySession(
     val prefill: String = "", val input: TextFieldValue = TextFieldValue(),
     val phase: ComposePhase = ComposePhase.Preparing, val error: String? = null,
     val preview: Boolean = false, val expandedContext: Boolean = false, val images: DraftImages = DraftImages(),
+    val anonymous: Boolean = false,
 ) {
     val comment get() = target.action == PublishAction.COMMENT
     val content get() = assembleReply(prefill, input.text)
@@ -86,6 +87,12 @@ class ReplySessionViewModel @Inject constructor(
     }
     fun expandContext() { _session.value = _session.value?.let { it.copy(expandedContext = !it.expandedContext) } }
     fun preview() { _session.value = _session.value?.let { it.copy(preview = !it.preview) } }
+    fun setAnonymous(anonymous: Boolean) {
+        val session = _session.value ?: return
+        if (session.phase in setOf(ComposePhase.Editing, ComposePhase.Rejected)) {
+            _session.value = session.copy(anonymous = anonymous)
+        }
+    }
     fun uploadImage(read: suspend () -> ImageUpload) {
         val session = _session.value ?: return
         if (!current() || session.comment || session.phase !in setOf(ComposePhase.Editing, ComposePhase.Rejected) ||
@@ -134,7 +141,8 @@ class ReplySessionViewModel @Inject constructor(
                 accounts.withCurrentRevision(owner.revision) {
                     client.publish(PublishRequest(target.action, target.forumId, session.content,
                         topicId = target.topicId, postId = target.postId, collectionId = target.collectionId,
-                        attachments = session.images.attachments.filter { session.content.contains(it.bbcode) }))
+                        attachments = session.images.attachments.filter { session.content.contains(it.bbcode) },
+                        anonymous = session.anonymous))
                 }
             } catch (error: CancellationException) {
                 if (current() && token == generation) _session.value = session.copy(phase = ComposePhase.Unconfirmed, error = null)

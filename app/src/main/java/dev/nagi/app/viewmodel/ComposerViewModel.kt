@@ -21,6 +21,7 @@ data class ComposerState(
     val recipients: String = "", val newMessage: Boolean = false,
     val selectionStart: Int = selection, val composition: androidx.compose.ui.text.TextRange? = null,
     val preview: Boolean = false, val images: DraftImages = DraftImages(),
+    val anonymous: Boolean = false,
 ) {
     val canSend get() = !images.uploading && content.isNotBlank() &&
         (target?.action != PublishAction.NEW_TOPIC || title.isNotBlank()) &&
@@ -45,6 +46,9 @@ class ComposerViewModel @Inject constructor(
         content = if (restoredTarget != null) saved["composerText"] ?: "" else "",
         selection = saved["composerSelection"] ?: 0,
         title = if (restoredTarget != null) saved["composerTitle"] ?: "" else "",
+        anonymous = if (restoredTarget != null && restoredTarget.action != PublishAction.MODIFY) {
+            saved.get<Boolean>("composerAnonymous") == true
+        } else false,
         phase = when {
             saved.get<Boolean>("composerPending") == true -> ComposePhase.Unconfirmed
             restoredTarget?.action == PublishAction.MODIFY && saved.get<Boolean>("composerPrepared") != true -> ComposePhase.Preparing
@@ -74,6 +78,7 @@ class ComposerViewModel @Inject constructor(
         saved["composerPending"] = false
         saved["composerPrepared"] = false
         saved["composerUploadPending"] = false
+        saved["composerAnonymous"] = false
         saved.saveImages(DraftImages())
         _state.value = ComposerState(target, context, phase = ComposePhase.Preparing)
         if (target.action == PublishAction.NEW_TOPIC) {
@@ -87,7 +92,7 @@ class ComposerViewModel @Inject constructor(
         if (_state.value.phase != ComposePhase.Confirmed) return
         listOf("composerOwner", "composerRevision", "composerAction", "composerForum", "composerCollection", "composerTopic",
             "composerPost", "composerContext", "composerText", "composerTitle", "composerSelection", "composerPending", "composerPrepared",
-            "composerImageNames", "composerImageChecks", "composerImageUrls", "composerUploadPending")
+            "composerImageNames", "composerImageChecks", "composerImageUrls", "composerUploadPending", "composerAnonymous")
             .forEach { saved.remove<Any>(it) }
         _state.value = ComposerState()
     }
@@ -124,6 +129,13 @@ class ComposerViewModel @Inject constructor(
         _state.value = _state.value.copy(selectionStart = value.selection.start, composition = value.composition)
     }
     fun preview() { _state.value = _state.value.copy(preview = !_state.value.preview) }
+    fun setAnonymous(anonymous: Boolean) {
+        val draft = _state.value
+        if (draft.privateMessage || draft.target?.action == PublishAction.MODIFY) return
+        if (draft.phase !in setOf(ComposePhase.Editing, ComposePhase.Rejected)) return
+        saved["composerAnonymous"] = anonymous
+        _state.value = draft.copy(anonymous = anonymous)
+    }
     fun details(title: String, recipients: String) {
         if (_state.value.phase !in setOf(ComposePhase.Editing, ComposePhase.Rejected)) return
         saved["composerTitle"] = title
@@ -182,7 +194,8 @@ class ComposerViewModel @Inject constructor(
                 val result = accounts.withCurrentRevision(owner.revision) {
                     client.publish(PublishRequest(target.action, target.forumId, draft.content,
                         title = draft.title, topicId = target.topicId, postId = target.postId, collectionId = target.collectionId,
-                        attachments = draft.images.attachments.filter { draft.content.contains(it.bbcode) }))
+                        attachments = draft.images.attachments.filter { draft.content.contains(it.bbcode) },
+                        anonymous = draft.anonymous && target.action != PublishAction.MODIFY))
                 }
                 if (!current()) return@launch
                 when (result) {

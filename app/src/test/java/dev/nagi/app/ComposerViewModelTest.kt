@@ -219,4 +219,35 @@ class ComposerViewModelTest {
         assertNotNull(vm.state.value.error)
         assertFalse(vm.state.value.canSend)
     }
+
+    @Test fun anonymousStatePersistsAcrossRestorationAndIsIgnoredOnModify() = runTest(dispatcher) {
+        val accounts = AccountManager(MemorySessionStore().apply { saveSession(NgaSession("7", "test")) }, FakeBrowserCookies())
+            .also { it.initialize() }
+        val sent = mutableListOf<PublishRequest>()
+        val client = object : NgaClient by FakeClient() {
+            override suspend fun preparePublish(target: PublishTarget) = PublishPreparation("原标题", "原内容")
+            override suspend fun publish(request: PublishRequest): WriteResult {
+                sent += request
+                return WriteResult.Confirmed("成功")
+            }
+        }
+        val saved = SavedStateHandle()
+        val vm = ComposerViewModel(client, accounts, saved)
+        vm.open(PublishTarget(PublishAction.NEW_TOPIC, forumId = "7"), "发帖")
+        vm.details("标题", "")
+        vm.edit("正文", 2)
+        vm.setAnonymous(true)
+        assertTrue(vm.state.value.anonymous)
+        val restored = ComposerViewModel(client, accounts, saved)
+        assertTrue(restored.state.value.anonymous)
+        restored.send(); runCurrent()
+        assertTrue(sent.last().anonymous)
+
+        vm.close()
+        vm.open(PublishTarget(PublishAction.MODIFY, topicId = "123", postId = "12"), "编辑"); runCurrent()
+        vm.setAnonymous(true)
+        assertFalse(vm.state.value.anonymous)
+        vm.send(); runCurrent()
+        assertFalse(sent.last().anonymous)
+    }
 }

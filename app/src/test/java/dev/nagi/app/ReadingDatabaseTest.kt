@@ -278,4 +278,39 @@ class ReadingDatabaseTest {
             context.deleteDatabase("${name}_7.db"); context.deleteDatabase("${name}_8.db")
         }
     }
+
+    @Test fun migration9To10AddsRecentSmilesPerAccountAndPrunesOldest() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val name = "recent-smiles-migration"
+        context.deleteDatabase("${name}_7.db"); context.deleteDatabase("${name}_8.db")
+        var databases = AccountDatabases(context, name)
+        try {
+            databases.forUser("7").saveHistory(ReadingHistory("101", "History 7", 10L))
+            databases.close()
+
+            android.database.sqlite.SQLiteDatabase.openDatabase(context.getDatabasePath("${name}_7.db").path, null, 0).use { db ->
+                db.execSQL("DROP TABLE IF EXISTS `recent_smiles`")
+                db.version = 9
+            }
+
+            databases = AccountDatabases(context, name)
+            val dao7 = databases.forUser("7")
+            assertEquals("History 7", dao7.history().first().single().title)
+            val sampleSmiles = dev.nagi.sdk.NgaSmiles.groups.first().smiles.take(MAX_RECENT_SMILES + 2)
+            sampleSmiles.forEachIndexed { idx, smile ->
+                dao7.recordRecentSmile(smile.key, usedAt = (idx + 1).toLong())
+            }
+            val stored7 = dao7.recentSmiles().first()
+            assertEquals(MAX_RECENT_SMILES, stored7.size)
+            assertEquals(sampleSmiles.last().key, stored7.first().smileKey)
+            assertFalse(stored7.any { it.smileKey == sampleSmiles.first().key })
+            assertTrue(databases.forUser("8").recentSmiles().first().isEmpty())
+
+            dao7.recordRecentSmile(sampleSmiles[2].key, usedAt = 999L)
+            assertEquals(sampleSmiles[2].key, dao7.recentSmiles().first().first().smileKey)
+        } finally {
+            databases.close()
+            context.deleteDatabase("${name}_7.db"); context.deleteDatabase("${name}_8.db")
+        }
+    }
 }

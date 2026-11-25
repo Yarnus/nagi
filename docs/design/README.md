@@ -78,7 +78,7 @@ Nagi 使用中性背景、金色强调和胶囊控件。内容卡片不使用阴
   - 仅深色下开启极微弱噪点（`0.04`）抑制色带，浅色关闭。模糊仅作用于有界边缘与悬浮控件自身形状；帖子正文和列表项不应用实时模糊，滚动时状态在图层阶段读取不触发重组。
 - 点击反馈：全局 `LocalIndication` 使用无扩散波纹的瞬态微压高光（浅色 4.2% `#1F1A12`、深色 6.5% 白色），`LocalRippleConfiguration` 同步收敛。悬浮按钮、圆钮、停靠栏动作、`NagiIconAction` 与 `CapsuleButton` 统一使用 `nagiPressFeedback`（按压微缩 0.90x–0.985x + 视觉轮廓内柔和按压蒙层），不在外层 48dp 触控热区溢出灰圈或裁切阴影。
 - 弹窗与浮动提示：确认弹窗、详情弹窗、长阅读引用原文弹窗、轻量选择/操作面板与下拉菜单统一复用共享 `NagiDialog` / `NagiConfirmDialog` / `NagiFrostedSheet` / `ForumScopePickerSheet` / `FrostedDropdownMenu` 容器（基于 `FrostedSurface`，使用 `menu` 材质、`20dp` 圆角、发丝描边、顶部内高光与淡悬浮阴影，支持跨窗口实时模糊、柔和背景遮罩与静态回退）；下拉菜单条目与分隔线统一复用 `FrostedDropdownItem` 与 `FrostedDropdownDivider`；悬浮面板顶栏统一复用 `NagiSheetHeader`；磨砂列表面板内使用透明行配细分隔线，不嵌套不透明卡片。编辑器抽屉保留实底容器（`CardSurface` / `GroupedCanvas`），不直接使用原生 Material `AlertDialog` 或未统一的 `Dialog`。
-  链接或上下文摘要放在 `InsetContainer`（`12dp` 圆角、无边框）内嵌区中；操作区使用等宽加宽的 `CapsuleButton` 撑满所在行（次操作 `Neutral`，常规确认 `SelectedGold`，警示操作 `Destructive`），窄屏或大字号下自动纵排。
+  链接或上下文摘要放在 `InsetContainer`（`12dp` 圆角、无边框）内嵌区中；操作区使用等宽加宽的 `CapsuleButton` 撑满所在行（次操作 `Neutral`，常规确认 `SelectedGold`，实心主按钮 `SolidGold` / 暖金发布按钮 `WarmGold`（浅色 `#966B1F` 白字、深色 `#D6BA8B` 黑字，满足 ≥4.5:1 对比度），警示操作 `Destructive`），窄屏或大字号下自动纵排。
 
 ## 列表与状态
 
