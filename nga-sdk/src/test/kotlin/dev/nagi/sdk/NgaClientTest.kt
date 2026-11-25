@@ -253,6 +253,44 @@ class NgaClientTest {
                 assertEquals("UTF8", req.requestUrl!!.queryParameter("__inchst"))
                 assertEquals(server.url("/").toString(), req.getHeader("Referer"))
             }
+            client.close()
+        }
+    }
+
+    @Test fun readPostsFallsBackToHtmlWithoutBlockingWhenStructuredFormatsFail() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("<root><broken"))
+            server.enqueue(MockResponse().setBody("<html><body>not xml</body></html>"))
+            server.enqueue(MockResponse().setBody(
+                """
+                <!doctype html><html><head><script>
+                var __CURRENT_TID=123, __CURRENT_PAGE=1, __CURRENT_AUTHORID=0;
+                var __ATTACH_BASE_VIEW='//img.nga.cn/attachments/';
+                </script></head><body>
+                <h1 id="currentTopicName">HTML标题</h1>
+                <div id="m_posts_c">
+                  <a id="postauthor0" href="nuke.php?func=ucp&amp;uid=7">作者</a>
+                  <div id="postcontainer0"><a id="pid100Anchor"></a>
+                    <span id="postdate0">2026-11-25 12:00</span>
+                    <span id="postcontent0">正文内容</span>
+                  </div>
+                </div>
+                <script>
+                commonui.userInfo.setAll({"7":{"username":"作者","avatar":""}});
+                commonui.postArg.setDefault(-7,0,123,7,0,'HTML标题','',null,'',null,0,0,1234,20);
+                </script>
+                </body></html>
+                """.trimIndent(),
+            ))
+            val client = HttpNgaClient(server.url("/"), MemorySessionStore())
+            try {
+                val page = client.getPosts("123")
+                assertEquals(1, page.items.size)
+                assertEquals("HTML标题", page.title)
+                assertEquals(3, server.requestCount)
+            } finally {
+                client.close()
+            }
         }
     }
 }

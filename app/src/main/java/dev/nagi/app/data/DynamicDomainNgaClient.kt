@@ -24,7 +24,6 @@ import dev.nagi.sdk.TopicSort
 import dev.nagi.sdk.UserReplyPage
 import dev.nagi.sdk.WriteResult
 import dev.nagi.sdk.createNgaClient
-import kotlinx.coroutines.flow.first
 
 /**
  * [NgaClient] delegator that follows the user's preferred [NgaDomain] without restarting the app
@@ -37,17 +36,21 @@ internal class DynamicDomainNgaClient(
         createNgaClient(config = NgaConfig(domain = domain), sessions = store)
     },
 ) : NgaClient {
+    private class DomainDelegate(
+        val domain: NgaDomain,
+        val client: NgaClient,
+    )
+
     private val lock = Any()
-    @Volatile private var cachedDomain: NgaDomain? = null
-    @Volatile private var cachedClient: NgaClient? = null
+    @Volatile private var cached: DomainDelegate? = null
 
     private suspend fun delegate(): NgaClient {
-        val domain = preferences.preferences.first().ngaDomain
-        cachedClient?.takeIf { cachedDomain == domain }?.let { return it }
+        val domain = preferences.currentNgaDomain()
+        cached?.takeIf { it.domain == domain }?.let { return it.client }
         return synchronized(lock) {
-            cachedClient?.takeIf { cachedDomain == domain } ?: factory(domain, sessions).also {
-                cachedDomain = domain
-                cachedClient = it
+            cached?.takeIf { it.domain == domain }?.client ?: factory(domain, sessions).also { created ->
+                // Leave any prior delegate's dispatcher intact so concurrent in-flight requests/retries finish safely.
+                cached = DomainDelegate(domain, created)
             }
         }
     }

@@ -27,7 +27,7 @@ class UserTagAccess(
     val save: (String, String, () -> Unit) -> Unit = { _, _, _ -> },
 )
 
-val LocalUserTags = staticCompositionLocalOf { UserTagAccess() }
+val LocalUserTags = compositionLocalOf { UserTagAccess() }
 
 @Composable
 internal fun UserTagBadge(userId: String) {

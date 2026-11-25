@@ -371,7 +371,6 @@ internal fun MessagesContent(
                             contentType = { _, _ -> "message-post" },
                         ) { index, post ->
                             SectionCardItem(CardGroupPosition.at(index, state.posts.size), gutter) {
-                                val postImages = remember(post.id, post.content) { collectContentImages(post.content) }
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -392,14 +391,9 @@ internal fun MessagesContent(
                                     }
                                     SelectionContainer {
                                         ContentBlocks(post.content, preferences) { clickedUrl ->
-                                            val matched = postImages.indexOf(clickedUrl)
-                                            if (matched >= 0) {
-                                                viewerImages = postImages
-                                                viewerIndex = matched
-                                            } else {
-                                                viewerImages = listOf(clickedUrl)
-                                                viewerIndex = 0
-                                            }
+                                            val (images, index) = resolveContentImageClick(post.content, clickedUrl)
+                                            viewerImages = images
+                                            viewerIndex = index
                                         }
                                     }
                                     if (post.createdAt > 0) {

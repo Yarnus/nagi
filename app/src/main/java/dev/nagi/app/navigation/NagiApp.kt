@@ -90,6 +90,8 @@ import dev.nagi.app.ui.theme.NagiTheme
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
 import dev.nagi.app.ui.topic.TopicsScreen
+import dev.nagi.app.data.AccountState
+import dev.nagi.app.data.TopicReadState
 import dev.nagi.app.viewmodel.AccountIdentity
 import dev.nagi.app.viewmodel.AccountIdentityViewModel
 import dev.nagi.app.viewmodel.AccountViewModel
@@ -98,6 +100,64 @@ import dev.nagi.sdk.ExtractedExternalLink
 import dev.nagi.sdk.Forum
 import dev.nagi.sdk.NgaExternalLinks
 import dev.nagi.sdk.NgaExternalTarget
+import kotlinx.coroutines.flow.StateFlow
+
+@Composable
+private fun ProvideAppAccountLocals(
+    account: AccountState,
+    identityVm: AccountIdentityViewModel,
+    notificationsVm: NotificationsViewModel,
+    tagsVm: UserTagsViewModel,
+    recentSmilesVm: dev.nagi.app.viewmodel.RecentSmilesViewModel,
+    updateVm: AppUpdateViewModel,
+    hardwareBlur: Boolean,
+    content: @Composable () -> Unit,
+) {
+    val loadedIdentity by identityVm.identity.collectAsStateWithLifecycle()
+    val identity = loadedIdentity.takeIf { it.revision == account.revision && it.userId == account.userId }
+        ?: AccountIdentity(account.revision, account.userId, loading = account.userId != null)
+    val loadedNotifications by notificationsVm.state.collectAsStateWithLifecycle()
+    val notifications = loadedNotifications.takeIf { !account.busy && it.revision == account.revision && it.userId == account.userId }
+        ?: NotificationsState(account.revision, account.userId)
+    val loadedTags by tagsVm.state.collectAsStateWithLifecycle()
+    val tags = loadedTags.takeIf { !account.busy && it.revision == account.revision && it.userId == account.userId }
+        ?: UserTagsState(account.revision, account.userId)
+    val tagAccess = remember(tags, tagsVm) {
+        UserTagAccess(tags) { userId, text, done -> tagsVm.save(tags, userId, text, done) }
+    }
+    val loadedRecentSmiles by recentSmilesVm.state.collectAsStateWithLifecycle()
+    val recentSmiles = loadedRecentSmiles.takeIf { !account.busy && it.revision == account.revision && it.userId == account.userId }
+        ?: dev.nagi.app.viewmodel.RecentSmilesState(account.revision, account.userId)
+    val recentSmilesAccess = remember(recentSmiles, recentSmilesVm) {
+        dev.nagi.app.ui.post.RecentSmilesAccess(
+            smiles = recentSmiles.smiles,
+            record = recentSmilesVm::record,
+            isBackedByStore = true,
+        )
+    }
+    val appUpdate by updateVm.state.collectAsStateWithLifecycle()
+    CompositionLocalProvider(
+        LocalAccountIdentity provides identity,
+        LocalNotifications provides notifications,
+        LocalUserTags provides tagAccess,
+        dev.nagi.app.ui.post.LocalRecentSmiles provides recentSmilesAccess,
+        LocalAppUpdate provides appUpdate,
+        LocalHardwareBlurAllowed provides hardwareBlur,
+        content = content,
+    )
+}
+
+@Composable
+private fun ProvideTopicReadStates(
+    flow: StateFlow<Map<String, TopicReadState>>,
+    content: @Composable () -> Unit,
+) {
+    val topicReadStates by flow.collectAsStateWithLifecycle()
+    CompositionLocalProvider(
+        dev.nagi.app.ui.components.LocalTopicReadStates provides topicReadStates,
+        content = content,
+    )
+}
 
 @Composable
 fun NagiApp(
@@ -111,29 +171,10 @@ fun NagiApp(
     val loadedPreferences by accountVm.loadedPreferences.collectAsStateWithLifecycle()
     val account by accountVm.account.collectAsStateWithLifecycle()
     val identityVm: AccountIdentityViewModel = hiltViewModel()
-    val loadedIdentity by identityVm.identity.collectAsStateWithLifecycle()
-    val identity = loadedIdentity.takeIf { it.revision == account.revision && it.userId == account.userId }
-        ?: AccountIdentity(account.revision, account.userId, loading = account.userId != null)
     val notificationsVm: NotificationsViewModel = hiltViewModel()
-    val loadedNotifications by notificationsVm.state.collectAsStateWithLifecycle()
-    val notifications = loadedNotifications.takeIf { !account.busy && it.revision == account.revision && it.userId == account.userId }
-        ?: NotificationsState(account.revision, account.userId)
     val tagsVm: UserTagsViewModel = hiltViewModel()
-    val loadedTags by tagsVm.state.collectAsStateWithLifecycle()
-    val tags = loadedTags.takeIf { !account.busy && it.revision == account.revision && it.userId == account.userId }
-        ?: UserTagsState(account.revision, account.userId)
-    val tagAccess = UserTagAccess(tags) { userId, text, done -> tagsVm.save(tags, userId, text, done) }
     val recentSmilesVm: dev.nagi.app.viewmodel.RecentSmilesViewModel = hiltViewModel()
-    val loadedRecentSmiles by recentSmilesVm.state.collectAsStateWithLifecycle()
-    val recentSmiles = loadedRecentSmiles.takeIf { !account.busy && it.revision == account.revision && it.userId == account.userId }
-        ?: dev.nagi.app.viewmodel.RecentSmilesState(account.revision, account.userId)
-    val recentSmilesAccess = dev.nagi.app.ui.post.RecentSmilesAccess(
-        smiles = recentSmiles.smiles,
-        record = recentSmilesVm::record,
-        isBackedByStore = true,
-    )
     val updateVm: AppUpdateViewModel = hiltViewModel()
-    val appUpdate by updateVm.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle, notificationsVm, updateVm) {
         val observer = LifecycleEventObserver { _, event ->
@@ -153,13 +194,14 @@ fun NagiApp(
         return
     }
     val hardwareBlur = rememberHardwareBlurAllowed()
-    CompositionLocalProvider(
-        LocalAccountIdentity provides identity,
-        LocalNotifications provides notifications,
-        LocalUserTags provides tagAccess,
-        dev.nagi.app.ui.post.LocalRecentSmiles provides recentSmilesAccess,
-        LocalAppUpdate provides appUpdate,
-        LocalHardwareBlurAllowed provides hardwareBlur,
+    ProvideAppAccountLocals(
+        account = account,
+        identityVm = identityVm,
+        notificationsVm = notificationsVm,
+        tagsVm = tagsVm,
+        recentSmilesVm = recentSmilesVm,
+        updateVm = updateVm,
+        hardwareBlur = hardwareBlur,
     ) {
         NagiTheme(preferences.theme) {
             val colors = NagiThemeTokens.colors
@@ -184,7 +226,6 @@ fun NagiApp(
                 val cloudForumBusyKeys by library.cloudForumBusyKeys.collectAsStateWithLifecycle()
                 val cloudForumUncertainKeys by library.cloudForumUncertainKeys.collectAsStateWithLifecycle()
                 val cloudForumNotice by library.cloudForumNotice.collectAsStateWithLifecycle()
-                val topicReadStates by library.topicReadStates.collectAsStateWithLifecycle()
                 val appContext = LocalContext.current
                 LaunchedEffect(library) {
                     library.cloudForumFeedback.collect { message ->
@@ -198,9 +239,11 @@ fun NagiApp(
                         nav.popBackStack()
                     }
                 }
-                val select: (String) -> Unit = { target ->
-                    nav.navigate(target) {
-                        launchSingleTop = true
+                val select: (String) -> Unit = remember(nav) {
+                    { target ->
+                        nav.navigate(target) {
+                            launchSingleTop = true
+                        }
                     }
                 }
                 val openTopic: (String) -> Unit = { topicId ->
@@ -244,8 +287,8 @@ fun NagiApp(
                             LocalUriHandler provides topicLinks,
                             LocalOpenUser provides openUser,
                             LocalOpenLogin provides openLogin,
-                            dev.nagi.app.ui.components.LocalTopicReadStates provides topicReadStates,
                         ) {
+                            ProvideTopicReadStates(library.topicReadStates) {
                             NavHost(
                                 nav,
                                 startDestination = "forums",
@@ -357,7 +400,7 @@ fun NagiApp(
                                         }
                                     } else {
                                         OwnProfileScreen(
-                                            identity = identity,
+                                            identity = LocalAccountIdentity.current,
                                             back = { popBackFrom(entry) },
                                             retry = identityVm::retry,
                                             content = { kind -> select("user/${Uri.encode(account.userId)}/$kind") },
@@ -373,7 +416,7 @@ fun NagiApp(
                                 }
                                 composable("login") { entry -> LoginScreen(back = { popBackFrom(entry) }) }
                                 composable("notifications") { entry ->
-                                    NotificationsScreen(notifications, { popBackFrom(entry) }, notificationsVm::refresh,
+                                    NotificationsScreen(LocalNotifications.current, { popBackFrom(entry) }, notificationsVm::refresh,
                                         { select("login") }, { item ->
                                             notificationsVm.markRead(item)
                                             if (item.topicId.matches(Regex("[1-9][0-9]*"))) openTopic(item.topicId)
@@ -408,6 +451,7 @@ fun NagiApp(
                                         onResetTypography = library::resetTypography,
                                     )
                                 }
+                            }
                             }
                         }
                     }

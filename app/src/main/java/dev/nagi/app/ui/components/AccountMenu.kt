@@ -26,7 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,9 +45,9 @@ import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
 import dev.nagi.app.viewmodel.AccountIdentity
 
-val LocalAccountIdentity = staticCompositionLocalOf { AccountIdentity() }
-val LocalNotifications = staticCompositionLocalOf { NotificationsState() }
-val LocalAppUpdate = staticCompositionLocalOf { AppUpdateState() }
+val LocalAccountIdentity = compositionLocalOf { AccountIdentity() }
+val LocalNotifications = compositionLocalOf { NotificationsState() }
+val LocalAppUpdate = compositionLocalOf { AppUpdateState() }
 
 @Composable
 fun UnreadBadge(count: Int, modifier: Modifier = Modifier) {

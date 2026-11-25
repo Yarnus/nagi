@@ -35,6 +35,8 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,12 +65,18 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.nagi.app.data.ReadingPreferences
 import dev.nagi.app.ui.components.GoldSwitch
+import dev.nagi.app.ui.components.LoadingLine
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.theme.NagiThemeTokens
 import dev.nagi.app.ui.theme.Space
+import dev.nagi.sdk.ContentBlock
 import dev.nagi.sdk.ContentParser
 import dev.nagi.sdk.NgaSmile
 import dev.nagi.sdk.NgaSmiles
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+private const val ASYNC_PREVIEW_THRESHOLD = 2_000
 
 private val INLINE_SMILE_TAG = Regex("""\[s:([^\]\s]+)\]""")
 
@@ -189,6 +197,22 @@ internal fun ComposerInput(
 
     Column(modifier = modifier.fillMaxWidth()) {
         if (preview) {
+            val parseSynchronously = previewContent.length <= ASYNC_PREVIEW_THRESHOLD
+            val syncBlocks = remember(previewContent, parseSynchronously) {
+                if (parseSynchronously) ContentParser.parse(previewContent) else null
+            }
+            val asyncBlocks by produceState<List<ContentBlock>?>(
+                initialValue = null,
+                key1 = previewContent,
+                key2 = parseSynchronously,
+            ) {
+                this.value = if (parseSynchronously) {
+                    null
+                } else {
+                    withContext(Dispatchers.Default) { ContentParser.parse(previewContent) }
+                }
+            }
+            val resolvedBlocks = syncBlocks ?: asyncBlocks
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -196,12 +220,16 @@ internal fun ComposerInput(
                     .verticalScroll(rememberScrollState())
                     .padding(Space.lg),
             ) {
-                SelectionContainer {
-                    ContentBlocks(
-                        blocks = remember(previewContent) { ContentParser.parse(previewContent) },
-                        preferences = preferences,
-                        onImage = {},
-                    )
+                if (resolvedBlocks == null) {
+                    LoadingLine()
+                } else {
+                    SelectionContainer {
+                        ContentBlocks(
+                            blocks = resolvedBlocks,
+                            preferences = preferences,
+                            onImage = {},
+                        )
+                    }
                 }
             }
         } else {

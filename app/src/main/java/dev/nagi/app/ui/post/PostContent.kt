@@ -68,6 +68,7 @@ import kotlin.math.roundToInt
 private val MaxInlineImageHeight = 460.dp
 private val InlineImagePlaceholderHeight = 140.dp
 private val InlineImageFailedHeight = 120.dp
+private val inlineImageIntrinsicSizes = android.util.LruCache<String, Size>(128)
 
 internal val LocalAllowHardwareImages = staticCompositionLocalOf { true }
 
@@ -145,6 +146,33 @@ internal fun collectVisibleCardMediaUrls(blocks: List<ContentBlock>): List<Strin
     }
     walk(blocks)
     return result.toList()
+}
+
+internal fun resolveContentImageClick(
+    blocks: List<ContentBlock>,
+    clickedUrl: String,
+): Pair<List<String>, Int> {
+    val postImages = collectContentImages(blocks)
+    val matched = postImages.indexOf(clickedUrl)
+    return if (matched >= 0) postImages to matched else listOf(clickedUrl) to 0
+}
+
+internal fun hasCopyablePlainText(blocks: List<ContentBlock>): Boolean = blocks.any { block ->
+    when (block) {
+        is ContentBlock.Text -> block.value.isNotBlank()
+        is ContentBlock.Heading -> hasCopyablePlainText(block.children)
+        is ContentBlock.Divider -> true
+        is ContentBlock.Aligned -> hasCopyablePlainText(block.children)
+        is ContentBlock.ListBlock -> block.items.any(::hasCopyablePlainText)
+        is ContentBlock.Code -> block.value.isNotBlank()
+        is ContentBlock.Quote -> hasCopyablePlainText(block.children)
+        is ContentBlock.Table -> block.rows.any { row -> row.size > 1 || row.any(::hasCopyablePlainText) }
+        is ContentBlock.Media -> block.url.isNotBlank()
+        is ContentBlock.Collapse,
+        is ContentBlock.Image,
+        is ContentBlock.Dice,
+        -> true
+    }
 }
 
 internal fun contentPlainText(blocks: List<ContentBlock>): String {
@@ -377,7 +405,9 @@ private fun PostImageBlock(
     val activeUrl = candidates.getOrElse(candidateIndex) { url }
     var loaded by remember(url) { mutableStateOf(false) }
     var failed by remember(url) { mutableStateOf(false) }
-    var intrinsicSize by remember(url) { mutableStateOf(Size.Unspecified) }
+    var intrinsicSize by remember(url, activeUrl) {
+        mutableStateOf(inlineImageIntrinsicSizes.get(activeUrl) ?: Size.Unspecified)
+    }
     var containerWidthPx by remember(url) { mutableIntStateOf(0) }
     var attempt by remember(url) { mutableIntStateOf(0) }
     val trackerToken = remember(url) { Any() }
@@ -397,7 +427,6 @@ private fun PostImageBlock(
                 val width = constraints.maxWidth
                 val desiredHeight = when {
                     failed -> failedHeightPx
-                    !loaded -> placeholderHeightPx
                     hasIntrinsic && width != Constraints.Infinity && width > 0 ->
                         (width * (intrinsicSize.height / intrinsicSize.width)).roundToInt()
                             .coerceIn(1, maxHeightPx)
@@ -458,9 +487,14 @@ private fun PostImageBlock(
                 onSuccess = { state ->
                     loaded = true
                     failed = false
-                    intrinsicSize = state.painter.intrinsicSize
+                    val size = state.painter.intrinsicSize
+                    intrinsicSize = size
+                    if (size.isSpecified && size.width > 0f && size.height > 0f) {
+                        inlineImageIntrinsicSizes.put(activeUrl, size)
+                    }
                 },
                 onError = { state ->
+                    inlineImageIntrinsicSizes.remove(activeUrl)
                     if (isHttp404Error(state.result.throwable) && candidateIndex + 1 < candidates.size) {
                         candidateIndex++
                     } else {

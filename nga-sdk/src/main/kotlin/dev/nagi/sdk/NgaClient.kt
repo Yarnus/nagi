@@ -138,7 +138,7 @@ internal class HttpNgaClient(
     private val timeoutSeconds: Long = 25,
     private val backupOrigins: List<HttpUrl> = emptyList(),
     private val writeDiagnostics: Boolean = false,
-) : NgaClient {
+) : NgaClient, AutoCloseable {
     private enum class ReadFormat(val parameters: Map<String, String>) {
         JSON(mapOf("__output" to "8")),
         XML_LITE(mapOf("lite" to "xml")),
@@ -208,6 +208,16 @@ internal class HttpNgaClient(
 
     @Volatile private var readBundle = buildTransport(ConnectionPool(), isWrite = false)
     private val writeBundle = buildTransport(ConnectionPool(), isWrite = true)
+
+    override fun close() {
+        listOf(readBundle, writeBundle).forEach { bundle ->
+            val executor = bundle.client.dispatcher.executorService
+            runCatching {
+                executor.execute { bundle.client.connectionPool.evictAll() }
+            }
+            executor.shutdown()
+        }
+    }
 
     private val preferredReads = ConcurrentHashMap<String, ReadAttempt>()
 

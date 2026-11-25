@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -25,15 +27,21 @@ import coil.decode.DataSource
 import coil.intercept.Interceptor
 import coil.request.ErrorResult
 import coil.request.SuccessResult
+import dev.nagi.app.data.TopicReadState
 import dev.nagi.app.ui.components.LocalHardwareBlurAllowed
 import dev.nagi.app.ui.components.LocalNagiBlurEnabled
+import dev.nagi.app.ui.components.LocalTopicReadStates
 import dev.nagi.app.ui.components.ProgressiveBlurScaffold
 import dev.nagi.app.ui.components.UserAvatar
 import dev.nagi.app.ui.components.hardwareBlurAllowed
 import dev.nagi.app.ui.post.contentTextColor
+import dev.nagi.app.ui.post.hasCopyablePlainText
 import dev.nagi.app.ui.theme.NagiTheme
+import dev.nagi.sdk.ContentBlock
 import dev.nagi.sdk.ContentColors
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -120,5 +128,69 @@ class PerformanceOptimizationTest {
                 assertEquals(first, second)
             }
         }
+    }
+
+    @androidx.compose.runtime.Composable
+    private fun UnrelatedSubtree(onCompose: () -> Unit) {
+        SideEffect(onCompose)
+        Box(Modifier.size(10.dp))
+    }
+
+    @androidx.compose.runtime.Composable
+    private fun ConsumerSubtree(onCompose: () -> Unit) {
+        val state = LocalTopicReadStates.current["42"]
+        SideEffect(onCompose)
+        if (state != null) Box(Modifier.size(10.dp))
+    }
+
+    @androidx.compose.runtime.Composable
+    private fun ProvideReadStates(
+        read: () -> Map<String, TopicReadState>,
+        content: @androidx.compose.runtime.Composable () -> Unit,
+    ) {
+        CompositionLocalProvider(LocalTopicReadStates provides read(), content = content)
+    }
+
+    @Test
+    fun topicReadStatesLocalUpdateSkipsUnrelatedSubtreeRecomposition() {
+        var readStates by mutableStateOf(emptyMap<String, TopicReadState>())
+        var unrelatedRecompositions = 0
+        var consumerRecompositions = 0
+        val onUnrelatedCompose: () -> Unit = { unrelatedRecompositions++ }
+        val onConsumerCompose: () -> Unit = { consumerRecompositions++ }
+
+        compose.setContent {
+            val content = androidx.compose.runtime.remember {
+                @androidx.compose.runtime.Composable {
+                    UnrelatedSubtree(onUnrelatedCompose)
+                    ConsumerSubtree(onConsumerCompose)
+                }
+            }
+            ProvideReadStates(read = { readStates }, content = content)
+        }
+        compose.runOnIdle {
+            assertEquals(1, unrelatedRecompositions)
+            assertEquals(1, consumerRecompositions)
+            readStates = mapOf("42" to TopicReadState("42", 5, 1000L))
+        }
+        compose.runOnIdle {
+            assertEquals(1, unrelatedRecompositions)
+            assertEquals(2, consumerRecompositions)
+        }
+    }
+
+    @Test
+    fun hasCopyablePlainTextMatchesContentPlainTextAvailability() {
+        assertFalse(hasCopyablePlainText(emptyList()))
+        assertFalse(hasCopyablePlainText(listOf(ContentBlock.Text(""))))
+        assertFalse(hasCopyablePlainText(listOf(ContentBlock.Text("   "))))
+        assertFalse(hasCopyablePlainText(listOf(ContentBlock.Heading(listOf(ContentBlock.Text("   "))))))
+        assertFalse(hasCopyablePlainText(listOf(ContentBlock.Quote(children = listOf(ContentBlock.Text("   "))))))
+        assertFalse(hasCopyablePlainText(listOf(ContentBlock.Code("   "))))
+        assertFalse(hasCopyablePlainText(listOf(ContentBlock.Media("", dev.nagi.sdk.MediaKind.VIDEO))))
+        assertTrue(hasCopyablePlainText(listOf(ContentBlock.Text("hello"))))
+        assertTrue(hasCopyablePlainText(listOf(ContentBlock.Image("https://img4.nga.cn/a.png"))))
+        assertTrue(hasCopyablePlainText(listOf(ContentBlock.Divider(emptyList()))))
+        assertTrue(hasCopyablePlainText(listOf(ContentBlock.Quote(children = listOf(ContentBlock.Text("nested"))))))
     }
 }

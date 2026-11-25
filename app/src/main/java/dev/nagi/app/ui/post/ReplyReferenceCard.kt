@@ -37,7 +37,7 @@ internal data class PostReferences(
     val locate: (PostReference) -> Unit,
 )
 
-internal val LocalPostReferences = staticCompositionLocalOf<PostReferences?> { null }
+internal val LocalPostReferences = compositionLocalOf<PostReferences?> { null }
 
 internal fun referencePreview(blocks: List<ContentBlock>): String = blocks.mapNotNull { block ->
     when (block) {

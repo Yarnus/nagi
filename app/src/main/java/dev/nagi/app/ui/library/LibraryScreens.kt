@@ -38,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -1050,9 +1051,12 @@ fun AboutScreen(
         )
     }
     if (licenses) {
-        val text = remember(context) {
-            listOf("LICENSE", "THIRD_PARTY_NOTICES.txt").joinToString("\n\n") { asset ->
-                context.assets.open(asset).bufferedReader().use { it.readText() }
+        val sections by produceState<List<String>?>(initialValue = null, key1 = context) {
+            value = withContext(Dispatchers.IO) {
+                val full = listOf("LICENSE", "THIRD_PARTY_NOTICES.txt").joinToString("\n\n") { asset ->
+                    context.assets.open(asset).bufferedReader().use { it.readText() }
+                }
+                splitLicenseSections(full)
             }
         }
         dev.nagi.app.ui.components.NagiDialog(
@@ -1060,14 +1064,25 @@ fun AboutScreen(
             modifier = Modifier.heightIn(max = 600.dp),
         ) {
             Text("开源许可", style = typography.sectionTitle, color = colors.textPrimary)
-            Text(
-                text = text,
-                modifier = Modifier
-                    .weight(1f, fill = false)
-                    .verticalScroll(rememberScrollState()),
-                style = typography.body,
-                color = colors.textSecondary,
-            )
+            val loadedSections = sections
+            if (loadedSections == null) {
+                LoadingLine()
+            } else {
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(Space.sm),
+                ) {
+                    loadedSections.forEach { section ->
+                        Text(
+                            text = section,
+                            style = typography.body,
+                            color = colors.textSecondary,
+                        )
+                    }
+                }
+            }
             NagiDialogActions(
                 confirmLabel = "关闭",
                 onConfirm = { licenses = false },
@@ -1075,4 +1090,21 @@ fun AboutScreen(
             )
         }
     }
+}
+
+private fun splitLicenseSections(raw: String, maxChunkChars: Int = 2_000): List<String> {
+    if (raw.isBlank()) return emptyList()
+    val chunks = mutableListOf<String>()
+    val current = StringBuilder()
+    for (paragraph in raw.split("\n\n")) {
+        if (paragraph.isBlank()) continue
+        if (current.isNotEmpty() && current.length + paragraph.length + 2 > maxChunkChars) {
+            chunks += current.toString()
+            current.clear()
+        }
+        if (current.isNotEmpty()) current.append("\n\n")
+        current.append(paragraph)
+    }
+    if (current.isNotEmpty()) chunks += current.toString()
+    return chunks
 }

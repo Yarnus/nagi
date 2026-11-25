@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.nagi.sdk.NgaDomain
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -394,8 +395,11 @@ class PreferenceStore @Inject constructor(@param:ApplicationContext private val 
     private val clipboardLinkKey = booleanPreferencesKey("clipboard_link_detection")
     private val autoCheckUpdatesKey = booleanPreferencesKey("auto_check_updates")
     private val ngaDomainKey = stringPreferencesKey("nga_domain")
+    @Volatile private var cachedNgaDomain: NgaDomain? = null
+    private val domainWriteEpoch = java.util.concurrent.atomic.AtomicLong(0L)
 
     val preferences = context.readingPreferences.data.map {
+        val epoch = domainWriteEpoch.get()
         val fontSize = (it[fontKey] ?: DEFAULT_FONT_SIZE).coerceIn(MIN_FONT_SIZE, MAX_FONT_SIZE)
         val lineHeight = (it[lineKey] ?: DEFAULT_LINE_HEIGHT).coerceIn(MIN_LINE_HEIGHT, MAX_LINE_HEIGHT)
         val theme = it[themeKey]?.takeIf { value -> value in setOf("system", "light", "dark") } ?: "system"
@@ -404,6 +408,9 @@ class PreferenceStore @Inject constructor(@param:ApplicationContext private val 
         val domainName = it[ngaDomainKey]
         val domain = SUPPORTED_NGA_DOMAINS.firstOrNull { candidate -> candidate.name == domainName }
             ?: NgaDomain.PRIMARY
+        if (domainWriteEpoch.get() == epoch) {
+            cachedNgaDomain = domain
+        }
         ReadingPreferences(
             fontSize = fontSize,
             lineHeight = lineHeight,
@@ -413,6 +420,9 @@ class PreferenceStore @Inject constructor(@param:ApplicationContext private val 
             ngaDomain = domain,
         )
     }
+
+    suspend fun currentNgaDomain(): NgaDomain =
+        cachedNgaDomain ?: preferences.first().ngaDomain
 
     suspend fun font(size: Int) {
         context.readingPreferences.edit { it[fontKey] = size.coerceIn(MIN_FONT_SIZE, MAX_FONT_SIZE) }
@@ -447,7 +457,9 @@ class PreferenceStore @Inject constructor(@param:ApplicationContext private val 
     }
 
     suspend fun ngaDomain(domain: NgaDomain) {
+        domainWriteEpoch.incrementAndGet()
         val normalized = if (domain in SUPPORTED_NGA_DOMAINS) domain else NgaDomain.PRIMARY
         context.readingPreferences.edit { it[ngaDomainKey] = normalized.name }
+        cachedNgaDomain = normalized
     }
 }

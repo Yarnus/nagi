@@ -34,6 +34,11 @@ class OpenSourceLicensesTest {
     @Test fun licenseDialogIncludesProjectLicenseAndThirdPartyNotices() {
         compose.setContent { NagiTheme("light") { AboutScreen {} } }
         compose.onNodeWithText("开源许可").performClick()
+        compose.waitUntil(5_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            compose.onAllNodes(androidx.compose.ui.test.hasText("THIRD-PARTY NOTICES", substring = true))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText("GNU GENERAL PUBLIC LICENSE", substring = true).assertExists()
         compose.onNodeWithText("THIRD-PARTY NOTICES", substring = true).assertExists()
         compose.onNodeWithText("关闭").performClick()

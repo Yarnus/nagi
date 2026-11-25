@@ -132,6 +132,7 @@ import dev.nagi.app.viewmodel.PostRatingState
 import dev.nagi.app.ui.components.LocalAccountIdentity
 import dev.nagi.app.viewmodel.ComposerViewModel
 import dev.nagi.app.viewmodel.PostRatingViewModel
+import dev.nagi.app.viewmodel.PostReferenceState
 import dev.nagi.app.viewmodel.ReaderViewModel
 import dev.nagi.app.viewmodel.ReplySessionViewModel
 import dev.nagi.sdk.Post
@@ -139,8 +140,23 @@ import dev.nagi.sdk.PostRating
 import dev.nagi.sdk.PublishAction
 import dev.nagi.sdk.PublishTarget
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+
+@Composable
+private fun ProvidePostReferences(
+    referencesFlow: StateFlow<Map<String, PostReferenceState>>,
+    request: (PostReference, Boolean) -> Unit,
+    locate: (PostReference) -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val referenceStates by referencesFlow.collectAsStateWithLifecycle()
+    val postReferences = remember(referenceStates, request, locate) {
+        PostReferences(referenceStates, request, locate)
+    }
+    CompositionLocalProvider(LocalPostReferences provides postReferences, content = content)
+}
 
 @Composable
 fun ReaderScreen(
@@ -197,7 +213,6 @@ fun ReaderScreen(
     LaunchedEffect(initialPage) {
         initialPage?.let { vm.jumpToPage(it); initialPageConsumed() }
     }
-    val referenceStates by vm.references.collectAsStateWithLifecycle()
     val shareCard by vm.shareCard.collectAsStateWithLifecycle()
     val uriHandler = LocalUriHandler.current
     var viewerImages by rememberSaveable(id) { mutableStateOf<List<String>>(emptyList()) }
@@ -206,11 +221,18 @@ fun ReaderScreen(
     val canAdjustTypography = onFontSizeChange != null && onLineHeightChange != null
     val data = state.data?.takeIf { state.id == id }
     val favorite = favorites.any { it.topicId == id }
-    CompositionLocalProvider(LocalPostReferences provides PostReferences(referenceStates, vm::resolveReference) { target ->
-        if (target.topicId == id) vm.locateReference(target)
-        else if (onOpenReference != null) onOpenReference(target)
-        else uriHandler.openUri("https://bbs.nga.cn/read.php?tid=${target.topicId}&pid=${target.postId}&page=${target.page}")
-    }) {
+    val locateReference = remember(id, vm, onOpenReference, uriHandler) {
+        { target: PostReference ->
+            if (target.topicId == id) vm.locateReference(target)
+            else if (onOpenReference != null) onOpenReference(target)
+            else uriHandler.openUri("https://bbs.nga.cn/read.php?tid=${target.topicId}&pid=${target.postId}&page=${target.page}")
+        }
+    }
+    ProvidePostReferences(
+        referencesFlow = vm.references,
+        request = vm::resolveReference,
+        locate = locateReference,
+    ) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         if (data != null) {
             key(id, state.epoch, state.filterAuthorId) {
@@ -357,8 +379,7 @@ fun ReaderScreen(
                             Column(Modifier.fillMaxWidth()) {
                                 if (hasMain && index == 1) Spacer(Modifier.height(16.dp))
                                 SectionCardItem(group) {
-                                    val postImages = remember(post.id, post.content) { collectContentImages(post.content) }
-                                    val plainText = remember(post.id, post.content) { contentPlainText(post.content) }
+                                    val canCopyText = remember(post.id, post.content) { hasCopyablePlainText(post.content) }
                                     val canFilterAuthor = dev.nagi.app.ui.components.isPublicUserId(post.authorId)
                                     val filteringThisAuthor = state.filterAuthorId == post.authorId
                                     val validPostLink = post.id.toLongOrNull()?.let { it > 0L } == true
@@ -368,14 +389,9 @@ fun ReaderScreen(
                                         isAuthor = post.authorId.isNotBlank() && post.authorId == data.authorId,
                                         title = data.title.takeIf { index == 0 },
                                         onImage = { clickedUrl ->
-                                            val matched = postImages.indexOf(clickedUrl)
-                                            if (matched >= 0) {
-                                                viewerImages = postImages
-                                                viewerIndex = matched
-                                            } else {
-                                                viewerImages = listOf(clickedUrl)
-                                                viewerIndex = 0
-                                            }
+                                            val (images, matchedIndex) = resolveContentImageClick(post.content, clickedUrl)
+                                            viewerImages = images
+                                            viewerIndex = matchedIndex
                                         },
                                         highlighted = highlighted == post.floor,
                                         onReply = { openComposer(post, PublishAction.REPLY) },
@@ -391,11 +407,14 @@ fun ReaderScreen(
                                                 else vm.load(page = 1, filterAuthorId = post.authorId, filterAuthorName = formatAuthorDisplayName(post.author))
                                             }
                                         } else null,
-                                        onCopyText = if (plainText.isNotEmpty()) {
+                                        onCopyText = if (canCopyText) {
                                             {
-                                                context.getSystemService(ClipboardManager::class.java)
-                                                    ?.setPrimaryClip(ClipData.newPlainText("帖子内容", plainText))
-                                                Toast.makeText(context, "已复制楼层内容", Toast.LENGTH_SHORT).show()
+                                                val copiedText = contentPlainText(post.content)
+                                                if (copiedText.isNotEmpty()) {
+                                                    context.getSystemService(ClipboardManager::class.java)
+                                                        ?.setPrimaryClip(ClipData.newPlainText("帖子内容", copiedText))
+                                                    Toast.makeText(context, "已复制楼层内容", Toast.LENGTH_SHORT).show()
+                                                }
                                             }
                                         } else null,
                                         onCopyLink = if (validPostLink) {

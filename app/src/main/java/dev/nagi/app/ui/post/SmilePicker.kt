@@ -36,7 +36,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -79,7 +79,7 @@ class RecentSmilesAccess(
     val isBackedByStore: Boolean = false,
 )
 
-val LocalRecentSmiles = staticCompositionLocalOf { RecentSmilesAccess() }
+val LocalRecentSmiles = compositionLocalOf { RecentSmilesAccess() }
 
 private const val RECENT_GROUP_ID = "recent"
 private const val MAX_SESSION_RECENT_SMILES = 24
