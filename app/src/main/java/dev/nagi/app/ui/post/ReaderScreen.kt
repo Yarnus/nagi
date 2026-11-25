@@ -54,12 +54,14 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalUriHandler
 import dev.nagi.sdk.PostReference
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -158,6 +160,69 @@ private fun ProvidePostReferences(
     CompositionLocalProvider(LocalPostReferences provides postReferences, content = content)
 }
 
+private val LocalPostRatings = compositionLocalOf<Map<String, PostRatingState>> { emptyMap() }
+
+@Composable
+private fun ProvidePostRatings(
+    ratingsFlow: StateFlow<Map<String, PostRatingState>>,
+    content: @Composable () -> Unit,
+) {
+    val ratingStates by ratingsFlow.collectAsStateWithLifecycle()
+    CompositionLocalProvider(LocalPostRatings provides ratingStates, content = content)
+}
+
+@Composable
+private fun ReaderReplyOverlay(
+    replies: ReplySessionViewModel,
+    preferences: ReadingPreferences,
+    onConfirmed: () -> Unit,
+) {
+    val replySession by replies.session.collectAsStateWithLifecycle()
+    val currentOnConfirmed by rememberUpdatedState(onConfirmed)
+    LaunchedEffect(replySession?.phase, replies) {
+        if (replySession?.phase == ComposePhase.Confirmed) {
+            replies.close()
+            currentOnConfirmed()
+        }
+    }
+    replySession?.let { session ->
+        ReplyPopup(
+            session = session,
+            preferences = preferences,
+            edit = replies::edit,
+            send = replies::send,
+            retry = replies::prepare,
+            preview = replies::preview,
+            close = replies::close,
+            expandContext = replies::expandContext,
+            uploadImage = replies::uploadImage,
+            onAnonymousChange = replies::setAnonymous,
+        )
+    }
+}
+
+@Composable
+private fun ReaderShareCardOverlay(
+    topicId: String,
+    topicTitle: String,
+    mainPost: Post?,
+    vm: ReaderViewModel,
+    preferences: ReadingPreferences,
+) {
+    val shareCard by vm.shareCard.collectAsStateWithLifecycle()
+    if (shareCard.open) {
+        PostShareCardDialog(
+            topicId = topicId,
+            topicTitle = topicTitle,
+            post = mainPost,
+            shareState = shareCard,
+            preferences = preferences,
+            onRetry = vm::retryShareCard,
+            close = vm::closeShareCard,
+        )
+    }
+}
+
 @Composable
 fun ReaderScreen(
     id: String,
@@ -179,19 +244,11 @@ fun ReaderScreen(
     val typography = NagiThemeTokens.typography
     val viewerId = LocalAccountIdentity.current.userId
     var editingPostId by rememberSaveable(id, viewerId) { mutableStateOf<String?>(null) }
-    val ratingStates by ratings.states.collectAsStateWithLifecycle()
     val context = LocalContext.current
     LaunchedEffect(ratings, context) {
         ratings.feedback.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
     }
-    val replySession by replies.session.collectAsStateWithLifecycle()
     var visiblePage by remember(id) { mutableIntStateOf(1) }
-    LaunchedEffect(replySession?.phase) {
-        if (replySession?.phase == ComposePhase.Confirmed) {
-            replies.close()
-            vm.load(page = visiblePage)
-        }
-    }
     val openComposer: (Post, PublishAction) -> Unit = { post, action ->
         val target = PublishTarget(action, topicId = id, postId = post.id)
         val label = when (action) {
@@ -213,7 +270,6 @@ fun ReaderScreen(
     LaunchedEffect(initialPage) {
         initialPage?.let { vm.jumpToPage(it); initialPageConsumed() }
     }
-    val shareCard by vm.shareCard.collectAsStateWithLifecycle()
     val uriHandler = LocalUriHandler.current
     var viewerImages by rememberSaveable(id) { mutableStateOf<List<String>>(emptyList()) }
     var viewerIndex by rememberSaveable(id) { mutableIntStateOf(0) }
@@ -228,6 +284,7 @@ fun ReaderScreen(
             else uriHandler.openUri("https://bbs.nga.cn/read.php?tid=${target.topicId}&pid=${target.postId}&page=${target.page}")
         }
     }
+    ProvidePostRatings(ratingsFlow = ratings.states) {
     ProvidePostReferences(
         referencesFlow = vm.references,
         request = vm::resolveReference,
@@ -396,7 +453,7 @@ fun ReaderScreen(
                                         highlighted = highlighted == post.floor,
                                         onReply = { openComposer(post, PublishAction.REPLY) },
                                         onComment = { openComposer(post, PublishAction.COMMENT) },
-                                        ratingState = ratingStates["$id:${post.id}"],
+                                        ratingState = LocalPostRatings.current["$id:${post.id}"],
                                         onRating = { ratings.rate(id, post.id, it) },
                                         viewerId = viewerId,
                                         onEdit = { editingPostId = post.id },
@@ -522,6 +579,7 @@ fun ReaderScreen(
         }
     }
     }
+    }
     editingPostId?.let { postId ->
         val editor: ComposerViewModel = hiltViewModel(key = "reader-edit:$id:$postId")
         val draft by editor.state.collectAsStateWithLifecycle()
@@ -541,20 +599,11 @@ fun ReaderScreen(
             details = editor::details, editValue = editor::editValue, togglePreview = editor::preview,
         )
     }
-    replySession?.let { session ->
-        ReplyPopup(
-            session = session,
-            preferences = preferences,
-            edit = replies::edit,
-            send = replies::send,
-            retry = replies::prepare,
-            preview = replies::preview,
-            close = replies::close,
-            expandContext = replies::expandContext,
-            uploadImage = replies::uploadImage,
-            onAnonymousChange = replies::setAnonymous,
-        )
-    }
+    ReaderReplyOverlay(
+        replies = replies,
+        preferences = preferences,
+        onConfirmed = { vm.load(page = visiblePage) },
+    )
     if (viewerImages.isNotEmpty()) {
         ImageViewer(
             urls = viewerImages,
@@ -562,15 +611,13 @@ fun ReaderScreen(
             close = { viewerImages = emptyList() },
         )
     }
-    if (shareCard.open && state.id == id) {
-        PostShareCardDialog(
+    if (state.id == id) {
+        ReaderShareCardOverlay(
             topicId = id,
             topicTitle = data?.title.orEmpty(),
-            post = state.mainPost ?: state.items.firstOrNull { it.floor == 0 },
-            shareState = shareCard,
+            mainPost = state.mainPost ?: state.items.firstOrNull { it.floor == 0 },
+            vm = vm,
             preferences = preferences,
-            onRetry = vm::retryShareCard,
-            close = vm::closeShareCard,
         )
     }
 }

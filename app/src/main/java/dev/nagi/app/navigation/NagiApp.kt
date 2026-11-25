@@ -160,6 +160,51 @@ private fun ProvideTopicReadStates(
 }
 
 @Composable
+private fun TopicsRoute(
+    forumId: String,
+    collection: String?,
+    title: String,
+    expanded: Boolean,
+    preferences: dev.nagi.app.data.ReadingPreferences,
+    library: LibraryViewModel,
+    back: () -> Unit,
+    onRead: (String) -> Unit,
+    onSearch: () -> Unit,
+    onSwitchForum: (Forum) -> Unit,
+    onOpenReference: (dev.nagi.sdk.PostReference) -> Unit,
+) {
+    val directory by library.forums.collectAsStateWithLifecycle()
+    val cloudForumFavorites by library.cloudFavoriteForums.collectAsStateWithLifecycle()
+    val cloudFavoriteForumKeys = remember(cloudForumFavorites.items) { cloudForumFavorites.items.map { it.key }.toSet() }
+    val cloudForumBusyKeys by library.cloudForumBusyKeys.collectAsStateWithLifecycle()
+    val cloudForumUncertainKeys by library.cloudForumUncertainKeys.collectAsStateWithLifecycle()
+    val cloudForumNotice by library.cloudForumNotice.collectAsStateWithLifecycle()
+    TopicsScreen(
+        forumId = forumId,
+        collection = collection,
+        title = title,
+        expanded = expanded,
+        preferences = preferences,
+        back = back,
+        onRead = onRead,
+        onSearch = onSearch,
+        directoryForums = directory.items,
+        isSignedIn = library.isSignedIn,
+        cloudFavoriteForumKeys = cloudFavoriteForumKeys,
+        cloudFavoriteBusyKeys = cloudForumBusyKeys,
+        cloudFavoriteUncertainKeys = cloudForumUncertainKeys,
+        cloudFavoriteNotice = cloudForumNotice,
+        onToggleCloudForumFavorite = library::toggleCloudForumFavorite,
+        onRefreshCloudFavorites = library::loadCloudFavoriteForums,
+        onSwitchForum = onSwitchForum,
+        onOpenReference = onOpenReference,
+        onFontSizeChange = library::font,
+        onLineHeightChange = library::lineHeight,
+        onResetTypography = library::resetTypography,
+    )
+}
+
+@Composable
 fun NagiApp(
     width: WindowWidthSizeClass,
     accountVm: AccountViewModel = hiltViewModel(),
@@ -220,12 +265,6 @@ fun NagiApp(
                 LaunchedEffect(account.revision, account.userId, account.ready, account.busy) {
                     if (account.ready && !account.busy) library.releaseInactiveDatabases()
                 }
-                val directory by library.forums.collectAsStateWithLifecycle()
-                val cloudForumFavorites by library.cloudFavoriteForums.collectAsStateWithLifecycle()
-                val cloudFavoriteForumKeys = remember(cloudForumFavorites.items) { cloudForumFavorites.items.map { it.key }.toSet() }
-                val cloudForumBusyKeys by library.cloudForumBusyKeys.collectAsStateWithLifecycle()
-                val cloudForumUncertainKeys by library.cloudForumUncertainKeys.collectAsStateWithLifecycle()
-                val cloudForumNotice by library.cloudForumNotice.collectAsStateWithLifecycle()
                 val appContext = LocalContext.current
                 LaunchedEffect(library) {
                     library.cloudForumFeedback.collect { message ->
@@ -234,9 +273,11 @@ fun NagiApp(
                 }
                 val nav = rememberNavController()
                 val expanded = width == WindowWidthSizeClass.Expanded
-                val popBackFrom: (androidx.navigation.NavBackStackEntry) -> Unit = { source ->
-                    if (nav.currentBackStackEntry === source && nav.previousBackStackEntry != null) {
-                        nav.popBackStack()
+                val popBackFrom: (androidx.navigation.NavBackStackEntry) -> Unit = remember(nav) {
+                    { source ->
+                        if (nav.currentBackStackEntry === source && nav.previousBackStackEntry != null) {
+                            nav.popBackStack()
+                        }
                     }
                 }
                 val select: (String) -> Unit = remember(nav) {
@@ -246,22 +287,28 @@ fun NagiApp(
                         }
                     }
                 }
-                val openTopic: (String) -> Unit = { topicId ->
-                    val current = nav.currentBackStackEntry
-                    nav.navigate("read/${Uri.encode(topicId)}") {
-                        launchSingleTop = current?.destination?.route == "read/{id}" &&
-                            current.arguments?.getString("id") == topicId
+                val openTopic: (String) -> Unit = remember(nav) {
+                    { topicId ->
+                        val current = nav.currentBackStackEntry
+                        nav.navigate("read/${Uri.encode(topicId)}") {
+                            launchSingleTop = current?.destination?.route == "read/{id}" &&
+                                current.arguments?.getString("id") == topicId
+                        }
                     }
                 }
-                val openPostReference: (dev.nagi.sdk.PostReference) -> Unit = { target ->
-                    openTopic(target.topicId)
-                    nav.currentBackStackEntry?.savedStateHandle?.set("postReference", "${target.postId},${target.page}")
+                val openPostReference: (dev.nagi.sdk.PostReference) -> Unit = remember(nav, openTopic) {
+                    { target ->
+                        openTopic(target.topicId)
+                        nav.currentBackStackEntry?.savedStateHandle?.set("postReference", "${target.postId},${target.page}")
+                    }
                 }
                 val topicLinks = rememberTopicLinkHandler(openTopic)
-                val navigateToForum: (Forum) -> Unit = { forum ->
-                    nav.navigate(
-                        "topics/${Uri.encode(forum.id.ifBlank { "0" })}?collection=${Uri.encode(forum.collectionId.orEmpty())}&name=${Uri.encode(forum.name)}",
-                    )
+                val navigateToForum: (Forum) -> Unit = remember(nav) {
+                    { forum ->
+                        nav.navigate(
+                            "topics/${Uri.encode(forum.id.ifBlank { "0" })}?collection=${Uri.encode(forum.collectionId.orEmpty())}&name=${Uri.encode(forum.name)}",
+                        )
+                    }
                 }
                 val showClipboardPrompt = clipboardLink != null && !account.busy && deepLinkUri == null
                 val useBackdropBlur = hardwareBlurAllowed() && showClipboardPrompt
@@ -307,12 +354,13 @@ fun NagiApp(
                                         navArgument("name") { defaultValue = "" },
                                     ),
                                 ) { backStack ->
-                                    TopicsScreen(
+                                    TopicsRoute(
                                         forumId = backStack.arguments!!.getString("id")!!,
                                         collection = backStack.arguments!!.getString("collection")?.ifBlank { null },
                                         title = backStack.arguments!!.getString("name").orEmpty(),
                                         expanded = expanded,
                                         preferences = preferences,
+                                        library = library,
                                         back = { popBackFrom(backStack) },
                                         onRead = openTopic,
                                         onSearch = {
@@ -321,14 +369,6 @@ fun NagiApp(
                                                 "search?forumId=${Uri.encode(args.getString("id"))}&collectionId=${Uri.encode(args.getString("collection").orEmpty())}&forumName=${Uri.encode(args.getString("name").orEmpty())}",
                                             )
                                         },
-                                        directoryForums = directory.items,
-                                        isSignedIn = library.isSignedIn,
-                                        cloudFavoriteForumKeys = cloudFavoriteForumKeys,
-                                        cloudFavoriteBusyKeys = cloudForumBusyKeys,
-                                        cloudFavoriteUncertainKeys = cloudForumUncertainKeys,
-                                        cloudFavoriteNotice = cloudForumNotice,
-                                        onToggleCloudForumFavorite = library::toggleCloudForumFavorite,
-                                        onRefreshCloudFavorites = library::loadCloudFavoriteForums,
                                         onSwitchForum = { targetForum ->
                                             backStack.arguments?.apply {
                                                 putString("id", targetForum.id.ifBlank { "0" })
@@ -337,9 +377,6 @@ fun NagiApp(
                                             }
                                         },
                                         onOpenReference = openPostReference,
-                                        onFontSizeChange = library::font,
-                                        onLineHeightChange = library::lineHeight,
-                                        onResetTypography = library::resetTypography,
                                     )
                                 }
                                 composable(
@@ -466,7 +503,7 @@ fun NagiApp(
                                 }
                             }
                             is NgaExternalTarget.Forum -> {
-                                val matched = directory.items.firstOrNull {
+                                val matched = library.forums.value.items.firstOrNull {
                                     it.id == target.forumId && it.collectionId.orEmpty() == target.collectionId.orEmpty()
                                 }
                                 val fallbackName = if (target.collectionId != null) "合集 ${target.collectionId}" else "版块 ${target.forumId}"

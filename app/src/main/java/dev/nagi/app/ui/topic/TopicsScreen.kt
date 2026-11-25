@@ -127,6 +127,28 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
+private fun TopicsComposerOverlay(
+    composer: ComposerViewModel,
+    preferences: ReadingPreferences,
+    close: () -> Unit,
+) {
+    val draft by composer.state.collectAsStateWithLifecycle()
+    ComposerScreen(
+        state = draft,
+        preferences = preferences,
+        edit = composer::edit,
+        send = composer::send,
+        retry = composer::prepare,
+        close = close,
+        details = composer::details,
+        editValue = composer::editValue,
+        togglePreview = composer::preview,
+        uploadImage = composer::uploadImage,
+        onAnonymousChange = composer::setAnonymous,
+    )
+}
+
+@Composable
 fun TopicsScreen(
     forumId: String?,
     collection: String?,
@@ -158,7 +180,6 @@ fun TopicsScreen(
     val typography = NagiThemeTokens.typography
     val context = LocalContext.current
     val openLogin = LocalOpenLogin.current
-    val draft by composer.state.collectAsStateWithLifecycle()
     var composing by rememberSaveable { mutableStateOf(false) }
     var replacingDraft by remember { mutableStateOf(false) }
     var activeForumId by rememberSaveable(forumId) { mutableStateOf(forumId) }
@@ -189,18 +210,10 @@ fun TopicsScreen(
     }
 
     if (composing) {
-        ComposerScreen(
-            state = draft,
+        TopicsComposerOverlay(
+            composer = composer,
             preferences = preferences,
-            edit = composer::edit,
-            send = composer::send,
-            retry = composer::prepare,
             close = { composing = false },
-            details = composer::details,
-            editValue = composer::editValue,
-            togglePreview = composer::preview,
-            uploadImage = composer::uploadImage,
-            onAnonymousChange = composer::setAnonymous,
         )
     }
 
@@ -261,7 +274,8 @@ fun TopicsScreen(
     val isCurrentCloudUncertain = currentForumKey != null && currentForumKey in cloudFavoriteUncertainKeys
 
     val openComposer = {
-        if (draft.content.isNotBlank() && draft.target != publishTarget) {
+        val currentDraft = composer.state.value
+        if (currentDraft.content.isNotBlank() && currentDraft.target != publishTarget) {
             replacingDraft = true
         } else {
             publishTarget?.let { composer.open(it, "发布到 $activeTitle") }
