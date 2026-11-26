@@ -9,6 +9,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.dp
 import coil.Coil
 import coil.ImageLoader
 import coil.intercept.Interceptor
@@ -190,6 +191,55 @@ class SmilePickerTest {
         compose.runOnIdle {
             assertEquals(EditorDockPanel.NONE, controller.visiblePanel)
             assertEquals(EditorDockPanel.NONE, controller.activeToolbarPanel)
+        }
+    }
+
+    @Test fun editorDockPreservesHeightContinuityDuringImeSlideTransition() {
+        var imeVisible by mutableStateOf(true)
+        var imeNetHeight by mutableStateOf(300.dp)
+        lateinit var controller: EditorDockController
+        compose.setContent {
+            NagiTheme {
+                controller = rememberEditorDockController(
+                    editable = true,
+                    preview = false,
+                    imeVisibleOverride = imeVisible,
+                    imeNetHeightDpOverride = imeNetHeight,
+                )
+            }
+        }
+        compose.runOnIdle {
+            assertEquals(300.dp, controller.targetHeight)
+            controller.togglePanel(EditorDockPanel.SMILE)
+            // Mid-slide: IME drops to 160dp, dock slot fills the remaining 140dp to hold total at 300dp.
+            imeNetHeight = 160.dp
+        }
+        compose.runOnIdle {
+            assertEquals(140.dp, controller.slotHeight)
+            assertEquals(300.dp, imeNetHeight + controller.slotHeight)
+            assertEquals(EditorDockPanel.SMILE, controller.visiblePanel)
+            imeVisible = false
+            imeNetHeight = 0.dp
+        }
+        compose.runOnIdle {
+            assertEquals(300.dp, controller.slotHeight)
+            assertEquals(EditorDockPanel.SMILE, controller.visiblePanel)
+            // Returning to keyboard holds slot + rising IME at 300dp until IME rises in.
+            controller.returnToKeyboard()
+            assertEquals(EditorDockPanel.NONE, controller.visiblePanel)
+            assertEquals(300.dp, controller.slotHeight)
+            imeVisible = true
+            imeNetHeight = 180.dp
+        }
+        compose.runOnIdle {
+            assertEquals(120.dp, controller.slotHeight)
+            assertEquals(300.dp, imeNetHeight + controller.slotHeight)
+            // IME completing its slide-in clears the bridge cleanly and reaches 0dp slot height.
+            imeNetHeight = 300.dp
+        }
+        compose.runOnIdle {
+            assertEquals(0.dp, controller.slotHeight)
+            assertEquals(EditorDockPanel.NONE, controller.visiblePanel)
         }
     }
 

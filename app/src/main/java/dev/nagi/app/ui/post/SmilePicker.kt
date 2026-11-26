@@ -2,6 +2,11 @@ package dev.nagi.app.ui.post
 
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,13 +20,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
@@ -41,19 +49,24 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -71,6 +84,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import dev.nagi.app.ui.components.CapsuleButton
 import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.FlatCard
@@ -89,15 +104,23 @@ internal enum class EditorDockPanel {
     COLOR,
 }
 
+private val DEFAULT_DOCK_HEIGHT = 236.dp
+private val MAX_DOCK_HEIGHT = 360.dp
+private val MIN_MEASURED_IME_HEIGHT = 160.dp
+private val MIN_VISIBLE_DOCK_HEIGHT = 12.dp
+
 /**
  * Coordinates the inline emoji/color dock inside the active editor window (`Dialog` /
- * `ModalBottomSheet`) so it and the system IME are never visible at the same time.
+ * `ModalBottomSheet`) so it swaps smoothly in place with the system IME without overlap or bounce.
  */
 @Stable
 internal class EditorDockController(
     val focusRequester: FocusRequester,
     private val requestedPanelState: MutableState<EditorDockPanel>,
     private val imeVisibleState: State<Boolean>,
+    private val slotHeightState: State<Dp>,
+    private val targetHeightState: State<Dp>,
+    private val awaitingKeyboardState: MutableState<Boolean>,
     private val editableState: State<Boolean>,
     private val previewState: State<Boolean>,
     private val showKeyboard: () -> Unit,
@@ -105,14 +128,34 @@ internal class EditorDockController(
 ) {
     private var requestedPanel: EditorDockPanel by requestedPanelState
 
+    val slotHeight: Dp
+        get() = slotHeightState.value
+
+    val targetHeight: Dp
+        get() = targetHeightState.value
+
+    val isKeyboardOrDockVisible: Boolean
+        get() = activeToolbarPanel != EditorDockPanel.NONE ||
+            imeVisibleState.value ||
+            slotHeightState.value > 0.dp
+
     val visiblePanel: EditorDockPanel
-        get() = if (editableState.value && !imeVisibleState.value) requestedPanel else EditorDockPanel.NONE
+        get() = if (
+            editableState.value &&
+            requestedPanel != EditorDockPanel.NONE &&
+            (!imeVisibleState.value || slotHeightState.value > MIN_VISIBLE_DOCK_HEIGHT)
+        ) {
+            requestedPanel
+        } else {
+            EditorDockPanel.NONE
+        }
 
     val activeToolbarPanel: EditorDockPanel
         get() = if (editableState.value) requestedPanel else EditorDockPanel.NONE
 
     fun openPanel(panel: EditorDockPanel) {
         if (!editableState.value) return
+        awaitingKeyboardState.value = false
         hideKeyboard()
         requestedPanel = panel
     }
@@ -126,10 +169,15 @@ internal class EditorDockController(
     }
 
     fun closePanel() {
-        requestedPanel = EditorDockPanel.NONE
+        if (requestedPanel != EditorDockPanel.NONE) {
+            awaitingKeyboardState.value = true
+            requestedPanel = EditorDockPanel.NONE
+        }
     }
 
     fun returnToKeyboard() {
+        val hadPanel = requestedPanel != EditorDockPanel.NONE
+        awaitingKeyboardState.value = hadPanel && !previewState.value
         requestedPanel = EditorDockPanel.NONE
         if (!previewState.value) {
             runCatching { focusRequester.requestFocus() }
@@ -144,20 +192,64 @@ internal fun rememberEditorDockController(
     editable: Boolean,
     preview: Boolean,
     imeVisibleOverride: Boolean? = null,
+    imeNetHeightDpOverride: Dp? = null,
 ): EditorDockController {
     val focusRequester = remember { FocusRequester() }
     val requestedPanelState = remember { mutableStateOf(EditorDockPanel.NONE) }
+    val awaitingKeyboardState = remember { mutableStateOf(false) }
     val editableState = rememberUpdatedState(editable)
     val previewState = rememberUpdatedState(preview)
+    val resetDock = remember(requestedPanelState, awaitingKeyboardState) {
+        {
+            awaitingKeyboardState.value = false
+            requestedPanelState.value = EditorDockPanel.NONE
+        }
+    }
 
     // Must be resolved inside the popup/dialog window so hide/show and insets target that window.
     val keyboard = LocalSoftwareKeyboardController.current
     val view = LocalView.current
     val focusManager = LocalFocusManager.current
     val density = LocalDensity.current
+    val orientation = LocalConfiguration.current.orientation
+    val imeNetHeightDp = imeNetHeightDpOverride ?: when (imeVisibleOverride) {
+        true -> 260.dp
+        false -> 0.dp
+        null -> with(density) {
+            WindowInsets.ime.exclude(WindowInsets.navigationBars).getBottom(density).toDp()
+        }
+    }
     val currentImeVisible = imeVisibleOverride
-        ?: (WindowInsets.isImeVisible || WindowInsets.ime.getBottom(density) > 0)
+        ?: (WindowInsets.isImeVisible || imeNetHeightDp > 0.dp)
+    val imeNetHeightState = rememberUpdatedState(imeNetHeightDp)
     val imeVisibleState = rememberUpdatedState(currentImeVisible)
+
+    val requestedPanel = requestedPanelState.value
+    val awaitingKeyboard = awaitingKeyboardState.value
+    var rememberedImeHeightDp by remember(orientation) { mutableStateOf(0.dp) }
+    LaunchedEffect(imeNetHeightDp, currentImeVisible, requestedPanel, awaitingKeyboard) {
+        if (
+            requestedPanel == EditorDockPanel.NONE &&
+            !awaitingKeyboard &&
+            currentImeVisible &&
+            imeNetHeightDp >= MIN_MEASURED_IME_HEIGHT
+        ) {
+            rememberedImeHeightDp = imeNetHeightDp
+        }
+    }
+    val targetDockHeight = (if (rememberedImeHeightDp >= DEFAULT_DOCK_HEIGHT) {
+        rememberedImeHeightDp
+    } else {
+        DEFAULT_DOCK_HEIGHT
+    }).coerceAtMost(MAX_DOCK_HEIGHT)
+    val targetHeightState = rememberUpdatedState(targetDockHeight)
+    // Holds the combined reserved bottom height (IME + dock slot) during swaps so toolbar/input stay put.
+    val combinedReservedHeight = remember { Animatable(0.dp, Dp.VectorConverter) }
+    val slotHeightState = remember(combinedReservedHeight, imeNetHeightState) {
+        derivedStateOf {
+            (combinedReservedHeight.value - imeNetHeightState.value).coerceAtLeast(0.dp)
+        }
+    }
 
     val hideKeyboardAction = remember(focusManager, keyboard, view) {
         {
@@ -168,7 +260,7 @@ internal fun rememberEditorDockController(
             Unit
         }
     }
-    val showKeyboardAction = remember(keyboard, view) {
+    val showKeyboardAction = remember(keyboard) {
         {
             keyboard?.show()
             Unit
@@ -177,16 +269,18 @@ internal fun rememberEditorDockController(
 
     LaunchedEffect(editable, preview) {
         if (!editable || (preview && requestedPanelState.value == EditorDockPanel.COLOR)) {
-            requestedPanelState.value = EditorDockPanel.NONE
+            resetDock()
         }
     }
 
     var wasImeVisible by remember { mutableStateOf(currentImeVisible) }
-    val requestedPanel = requestedPanelState.value
     LaunchedEffect(currentImeVisible, requestedPanel) {
         val justOpenedIme = !wasImeVisible && currentImeVisible
         wasImeVisible = currentImeVisible
         if (justOpenedIme && requestedPanel != EditorDockPanel.NONE) {
+            val settleThreshold = (targetHeightState.value - 4.dp).coerceAtLeast(MIN_MEASURED_IME_HEIGHT)
+            awaitingKeyboardState.value =
+                combinedReservedHeight.value > 0.dp && imeNetHeightState.value < settleThreshold
             requestedPanelState.value = EditorDockPanel.NONE
         } else if (requestedPanel != EditorDockPanel.NONE && currentImeVisible) {
             delay(120)
@@ -196,8 +290,40 @@ internal fun rememberEditorDockController(
         }
     }
 
-    BackHandler(enabled = requestedPanel != EditorDockPanel.NONE) {
-        requestedPanelState.value = EditorDockPanel.NONE
+    LaunchedEffect(requestedPanel, awaitingKeyboard, targetDockHeight) {
+        when {
+            requestedPanel != EditorDockPanel.NONE -> {
+                if (imeNetHeightState.value > 0.dp || combinedReservedHeight.value > 0.dp) {
+                    combinedReservedHeight.snapTo(targetDockHeight)
+                } else {
+                    combinedReservedHeight.animateTo(
+                        targetValue = targetDockHeight,
+                        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+                    )
+                }
+            }
+            awaitingKeyboard -> {
+                val settleThreshold = (targetDockHeight - 4.dp).coerceAtLeast(MIN_MEASURED_IME_HEIGHT)
+                withTimeoutOrNull(280) {
+                    snapshotFlow { imeNetHeightState.value }.first { it >= settleThreshold }
+                }
+                awaitingKeyboardState.value = false
+            }
+            else -> {
+                if (imeNetHeightState.value >= combinedReservedHeight.value) {
+                    combinedReservedHeight.snapTo(0.dp)
+                } else {
+                    combinedReservedHeight.animateTo(
+                        targetValue = 0.dp,
+                        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                    )
+                }
+            }
+        }
+    }
+
+    BackHandler(enabled = requestedPanel != EditorDockPanel.NONE || awaitingKeyboard) {
+        resetDock()
     }
 
     return remember(focusRequester, showKeyboardAction, hideKeyboardAction) {
@@ -205,11 +331,57 @@ internal fun rememberEditorDockController(
             focusRequester = focusRequester,
             requestedPanelState = requestedPanelState,
             imeVisibleState = imeVisibleState,
+            slotHeightState = slotHeightState,
+            targetHeightState = targetHeightState,
+            awaitingKeyboardState = awaitingKeyboardState,
             editableState = editableState,
             previewState = previewState,
             showKeyboard = showKeyboardAction,
             hideKeyboard = hideKeyboardAction,
         )
+    }
+}
+
+@Composable
+internal fun EditorDockSlot(
+    dock: EditorDockController,
+    onSelectSmile: (NgaSmile) -> Unit,
+    onSelectColor: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val slotHeight = dock.slotHeight
+    val visiblePanel = dock.visiblePanel
+    val panelVisible = visiblePanel != EditorDockPanel.NONE && slotHeight > MIN_VISIBLE_DOCK_HEIGHT
+    val contentAlpha by animateFloatAsState(
+        targetValue = if (panelVisible) 1f else 0f,
+        animationSpec = tween(durationMillis = 160, easing = FastOutSlowInEasing),
+        label = "editorDockAlpha",
+    )
+    if (slotHeight > 0.dp || panelVisible) {
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(slotHeight)
+                .clipToBounds(),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            if (panelVisible) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .requiredHeight(dock.targetHeight)
+                        .graphicsLayer { alpha = contentAlpha },
+                ) {
+                    InlineEditorDock(
+                        panel = visiblePanel,
+                        dockHeight = dock.targetHeight,
+                        onReturnToKeyboard = dock::returnToKeyboard,
+                        onSelectSmile = onSelectSmile,
+                        onSelectColor = onSelectColor,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -287,15 +459,18 @@ internal fun InlineEditorDock(
     onSelectSmile: (NgaSmile) -> Unit,
     onSelectColor: (String) -> Unit,
     modifier: Modifier = Modifier,
+    dockHeight: Dp = DEFAULT_DOCK_HEIGHT,
 ) {
     when (panel) {
         EditorDockPanel.NONE -> Unit
         EditorDockPanel.SMILE -> InlineSmileDock(
+            dockHeight = dockHeight,
             onReturnToKeyboard = onReturnToKeyboard,
             onSelectSmile = onSelectSmile,
             modifier = modifier,
         )
         EditorDockPanel.COLOR -> InlineColorDock(
+            dockHeight = dockHeight,
             onReturnToKeyboard = onReturnToKeyboard,
             onSelectColor = onSelectColor,
             modifier = modifier,
@@ -305,6 +480,7 @@ internal fun InlineEditorDock(
 
 @Composable
 private fun InlineSmileDock(
+    dockHeight: Dp,
     onReturnToKeyboard: () -> Unit,
     onSelectSmile: (NgaSmile) -> Unit,
     modifier: Modifier = Modifier,
@@ -326,7 +502,7 @@ private fun InlineSmileDock(
     FlatCard(
         modifier = modifier
             .fillMaxWidth()
-            .height(236.dp)
+            .height(dockHeight)
             .semantics { contentDescription = "选择表情" },
         shape = NagiThemeTokens.shapes.flatCard,
     ) {
@@ -558,6 +734,7 @@ internal val NGA_COLOR_OPTIONS: List<NgaColorOption> = ContentColors.rgb.map { (
 
 @Composable
 private fun InlineColorDock(
+    dockHeight: Dp,
     onReturnToKeyboard: () -> Unit,
     onSelectColor: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -567,7 +744,7 @@ private fun InlineColorDock(
     FlatCard(
         modifier = modifier
             .fillMaxWidth()
-            .height(236.dp)
+            .height(dockHeight)
             .semantics { contentDescription = "选择字体颜色" },
         shape = NagiThemeTokens.shapes.flatCard,
     ) {

@@ -2,6 +2,9 @@ package dev.nagi.app.ui.post
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -71,13 +74,23 @@ internal fun ReplyPopup(
 
     EditorPopup(dismiss) {
         val dock = rememberEditorDockController(editable = editable, preview = session.preview)
+        val inputMaxHeight by animateDpAsState(
+            targetValue = if (dock.isKeyboardOrDockVisible) 180.dp else 260.dp,
+            animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+            label = "replyInputMaxHeight",
+        )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = Space.lg)
                 .padding(top = Space.md, bottom = Space.md),
-            verticalArrangement = Arrangement.spacedBy(Space.sm),
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false),
+                verticalArrangement = Arrangement.spacedBy(Space.sm),
+            ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -244,7 +257,7 @@ internal fun ReplyPopup(
                             preview = session.preview,
                             previewContent = session.content,
                             preferences = preferences,
-                            modifier = Modifier.heightIn(max = if (dock.visiblePanel != EditorDockPanel.NONE) 180.dp else 260.dp),
+                            modifier = Modifier.heightIn(max = inputMaxHeight),
                             minLines = if (session.comment) 3 else 4,
                             focusRequester = dock.focusRequester,
                             onInputTap = dock::closePanel,
@@ -328,16 +341,14 @@ internal fun ReplyPopup(
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                     )
                 }
-
-                if (dock.visiblePanel != EditorDockPanel.NONE) {
-                    InlineEditorDock(
-                        panel = dock.visiblePanel,
-                        onReturnToKeyboard = dock::returnToKeyboard,
-                        onSelectSmile = { smile -> if (editable) edit(insertSmile(session.input, smile)) },
-                        onSelectColor = { colorName -> if (!session.preview && editable) edit(colorSelection(session.input, colorName)) },
-                    )
-                }
             }
+            }
+
+            EditorDockSlot(
+                dock = dock,
+                onSelectSmile = { smile -> if (editable) edit(insertSmile(session.input, smile)) },
+                onSelectColor = { colorName -> if (!session.preview && editable) edit(colorSelection(session.input, colorName)) },
+            )
         }
     }
 

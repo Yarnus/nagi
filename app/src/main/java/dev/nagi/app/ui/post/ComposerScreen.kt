@@ -139,8 +139,13 @@ internal fun ComposerScreen(
                 .fillMaxWidth()
                 .padding(horizontal = Space.lg)
                 .padding(top = Space.xs, bottom = Space.sm),
-            verticalArrangement = Arrangement.spacedBy(Space.sm),
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = !shortForm),
+                verticalArrangement = Arrangement.spacedBy(Space.sm),
+            ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -374,15 +379,13 @@ internal fun ComposerScreen(
                     }
                 },
             )
-
-            if (dock.visiblePanel != EditorDockPanel.NONE) {
-                InlineEditorDock(
-                    panel = dock.visiblePanel,
-                    onReturnToKeyboard = dock::returnToKeyboard,
-                    onSelectSmile = { smile -> if (editable) update(insertSmile(field, smile)) },
-                    onSelectColor = { colorName -> if (!preview && editable) update(colorSelection(field, colorName)) },
-                )
             }
+
+            EditorDockSlot(
+                dock = dock,
+                onSelectSmile = { smile -> if (editable) update(insertSmile(field, smile)) },
+                onSelectColor = { colorName -> if (!preview && editable) update(colorSelection(field, colorName)) },
+            )
         }
     }
 
