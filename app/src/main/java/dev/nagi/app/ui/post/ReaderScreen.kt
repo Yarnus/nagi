@@ -229,7 +229,7 @@ fun ReaderScreen(
     preferences: ReadingPreferences,
     back: () -> Unit,
     vm: ReaderViewModel = hiltViewModel(),
-    replies: ReplySessionViewModel = hiltViewModel(),
+    replies: ReplySessionViewModel = hiltViewModel(key = "reply:$id"),
     ratings: PostRatingViewModel = hiltViewModel(),
     initialReference: PostReference? = null,
     referenceConsumed: () -> Unit = {},
@@ -249,14 +249,16 @@ fun ReaderScreen(
         ratings.feedback.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
     }
     var visiblePage by remember(id) { mutableIntStateOf(1) }
-    val openComposer: (Post, PublishAction) -> Unit = { post, action ->
-        val target = PublishTarget(action, topicId = id, postId = post.id)
-        val label = when (action) {
-            PublishAction.COMMENT -> "贴条评论"
-            PublishAction.QUOTE -> "引用回复"
-            else -> "回复"
+    val openComposer: (Post, PublishAction) -> Unit = remember(id, replies) {
+        { post, action ->
+            val target = PublishTarget(action, topicId = id, postId = post.id)
+            val label = when (action) {
+                PublishAction.COMMENT -> "贴条评论"
+                PublishAction.QUOTE -> "引用回复"
+                else -> "回复"
+            }
+            replies.open(target, "$label ${formatAuthorDisplayName(post.author)} · #${post.floor}")
         }
-        replies.open(target, "$label ${formatAuthorDisplayName(post.author)} · #${post.floor}")
     }
     val state by vm.state.collectAsStateWithLifecycle()
     LaunchedEffect(state.id, state.loadedRevision) {
@@ -440,31 +442,29 @@ fun ReaderScreen(
                                     val canFilterAuthor = dev.nagi.app.ui.components.isPublicUserId(post.authorId)
                                     val filteringThisAuthor = state.filterAuthorId == post.authorId
                                     val validPostLink = post.id.toLongOrNull()?.let { it > 0L } == true
-                                    ReaderPost(
-                                        post = post,
-                                        preferences = preferences,
-                                        isAuthor = post.authorId.isNotBlank() && post.authorId == data.authorId,
-                                        title = data.title.takeIf { index == 0 },
-                                        onImage = { clickedUrl ->
+                                    val onImageClick = remember(post.id, post.content) {
+                                        { clickedUrl: String ->
                                             val (images, matchedIndex) = resolveContentImageClick(post.content, clickedUrl)
                                             viewerImages = images
                                             viewerIndex = matchedIndex
-                                        },
-                                        highlighted = highlighted == post.floor,
-                                        onReply = { openComposer(post, PublishAction.REPLY) },
-                                        onComment = { openComposer(post, PublishAction.COMMENT) },
-                                        ratingState = LocalPostRatings.current["$id:${post.id}"],
-                                        onRating = { ratings.rate(id, post.id, it) },
-                                        viewerId = viewerId,
-                                        onEdit = { editingPostId = post.id },
-                                        filteringThisAuthor = filteringThisAuthor,
-                                        onFilterAuthor = if (canFilterAuthor) {
+                                        }
+                                    }
+                                    val onReplyClick = remember(post, openComposer) { { openComposer(post, PublishAction.REPLY) } }
+                                    val onCommentClick = remember(post, openComposer) { { openComposer(post, PublishAction.COMMENT) } }
+                                    val onRatingClick = remember(id, post.id, ratings) {
+                                        { rating: PostRating -> ratings.rate(id, post.id, rating) }
+                                    }
+                                    val onEditClick = remember(post.id) { { editingPostId = post.id } }
+                                    val onFilterAuthorClick = remember(post.authorId, post.author, filteringThisAuthor, vm) {
+                                        if (canFilterAuthor) {
                                             {
                                                 if (filteringThisAuthor) vm.load(page = 1, clearAuthorFilter = true)
                                                 else vm.load(page = 1, filterAuthorId = post.authorId, filterAuthorName = formatAuthorDisplayName(post.author))
                                             }
-                                        } else null,
-                                        onCopyText = if (canCopyText) {
+                                        } else null
+                                    }
+                                    val onCopyTextClick = remember(post.id, post.content, canCopyText, context) {
+                                        if (canCopyText) {
                                             {
                                                 val copiedText = contentPlainText(post.content)
                                                 if (copiedText.isNotEmpty()) {
@@ -473,8 +473,10 @@ fun ReaderScreen(
                                                     Toast.makeText(context, "已复制楼层内容", Toast.LENGTH_SHORT).show()
                                                 }
                                             }
-                                        } else null,
-                                        onCopyLink = if (validPostLink) {
+                                        } else null
+                                    }
+                                    val onCopyLinkClick = remember(id, post.id, validPostLink, context) {
+                                        if (validPostLink) {
                                             {
                                                 val postUrl = "https://bbs.nga.cn/read.php?tid=$id&pid=${post.id}"
                                                 val clipboard = context.getSystemService(ClipboardManager::class.java)
@@ -483,11 +485,32 @@ fun ReaderScreen(
                                                 dev.nagi.app.navigation.ClipboardLinkTracker.markHandled(postUrl, timestamp)
                                                 Toast.makeText(context, "已复制楼层链接", Toast.LENGTH_SHORT).show()
                                             }
-                                        } else null,
+                                        } else null
+                                    }
+                                    val onLocateHotReplyClick = remember(id, vm) {
+                                        { reply: Post -> vm.locateReference(PostReference(id, reply.id)) }
+                                    }
+                                    ReaderPost(
+                                        post = post,
+                                        preferences = preferences,
+                                        isAuthor = post.authorId.isNotBlank() && post.authorId == data.authorId,
+                                        title = data.title.takeIf { index == 0 },
+                                        onImage = onImageClick,
+                                        highlighted = highlighted == post.floor,
+                                        onReply = onReplyClick,
+                                        onComment = onCommentClick,
+                                        ratingState = LocalPostRatings.current["$id:${post.id}"],
+                                        onRating = onRatingClick,
+                                        viewerId = viewerId,
+                                        onEdit = onEditClick,
+                                        filteringThisAuthor = filteringThisAuthor,
+                                        onFilterAuthor = onFilterAuthorClick,
+                                        onCopyText = onCopyTextClick,
+                                        onCopyLink = onCopyLinkClick,
                                         onShareCard = if (post.floor == 0) vm::openShareCard else null,
                                         topicAuthorId = data.authorId,
                                         showHotReplies = data.page == 1,
-                                        onLocateHotReply = { reply -> vm.locateReference(PostReference(id, reply.id)) },
+                                        onLocateHotReply = onLocateHotReplyClick,
                                     )
                                 }
                             }

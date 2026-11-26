@@ -571,11 +571,11 @@ internal fun PostShareCardSurface(
     topicId: String,
     topicTitle: String,
     post: Post,
-    earlyReplies: List<Post> = emptyList(),
     content: ShareCardContent,
     preferences: ReadingPreferences,
     darkCard: Boolean,
     modifier: Modifier = Modifier,
+    earlyReplies: List<Post> = emptyList(),
 ) {
     val cardColors = if (darkCard) DarkSemanticColors else LightSemanticColors
     val typography = NagiThemeTokens.typography

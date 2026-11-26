@@ -370,7 +370,10 @@ internal fun MessagesContent(
                             key = { _, post -> post.id },
                             contentType = { _, _ -> "message-post" },
                         ) { index, post ->
-                            SectionCardItem(CardGroupPosition.at(index, state.posts.size), gutter) {
+                            SectionCardItem(
+                                position = CardGroupPosition.at(index, state.posts.size),
+                                margin = gutter,
+                            ) {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()

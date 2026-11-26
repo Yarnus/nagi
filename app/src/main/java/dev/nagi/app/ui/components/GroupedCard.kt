@@ -58,11 +58,11 @@ fun FlatCard(
 @Composable
 fun SectionCardItem(
     position: CardGroupPosition,
+    modifier: Modifier = Modifier,
     margin: Dp = 16.dp,
     cornerRadius: Dp = 20.dp,
     dividerIndent: Dp = 16.dp,
     dividerEndIndent: Dp = 16.dp,
-    modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val topRadius = if (position == CardGroupPosition.First || position == CardGroupPosition.Single) cornerRadius else 0.dp

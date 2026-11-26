@@ -313,4 +313,27 @@ class ReadingDatabaseTest {
             context.deleteDatabase("${name}_7.db"); context.deleteDatabase("${name}_8.db")
         }
     }
+
+    @Test fun historyAndPositionPruneUseHysteresisAndProtectFavoritesInCounts() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val database = Room.inMemoryDatabaseBuilder(context, ReadingDatabase::class.java).build()
+        try {
+            val dao = database.readingDao()
+            dao.saveFavorite(LocalFavorite("fav-1", "Fav"))
+            dao.upsertPosition(ReadingPosition("fav-1", 1, 0, 0, updatedAt = 1L))
+            assertEquals(0, dao.positionCount())
+
+            repeat(MAX_HISTORY_ENTRIES + 5) { idx ->
+                dao.saveHistory(ReadingHistory("h-$idx", "Title $idx", idx.toLong()))
+            }
+            assertEquals(MAX_HISTORY_ENTRIES + 5, dao.historyCount())
+
+            repeat(20) { idx ->
+                dao.saveHistory(ReadingHistory("h-extra-$idx", "Extra $idx", (1000 + idx).toLong()))
+            }
+            assertTrue(dao.historyCount() <= PRUNE_HISTORY_TRIGGER)
+        } finally {
+            database.close()
+        }
+    }
 }

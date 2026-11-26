@@ -431,6 +431,7 @@ class TopicsViewModel @Inject constructor(
             _state.update { it.copy(loading = true, error = null) }
             try {
                 var combined = if (refresh) emptyList() else _state.value.items
+                val seenIds = combined.mapTo(HashSet(combined.size + 32)) { it.id }
                 var result: TopicPage? = null
                 val lastPage = if (refresh) throughPage.coerceAtLeast(1) else next
                 for (number in next..lastPage) {
@@ -438,7 +439,10 @@ class TopicsViewModel @Inject constructor(
                     val page = if (keyword != null) client.searchTopics(keyword, source!!.first, number, source.second) else client.getTopics(source!!.first, number, source.second, order)
                     ensureActive()
                     if (version != generation || !current()) return@launch
-                    combined = (combined + page.items).distinctBy { it.id }
+                    val fresh = page.items.filter { seenIds.add(it.id) }
+                    if (fresh.isNotEmpty()) {
+                        combined = combined + fresh
+                    }
                     result = page
                     if (!page.hasMore) break
                 }
@@ -823,6 +827,10 @@ class ReaderViewModel @Inject constructor(
     suspend fun savePosition(page: Int, index: Int, offset: Int, topicId: String = _state.value.id) {
         val state = _state.value
         if (state.id != topicId || state.data == null || page !in state.startPage..state.endPage || state.authorOnly || state.loading) return
+        val previous = latestPosition
+        if (previous != null && previous.topicId == state.id && previous.page == page && previous.index == index && previous.offset == offset) {
+            return
+        }
         accounts.withCurrentRevision(owner.revision) {
             val position = ReadingPosition(state.id, page, index, offset, updatedAt = System.currentTimeMillis())
             dao.savePosition(position)

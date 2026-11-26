@@ -64,9 +64,9 @@ private fun avatarToneFor(seed: String?, colors: NagiSemanticColors): AvatarTone
 fun UserAvatar(
     name: String?,
     avatarUrl: String?,
+    modifier: Modifier = Modifier,
     uid: String? = null,
     size: Dp = 32.dp,
-    modifier: Modifier = Modifier,
     colors: NagiSemanticColors = NagiThemeTokens.colors,
     imageModel: Any? = avatarUrl,
     revisionKey: Any? = Unit,

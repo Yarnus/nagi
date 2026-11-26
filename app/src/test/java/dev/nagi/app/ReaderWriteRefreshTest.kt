@@ -60,7 +60,7 @@ class ReaderWriteRefreshTest {
         compose.runOnIdle { reader.load(page = 3) }
         compose.onNodeWithText("Read 2").assertExists()
         compose.runOnIdle { replies.open(PublishTarget(action, topicId = "123", postId = "12"), "Synthetic reply") }
-        compose.waitUntil { replies.session.value?.phase == ComposePhase.Editing }
+        compose.waitUntil { replies.session.value?.let { it.phase == ComposePhase.Editing && !it.preparing } == true }
         compose.runOnIdle { replies.edit(TextFieldValue("Draft")); replies.send() }
         if (result is WriteResult.Confirmed) {
             compose.onNodeWithText("Read 3").assertExists()
@@ -74,5 +74,39 @@ class ReaderWriteRefreshTest {
         compose.runOnIdle { appearance = "dark" }
         compose.waitForIdle()
         compose.runOnIdle { assertEquals(if (result is WriteResult.Confirmed) 3 else 2, reads); assertEquals(1, writes) }
+    }
+
+    @Test fun switchingTopicsWithSeparateReplySessionsIsolatesOpenReplyPopup() {
+        val sessions = MemorySessionStore()
+        val accounts = runBlocking {
+            sessions.saveSession(NgaSession("7", "test"))
+            AccountManager(sessions, FakeBrowserCookies()).also { it.initialize() }
+        }
+        val client = object : NgaClient by FakeClient() {
+            override suspend fun getPosts(topicId: String, page: Int, authorId: String?): PostPage =
+                PostPage(listOf(Post("${topicId}0", 0, "Author", "7", "", "", listOf(ContentBlock.Text("Body $topicId")))),
+                    "Title $topicId", "7", page, 1, false, 10, 1)
+            override suspend fun preparePublish(target: PublishTarget) = PublishPreparation("", "")
+        }
+        val reader = ReaderViewModel(client, FakeDaoProvider(), sessions, accounts)
+        val replyA = ReplySessionViewModel(client, accounts, SavedStateHandle())
+        val replyB = ReplySessionViewModel(client, accounts, SavedStateHandle())
+        val ratings = PostRatingViewModel(client, accounts, SavedStateHandle())
+        var activeTopic by mutableStateOf("100")
+        compose.setContent {
+            NagiTheme {
+                key(activeTopic) {
+                    val replyVm = if (activeTopic == "100") replyA else replyB
+                    ReaderScreen(activeTopic, ReadingPreferences(), {}, reader, replyVm, ratings)
+                }
+            }
+        }
+        compose.onNodeWithText("Body 100").assertExists()
+        compose.onNodeWithContentDescription("回复帖子").performClick()
+        compose.onNodeWithText("写下你的回复…").assertExists()
+
+        compose.runOnIdle { activeTopic = "200" }
+        compose.onNodeWithText("Body 200").assertExists()
+        compose.onNodeWithText("写下你的回复…").assertDoesNotExist()
     }
 }

@@ -680,6 +680,43 @@ class ReadingViewModelTest {
         accounts.logout(); runCurrent()
         assertFalse(vm.shareCard.value.open)
     }
+
+    @Test fun savePositionSkipsDuplicateWriteWhenUnchanged() = runTest(dispatcher) {
+        val sessions = MemorySessionStore().apply { saveSession(NgaSession("7", "test")) }
+        val accounts = AccountManager(sessions, FakeBrowserCookies()).also { it.initialize() }
+        var positionWrites = 0
+        val dao = object : ReadingDao by FakeDao() {
+            override suspend fun savePosition(item: ReadingPosition) {
+                positionWrites++
+                upsertPosition(item)
+            }
+        }
+        val provider = object : ReadingDaoProvider { override fun forUser(userId: String?) = dao }
+        val vm = ReaderViewModel(FakeClient(), provider, sessions, accounts)
+        vm.open("42"); runCurrent()
+        positionWrites = 0
+        vm.savePosition(1, 2, 120, topicId = "42")
+        vm.savePosition(1, 2, 120, topicId = "42")
+        assertEquals(1, positionWrites)
+        vm.savePosition(1, 2, 180, topicId = "42")
+        assertEquals(2, positionWrites)
+    }
+
+    @Test fun topicsPaginationDeduplicatesIncrementallyAcrossPages() = runTest(dispatcher) {
+        val sessions = MemorySessionStore().apply { saveSession(NgaSession("7", "test")) }
+        val accounts = AccountManager(sessions, FakeBrowserCookies()).also { it.initialize() }
+        val client = object : NgaClient by FakeClient() {
+            override suspend fun getTopics(forumId: String, page: Int, collectionId: String?, sort: TopicSort): TopicPage =
+                when (page) {
+                    1 -> TopicPage(listOf(Topic("1", "T1", "A", "7"), Topic("2", "T2", "A", "7")), 1, 4, true)
+                    else -> TopicPage(listOf(Topic("2", "T2", "A", "7"), Topic("3", "T3", "A", "7")), 2, 4, false)
+                }
+        }
+        val vm = TopicsViewModel(client, SavedStateHandle(), accounts)
+        vm.openForum("7", null); runCurrent()
+        vm.load(false); runCurrent()
+        assertEquals(listOf("1", "2", "3"), vm.state.value.items.map { it.id })
+    }
 }
 
 class FakeClient : NgaClient {
@@ -829,6 +866,7 @@ class FakeDao : ReadingDao {
         readStates.update { current -> current.filterKeys { it in favIds } }
     }
     private val recentSmiles = MutableStateFlow<List<RecentSmileEntity>>(emptyList())
+    override suspend fun recentSmileCount(): Int = recentSmiles.value.size
     override fun recentSmiles(limit: Int): Flow<List<RecentSmileEntity>> =
         recentSmiles.map { list ->
             list.sortedWith(compareByDescending<RecentSmileEntity> { it.usedAt }.thenBy { it.smileKey }).take(limit)

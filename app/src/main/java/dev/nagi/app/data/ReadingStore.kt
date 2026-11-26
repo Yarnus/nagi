@@ -39,8 +39,11 @@ data class CloudForumFavoriteOrder(
 )
 
 const val MAX_HISTORY_ENTRIES = 100
+const val PRUNE_HISTORY_TRIGGER = MAX_HISTORY_ENTRIES + 20
 const val MAX_UNFAVORITED_POSITIONS = 500
+const val PRUNE_POSITIONS_TRIGGER = MAX_UNFAVORITED_POSITIONS + 50
 const val MAX_UNFAVORITED_READ_STATES = 2000
+const val PRUNE_READ_STATES_TRIGGER = MAX_UNFAVORITED_READ_STATES + 50
 const val MAX_RECENT_SMILES = 24
 
 @Entity(
@@ -153,7 +156,7 @@ interface ReadingDao {
     @Transaction
     suspend fun saveHistory(item: ReadingHistory) {
         upsertHistory(item)
-        if (historyCount() > MAX_HISTORY_ENTRIES) pruneHistory()
+        if (historyCount() > PRUNE_HISTORY_TRIGGER) pruneHistory()
     }
     @Query("DELETE FROM history WHERE topicId = :topicId") suspend fun removeHistory(topicId: String)
     @Query("DELETE FROM history") suspend fun clearHistory()
@@ -192,7 +195,7 @@ interface ReadingDao {
             )
         }
     }
-    @Query("SELECT COUNT(*) FROM positions") suspend fun positionCount(): Int
+    @Query("SELECT COUNT(*) FROM positions WHERE topicId NOT IN (SELECT topicId FROM favorites)") suspend fun positionCount(): Int
     @Query("SELECT * FROM positions WHERE topicId = :id") suspend fun position(id: String): ReadingPosition?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertPosition(item: ReadingPosition)
     @Query(
@@ -203,11 +206,11 @@ interface ReadingDao {
     @Transaction
     suspend fun savePosition(item: ReadingPosition) {
         upsertPosition(item)
-        if (positionCount() > MAX_UNFAVORITED_POSITIONS) prunePositions()
+        if (positionCount() > PRUNE_POSITIONS_TRIGGER) prunePositions()
     }
     @Query("DELETE FROM positions WHERE topicId NOT IN (SELECT topicId FROM favorites)")
     suspend fun clearUnfavoritedPositions()
-    @Query("SELECT COUNT(*) FROM topic_read_states") suspend fun topicReadStateCount(): Int
+    @Query("SELECT COUNT(*) FROM topic_read_states WHERE topicId NOT IN (SELECT topicId FROM favorites)") suspend fun topicReadStateCount(): Int
     @Query("SELECT * FROM topic_read_states")
     fun topicReadStates(): kotlinx.coroutines.flow.Flow<List<TopicReadState>>
     @Query("SELECT * FROM topic_read_states WHERE topicId = :id")
@@ -228,10 +231,12 @@ interface ReadingDao {
         }
         val mergedAt = maxOf(existing?.lastReadAt ?: 0L, readAtSeconds)
         upsertTopicReadState(TopicReadState(topicId, mergedReplies, mergedAt))
-        if (topicReadStateCount() > MAX_UNFAVORITED_READ_STATES) pruneTopicReadStates()
+        if (topicReadStateCount() > PRUNE_READ_STATES_TRIGGER) pruneTopicReadStates()
     }
     @Query("DELETE FROM topic_read_states WHERE topicId NOT IN (SELECT topicId FROM favorites)")
     suspend fun clearUnfavoritedReadStates()
+    @Query("SELECT COUNT(*) FROM recent_smiles")
+    suspend fun recentSmileCount(): Int
     @Query("SELECT * FROM recent_smiles ORDER BY usedAt DESC, smileKey ASC LIMIT :limit")
     fun recentSmiles(limit: Int = MAX_RECENT_SMILES): kotlinx.coroutines.flow.Flow<List<RecentSmileEntity>>
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -246,7 +251,7 @@ interface ReadingDao {
     @Transaction
     suspend fun recordRecentSmile(smileKey: String, usedAt: Long) {
         upsertRecentSmile(RecentSmileEntity(smileKey, usedAt))
-        pruneRecentSmiles()
+        if (recentSmileCount() > MAX_RECENT_SMILES) pruneRecentSmiles()
     }
 }
 

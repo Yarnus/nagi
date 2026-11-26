@@ -206,7 +206,7 @@ internal class HttpNgaClient(
                 .create(NgaApi::class.java)
         }
 
-    @Volatile private var readBundle = buildTransport(ConnectionPool(), isWrite = false)
+    private val readBundle = buildTransport(ConnectionPool(), isWrite = false)
     private val writeBundle = buildTransport(ConnectionPool(), isWrite = true)
 
     override fun close() {
@@ -399,7 +399,7 @@ internal class HttpNgaClient(
                 } catch (error: NgaException) {
                     if (error !is NgaException.Protocol && error !is NgaException.Http) throw error
                     if (firstError == null) firstError = error
-                    readBundle = buildTransport(ConnectionPool(), isWrite = false)
+                    withContext(Dispatchers.IO) { readBundle.client.connectionPool.evictAll() }
                 }
             }
             if (firstError !is NgaException.Protocol) throw firstError ?: NgaException.Protocol(ProtocolReason.UNKNOWN)

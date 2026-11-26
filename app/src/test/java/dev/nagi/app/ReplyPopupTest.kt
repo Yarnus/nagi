@@ -35,7 +35,7 @@ class ReplyPopupTest {
         PublishTarget(if (comment) PublishAction.COMMENT else PublishAction.REPLY, topicId = "123", postId = "12"),
         "${if (comment) "评论" else "回复"} 测试作者 · #12", phase = ComposePhase.Editing)
 
-    @Test fun replyRequiresDiscardWithoutSaveOption() {
+    @Test fun replyClosesDirectlyWithoutDiscardConfirmation() {
         var state by mutableStateOf(session())
         var closed = false
         compose.setContent { NagiTheme { ReplyPopup(state, ReadingPreferences(), { state = state.copy(input = it) }, {}, {},
@@ -45,12 +45,8 @@ class ReplyPopupTest {
         compose.onNodeWithText("中文回复 加粗").assertExists()
         compose.onNodeWithContentDescription("编辑").performClick()
         compose.onNodeWithContentDescription("关闭回复").performClick()
-        compose.onNodeWithText("放弃这次回复？").assertExists()
-        compose.onNodeWithText("继续编辑").performClick()
-        compose.runOnIdle { assertFalse(closed); assertEquals("中文回复 [b]加粗[/b]", state.input.text) }
-        compose.onNodeWithContentDescription("关闭回复").performClick()
-        compose.onNodeWithText("放弃回复").performClick()
-        compose.runOnIdle { assertTrue(closed) }
+        compose.onNodeWithText("放弃这次回复？").assertDoesNotExist()
+        compose.runOnIdle { assertTrue(closed); assertEquals("中文回复 [b]加粗[/b]", state.input.text) }
     }
     @Test fun commentClosesWithoutDraftPromptAndSupportsPreview() {
         var state by mutableStateOf(session(true))
@@ -119,6 +115,36 @@ class ReplyPopupTest {
         compose.onNodeWithText("重新准备").assertIsDisplayed()
         compose.onAllNodes(hasSetTextAction()).assertCountEquals(0)
         compose.onNodeWithText("发送").assertDoesNotExist()
+    }
+
+    @Test fun backgroundPreparationAllowsImmediateTypingAndBlocksSendUntilReady() {
+        var state by mutableStateOf(session().copy(preparing = true))
+        var retried = false
+        compose.setContent {
+            NagiTheme {
+                ReplyPopup(
+                    session = state,
+                    preferences = ReadingPreferences(),
+                    edit = { state = state.copy(input = it) },
+                    send = {},
+                    retry = { retried = true },
+                    preview = {},
+                    close = {},
+                )
+            }
+        }
+        compose.onNodeWithText("写下你的回复…").performTextInput("立即输入的内容")
+        compose.runOnIdle { assertEquals("立即输入的内容", state.input.text) }
+        compose.onNodeWithText("准备中…").assertIsDisplayed().assertIsNotEnabled()
+
+        compose.runOnIdle {
+            state = state.copy(preparing = false, prepareError = "无法准备回复：访问受限")
+        }
+        compose.onNodeWithText("立即输入的内容").assertIsDisplayed()
+        compose.onNodeWithText("无法准备回复：访问受限").assertIsDisplayed()
+        compose.onNodeWithText("重新准备").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertTrue(retried) }
+        compose.onNodeWithText("发送").assertIsNotEnabled()
     }
 
     @Test fun unconfirmedReplyDisplaysSafeDiagnosticAndDoesNotEnableSending() {

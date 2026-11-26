@@ -1278,8 +1278,9 @@ internal fun TopicRow(
                     val primaryTime = if (sort == TopicSort.NEWEST || sort == TopicSort.RECOMMENDED) topic.createdAt else topic.lastActiveAt
                     val timestamp = primaryTime.takeIf { it > 0 } ?: topic.createdAt.takeIf { it > 0 } ?: topic.lastActiveAt
                     if (timestamp > 0) {
+                        val timeText = remember(timestamp) { formatTime(timestamp) }
                         Text(
-                            text = formatTime(timestamp),
+                            text = timeText,
                             style = typography.metadata,
                             color = colors.textSecondary,
                             maxLines = 1,

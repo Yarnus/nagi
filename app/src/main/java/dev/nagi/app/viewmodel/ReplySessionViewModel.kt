@@ -25,12 +25,14 @@ data class ReplySession(
     val target: PublishTarget, val context: String,
     val prefill: String = "", val input: TextFieldValue = TextFieldValue(),
     val phase: ComposePhase = ComposePhase.Preparing, val error: String? = null,
+    val preparing: Boolean = false, val prepareError: String? = null,
     val preview: Boolean = false, val expandedContext: Boolean = false, val images: DraftImages = DraftImages(),
     val anonymous: Boolean = false,
 ) {
     val comment get() = target.action == PublishAction.COMMENT
     val content get() = assembleReply(prefill, input.text)
-    val canSend get() = !images.uploading && input.text.isNotBlank() && phase in setOf(ComposePhase.Editing, ComposePhase.Rejected)
+    val canSend get() = !preparing && prepareError == null && !images.uploading && input.text.isNotBlank() &&
+        phase in setOf(ComposePhase.Editing, ComposePhase.Rejected)
 }
 
 @HiltViewModel
@@ -58,26 +60,50 @@ class ReplySessionViewModel @Inject constructor(
         require(target.action in setOf(PublishAction.REPLY, PublishAction.COMMENT, PublishAction.QUOTE))
         val interrupted = pendingKey(target) in pending()
         val uploadBlocked = pendingKey(target) in saved.get<ArrayList<String>>("replyPendingUploads").orEmpty()
-        _session.value = ReplySession(target, context, phase = if (interrupted) ComposePhase.Unconfirmed else ComposePhase.Preparing,
-            images = DraftImages(blocked = uploadBlocked, error = if (uploadBlocked) "上次图片上传结果不明，请勿重复上传。" else null))
+        _session.value = ReplySession(
+            target = target,
+            context = context,
+            phase = if (interrupted) ComposePhase.Unconfirmed else ComposePhase.Editing,
+            preparing = !interrupted,
+            images = DraftImages(blocked = uploadBlocked, error = if (uploadBlocked) "上次图片上传结果不明，请勿重复上传。" else null),
+        )
         if (!interrupted) prepare()
     }
     fun prepare() {
         val session = _session.value ?: return
-        if (!current() || session.phase != ComposePhase.Preparing) return
+        if (!current()) return
+        val needsPrepare = session.phase == ComposePhase.Preparing ||
+            (session.phase in setOf(ComposePhase.Editing, ComposePhase.Rejected) &&
+                (session.preparing || session.prepareError != null))
+        if (!needsPrepare) return
         preparation?.cancel()
         val token = ++generation
-        _session.value = session.copy(error = null)
+        _session.value = session.copy(
+            phase = if (session.phase == ComposePhase.Preparing) ComposePhase.Editing else session.phase,
+            preparing = true,
+            prepareError = null,
+            error = null,
+        )
         preparation = viewModelScope.launch {
             try {
                 if (owner.userId == null) throw NgaException.Authentication()
                 val result = client.preparePublish(session.target)
-                if (current() && generation == token) _session.value = _session.value?.copy(
-                    prefill = result.content, phase = ComposePhase.Editing)
+                if (current() && generation == token) {
+                    _session.value = _session.value?.copy(
+                        prefill = result.content,
+                        phase = ComposePhase.Editing,
+                        preparing = false,
+                        prepareError = null,
+                    )
+                }
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) {
-                if (current() && generation == token) _session.value = _session.value?.copy(
-                    error = if (owner.userId == null) "请先登录后再回复" else "无法准备回复：${userMessage(error)}")
+                if (current() && generation == token) {
+                    _session.value = _session.value?.copy(
+                        preparing = false,
+                        prepareError = if (owner.userId == null) "请先登录后再回复" else "无法准备回复：${userMessage(error)}",
+                    )
+                }
             }
         }
     }

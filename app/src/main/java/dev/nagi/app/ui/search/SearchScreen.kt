@@ -89,7 +89,6 @@ fun SearchScreen(
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     var choosingScope by rememberSaveable { mutableStateOf(false) }
-    var scopeFilter by rememberSaveable { mutableStateOf("") }
     var topicDetails by remember { mutableStateOf<Topic?>(null) }
     val cancel = {
         focusManager.clearFocus()
@@ -370,12 +369,10 @@ fun SearchScreen(
             allSelected = state.forumId == null && state.collectionId == null,
             onSelectAll = {
                 choosingScope = false
-                scopeFilter = ""
                 vm.scope(null)
             },
             onSelectForum = { forum ->
                 choosingScope = false
-                scopeFilter = ""
                 vm.scope(forum)
             },
             onDismissRequest = { choosingScope = false },

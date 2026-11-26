@@ -59,15 +59,10 @@ internal fun ReplyPopup(
 ) {
     val colors = NagiThemeTokens.colors
     val typography = NagiThemeTokens.typography
-    var discard by remember { mutableStateOf(false) }
     val editable = session.phase in setOf(ComposePhase.Editing, ComposePhase.Rejected)
     val dismiss = {
         if (session.phase != ComposePhase.Submitting && !session.images.uploading) {
-            if (!session.comment && session.input.text.isNotEmpty()) {
-                discard = true
-            } else {
-                close()
-            }
+            close()
         }
     }
     val context = LocalContext.current
@@ -173,33 +168,7 @@ internal fun ReplyPopup(
                         if (session.error == null) {
                             LoadingLine()
                         } else {
-                            FlatCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = NagiThemeTokens.shapes.topicCard,
-                                containerColor = colors.destructiveContainer,
-                                borderColor = colors.destructive.copy(alpha = 0.25f),
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = Space.md, vertical = Space.xs),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(Space.sm),
-                                ) {
-                                    Text(
-                                        text = session.error,
-                                        modifier = Modifier.weight(1f),
-                                        style = typography.metadata,
-                                        color = colors.destructive,
-                                    )
-                                    CapsuleButton(
-                                        text = "重新准备",
-                                        onClick = retry,
-                                        icon = NagiIcons.Refresh,
-                                        style = CapsuleStyle.Destructive,
-                                    )
-                                }
-                            }
+                            PrepareErrorCard(message = session.error, onRetry = retry)
                         }
                     }
                     ComposePhase.Submitting -> LoadingLine()
@@ -235,12 +204,19 @@ internal fun ReplyPopup(
                             }
                         }
                     }
-                    else -> session.error?.let { err ->
-                        Text(
-                            text = err,
-                            style = typography.metadata,
-                            color = colors.destructive,
-                        )
+                    else -> {
+                        if (session.preparing) {
+                            LoadingLine()
+                        } else if (session.prepareError != null) {
+                            PrepareErrorCard(message = session.prepareError, onRetry = retry)
+                        }
+                        session.error?.let { err ->
+                            Text(
+                                text = err,
+                                style = typography.metadata,
+                                color = colors.destructive,
+                            )
+                        }
                     }
                 }
 
@@ -331,6 +307,7 @@ internal fun ReplyPopup(
                     CapsuleButton(
                         text = when {
                             session.phase == ComposePhase.Submitting -> "发送中…"
+                            session.preparing -> "准备中…"
                             session.anonymous -> "匿名发送"
                             else -> "发送"
                         },
@@ -351,20 +328,40 @@ internal fun ReplyPopup(
             )
         }
     }
+}
 
-    if (discard) {
-        dev.nagi.app.ui.components.NagiConfirmDialog(
-            onDismissRequest = { discard = false },
-            title = "放弃这次回复？",
-            message = "关闭后将清除本次输入。",
-            confirmLabel = "放弃回复",
-            onConfirm = {
-                discard = false
-                close()
-            },
-            confirmStyle = CapsuleStyle.Destructive,
-            dismissLabel = "继续编辑",
-            onDismiss = { discard = false },
-        )
+@Composable
+private fun PrepareErrorCard(
+    message: String,
+    onRetry: () -> Unit,
+) {
+    val colors = NagiThemeTokens.colors
+    val typography = NagiThemeTokens.typography
+    FlatCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = NagiThemeTokens.shapes.topicCard,
+        containerColor = colors.destructiveContainer,
+        borderColor = colors.destructive.copy(alpha = 0.25f),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Space.md, vertical = Space.xs),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Space.sm),
+        ) {
+            Text(
+                text = message,
+                modifier = Modifier.weight(1f),
+                style = typography.metadata,
+                color = colors.destructive,
+            )
+            CapsuleButton(
+                text = "重新准备",
+                onClick = onRetry,
+                icon = NagiIcons.Refresh,
+                style = CapsuleStyle.Destructive,
+            )
+        }
     }
 }

@@ -1,6 +1,7 @@
 package dev.nagi.app.data
 
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import java.security.MessageDigest
 
 class MessageWriteGuard(private val preferences: SharedPreferences? = null) {
@@ -16,7 +17,10 @@ class MessageWriteGuard(private val preferences: SharedPreferences? = null) {
     }
     @Synchronized private fun change(key: String, add: Boolean) {
         val next = if (add) pending + key else pending - key
-        check(preferences?.edit()?.putStringSet("pending", next)?.commit() != false) { "Cannot persist write guard" }
+        val prefs = preferences
+        if (prefs != null) {
+            prefs.edit(commit = true) { putStringSet("pending", next) }
+        }
         pending.clear()
         pending.addAll(next)
     }

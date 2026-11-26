@@ -237,4 +237,85 @@ class ReplySessionViewModelTest {
         assertTrue(requests.single().anonymous)
         assertEquals(ComposePhase.Confirmed, vm.session.value!!.phase)
     }
+
+    @Test fun editingIsImmediatelyAvailableWhilePreparationRunsInBackgroundAndMergesPrefill() = runTest(dispatcher) {
+        val gate = CompletableDeferred<PublishPreparation>()
+        val requests = mutableListOf<PublishRequest>()
+        val client = object : NgaClient by FakeClient() {
+            override suspend fun preparePublish(target: PublishTarget): PublishPreparation = gate.await()
+            override suspend fun publish(request: PublishRequest): WriteResult {
+                requests += request
+                return WriteResult.Confirmed("回复成功")
+            }
+        }
+        val vm = ReplySessionViewModel(client, accounts(), SavedStateHandle())
+        vm.open(target.copy(action = PublishAction.QUOTE), "引用回复")
+        val initial = vm.session.value!!
+        assertEquals(ComposePhase.Editing, initial.phase)
+        assertTrue(initial.preparing)
+        assertFalse(initial.canSend)
+
+        vm.edit(TextFieldValue("先输入正文"))
+        vm.setAnonymous(true)
+        vm.send(); runCurrent()
+        assertTrue(requests.isEmpty())
+        assertEquals("先输入正文", vm.session.value!!.input.text)
+
+        gate.complete(PublishPreparation("", "[quote]引用原文[/quote]\n"))
+        runCurrent()
+        val ready = vm.session.value!!
+        assertFalse(ready.preparing)
+        assertNull(ready.prepareError)
+        assertTrue(ready.canSend)
+        assertTrue(ready.anonymous)
+        assertEquals("先输入正文", ready.input.text)
+        assertEquals("[quote]引用原文[/quote]\n先输入正文", ready.content)
+
+        vm.send(); runCurrent()
+        assertEquals(1, requests.size)
+        assertEquals("[quote]引用原文[/quote]\n先输入正文", requests.single().content)
+        assertTrue(requests.single().anonymous)
+    }
+
+    @Test fun failedBackgroundPreparationPreservesDraftDisablesSendAndRetries() = runTest(dispatcher) {
+        var fail = true
+        var writes = 0
+        val gate = CompletableDeferred<Unit>()
+        val client = object : NgaClient by FakeClient() {
+            override suspend fun preparePublish(target: PublishTarget): PublishPreparation {
+                if (fail) {
+                    gate.await()
+                    throw NgaException.Restricted()
+                }
+                return PublishPreparation("", "[quote]恢复引用[/quote]\n")
+            }
+            override suspend fun publish(request: PublishRequest): WriteResult {
+                writes++
+                return WriteResult.Confirmed("成功")
+            }
+        }
+        val vm = ReplySessionViewModel(client, accounts(), SavedStateHandle())
+        vm.open(target, "回复")
+        vm.edit(TextFieldValue("不要丢失的内容"))
+        gate.complete(Unit)
+        runCurrent()
+
+        val failed = vm.session.value!!
+        assertEquals(ComposePhase.Editing, failed.phase)
+        assertFalse(failed.preparing)
+        assertNotNull(failed.prepareError)
+        assertFalse(failed.canSend)
+        assertEquals("不要丢失的内容", failed.input.text)
+        vm.send(); runCurrent()
+        assertEquals(0, writes)
+
+        fail = false
+        vm.prepare()
+        runCurrent()
+        val retried = vm.session.value!!
+        assertNull(retried.prepareError)
+        assertFalse(retried.preparing)
+        assertTrue(retried.canSend)
+        assertEquals("[quote]恢复引用[/quote]\n不要丢失的内容", retried.content)
+    }
 }
