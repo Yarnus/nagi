@@ -83,9 +83,11 @@ import okhttp3.Callback
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
 import okhttp3.Response
-import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -140,10 +142,55 @@ internal fun detectImageFormat(bytes: ByteArray): DecodedImageFormat {
     return DecodedImageFormat("image/jpeg", "jpg")
 }
 
+internal fun readFormatHeader(input: InputStream): Pair<ByteArray, Int> {
+    val header = ByteArray(16)
+    var total = 0
+    while (total < header.size) {
+        val read = input.read(header, total, header.size - total)
+        if (read <= 0) break
+        total += read
+    }
+    return header to total
+}
+
+internal fun copyStreamBounded(
+    input: InputStream,
+    output: OutputStream,
+    header: ByteArray,
+    headerLen: Int,
+    maxBytes: Long = MAX_IMAGE_DOWNLOAD_BYTES.toLong(),
+) {
+    var total = 0L
+    if (headerLen > 0) {
+        output.write(header, 0, headerLen)
+        total += headerLen
+    }
+    val buf = ByteArray(8192)
+    while (true) {
+        val read = input.read(buf)
+        if (read <= 0) break
+        total += read
+        if (total > maxBytes) throw IOException("Image exceeds maximum allowed size")
+        output.write(buf, 0, read)
+    }
+}
+
 @OptIn(coil.annotation.ExperimentalCoilApi::class)
-private suspend fun loadImageBytes(context: Context, url: String): ByteArray? = withContext(Dispatchers.IO) {
+private suspend fun <T> streamImage(
+    context: Context,
+    url: String,
+    consume: (format: DecodedImageFormat, input: InputStream, header: ByteArray, headerLen: Int) -> T?,
+): T? = withContext(Dispatchers.IO) {
     Coil.imageLoader(context).diskCache?.openSnapshot(url)?.use { snapshot ->
-        snapshot.data.toFile().takeIf { it.isFile && it.length() <= MAX_IMAGE_DOWNLOAD_BYTES }?.readBytes()
+        val cached = snapshot.data.toFile()
+        if (cached.isFile && cached.length() in 1L..MAX_IMAGE_DOWNLOAD_BYTES.toLong()) {
+            FileInputStream(cached).use { input ->
+                val (header, headerLen) = readFormatHeader(input)
+                if (headerLen <= 0) return@use null
+                val format = detectImageFormat(header.copyOf(headerLen))
+                consume(format, input, header, headerLen)
+            }
+        } else null
     }?.let { return@withContext it }
 
     val parsed = url.toHttpUrlOrNull() ?: return@withContext null
@@ -169,17 +216,10 @@ private suspend fun loadImageBytes(context: Context, url: String): ByteArray? = 
             val body = res.body ?: return@withContext null
             if (body.contentLength() > MAX_IMAGE_DOWNLOAD_BYTES) return@withContext null
             body.byteStream().use { input ->
-                val out = ByteArrayOutputStream()
-                val buf = ByteArray(8192)
-                var total = 0
-                while (true) {
-                    val read = input.read(buf)
-                    if (read <= 0) break
-                    total += read
-                    if (total > MAX_IMAGE_DOWNLOAD_BYTES) return@withContext null
-                    out.write(buf, 0, read)
-                }
-                out.toByteArray().takeIf { it.isNotEmpty() }
+                val (header, headerLen) = readFormatHeader(input)
+                if (headerLen <= 0) return@withContext null
+                val format = detectImageFormat(header.copyOf(headerLen))
+                consume(format, input, header, headerLen)
             }
         }
     } catch (error: CancellationException) {
@@ -189,30 +229,32 @@ private suspend fun loadImageBytes(context: Context, url: String): ByteArray? = 
     }
 }
 
-private suspend fun saveImageToGallery(context: Context, bytes: ByteArray, format: DecodedImageFormat): Boolean =
+private suspend fun saveImageToGallery(context: Context, url: String): Boolean? =
     withContext(Dispatchers.IO) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return@withContext false
-        val resolver = context.contentResolver
-        val values = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, "nagi_${System.currentTimeMillis()}.${format.extension}")
-            put(MediaStore.Images.Media.MIME_TYPE, format.mimeType)
-            put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/Nagi")
-            put(MediaStore.Images.Media.IS_PENDING, 1)
-        }
-        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return@withContext false
-        try {
-            val stream = resolver.openOutputStream(uri) ?: run {
-                resolver.delete(uri, null, null)
-                return@withContext false
+        streamImage(context, url) { format, input, header, headerLen ->
+            val resolver = context.contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, "nagi_${System.currentTimeMillis()}.${format.extension}")
+                put(MediaStore.Images.Media.MIME_TYPE, format.mimeType)
+                put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/Nagi")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
             }
-            stream.use { it.write(bytes) }
-            values.clear()
-            values.put(MediaStore.Images.Media.IS_PENDING, 0)
-            resolver.update(uri, values, null, null)
-            true
-        } catch (_: Exception) {
-            runCatching { resolver.delete(uri, null, null) }
-            false
+            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return@streamImage false
+            try {
+                val stream = resolver.openOutputStream(uri) ?: run {
+                    resolver.delete(uri, null, null)
+                    return@streamImage false
+                }
+                stream.use { copyStreamBounded(input, it, header, headerLen) }
+                values.clear()
+                values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+                true
+            } catch (_: Exception) {
+                runCatching { resolver.delete(uri, null, null) }
+                false
+            }
         }
     }
 
@@ -251,10 +293,29 @@ internal fun launchShareImageIntent(
     }
 }
 
-private suspend fun prepareShareImageUri(context: Context, url: String, bytes: ByteArray, format: DecodedImageFormat) =
-    prepareShareImageUri(context, "nagi_${url.hashCode().toUInt()}.${format.extension}") { file ->
-        file.writeBytes(bytes)
+private suspend fun prepareShareImageFile(
+    context: Context,
+    url: String,
+): Pair<DecodedImageFormat, File>? = streamImage(context, url) { format, input, header, headerLen ->
+    val dir = File(context.cacheDir, "shared-images").apply { mkdirs() }
+    dir.listFiles()?.forEach { old -> old.delete() }
+    val file = File(dir, "nagi_${url.hashCode().toUInt()}.${format.extension}")
+    try {
+        file.outputStream().use { copyStreamBounded(input, it, header, headerLen) }
+        format to file
+    } catch (error: Throwable) {
+        file.delete()
+        throw error
     }
+}
+
+private suspend fun prepareShareImageUri(
+    context: Context,
+    url: String,
+): Pair<DecodedImageFormat, Uri>? = withContext(Dispatchers.IO) {
+    val (format, file) = prepareShareImageFile(context, url) ?: return@withContext null
+    format to FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+}
 
 private suspend fun PointerInputScope.detectImageZoomAndPan(
     allowSingleFingerPan: () -> Boolean,
@@ -309,20 +370,29 @@ internal fun ImageViewer(
     val resetSignals = remember(urls) { mutableStateMapOf<Int, Int>() }
     val fitWidthSignals = remember(urls) { mutableStateMapOf<Int, Int>() }
     var busyAction by remember { mutableStateOf(false) }
-    var pendingSaveBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingSaveFile by remember { mutableStateOf<File?>(null) }
     val saveDocumentLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("image/*"),
     ) { targetUri ->
-        val bytes = pendingSaveBytes
-        pendingSaveBytes = null
-        if (targetUri == null || bytes == null) return@rememberLauncherForActivityResult
+        val source = pendingSaveFile
+        pendingSaveFile = null
+        if (source == null) return@rememberLauncherForActivityResult
         scope.launch {
             val ok = withContext(Dispatchers.IO) {
-                runCatching {
-                    context.contentResolver.openOutputStream(targetUri)?.use { it.write(bytes) } != null
-                }.getOrDefault(false)
+                try {
+                    if (targetUri == null) return@withContext null
+                    runCatching {
+                        context.contentResolver.openOutputStream(targetUri)?.use { output ->
+                            source.inputStream().use { input -> input.copyTo(output) }
+                        } != null
+                    }.getOrDefault(false)
+                } finally {
+                    source.delete()
+                }
             }
-            Toast.makeText(context, if (ok) "图片已保存" else "保存失败", Toast.LENGTH_SHORT).show()
+            if (ok != null) {
+                Toast.makeText(context, if (ok) "图片已保存" else "保存失败", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -366,17 +436,23 @@ internal fun ImageViewer(
                                 busyAction = true
                                 scope.launch {
                                     try {
-                                        val bytes = loadImageBytes(context, currentUrl)
-                                        if (bytes == null) {
-                                            Toast.makeText(context, "获取原图失败", Toast.LENGTH_SHORT).show()
-                                            return@launch
-                                        }
-                                        val format = detectImageFormat(bytes)
                                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                            val ok = saveImageToGallery(context, bytes, format)
-                                            Toast.makeText(context, if (ok) "已保存到相册" else "保存失败", Toast.LENGTH_SHORT).show()
+                                            val saved = saveImageToGallery(context, currentUrl)
+                                            val message = when (saved) {
+                                                null -> "获取原图失败"
+                                                true -> "已保存到相册"
+                                                false -> "保存失败"
+                                            }
+                                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                         } else {
-                                            pendingSaveBytes = bytes
+                                            val prepared = prepareShareImageFile(context, currentUrl)
+                                            if (prepared == null) {
+                                                Toast.makeText(context, "获取原图失败", Toast.LENGTH_SHORT).show()
+                                                return@launch
+                                            }
+                                            val (format, file) = prepared
+                                            pendingSaveFile?.delete()
+                                            pendingSaveFile = file
                                             saveDocumentLauncher.launch("nagi_${System.currentTimeMillis()}.${format.extension}")
                                         }
                                     } finally {
@@ -395,13 +471,12 @@ internal fun ImageViewer(
                                 busyAction = true
                                 scope.launch {
                                     try {
-                                        val bytes = loadImageBytes(context, currentUrl)
-                                        if (bytes == null) {
+                                        val prepared = prepareShareImageUri(context, currentUrl)
+                                        if (prepared == null) {
                                             Toast.makeText(context, "获取原图失败", Toast.LENGTH_SHORT).show()
                                             return@launch
                                         }
-                                        val format = detectImageFormat(bytes)
-                                        val uri = prepareShareImageUri(context, currentUrl, bytes, format)
+                                        val (format, uri) = prepared
                                         launchShareImageIntent(context, uri, format.mimeType, "分享图片")
                                     } finally {
                                         busyAction = false

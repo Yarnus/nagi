@@ -1,0 +1,402 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 10,
+    "identityHash": "65a162bc8961612288e7031fb104c11a",
+    "entities": [
+      {
+        "tableName": "favorites",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`topicId` TEXT NOT NULL, `title` TEXT NOT NULL, `savedAt` INTEGER NOT NULL, PRIMARY KEY(`topicId`))",
+        "fields": [
+          {
+            "fieldPath": "topicId",
+            "columnName": "topicId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "savedAt",
+            "columnName": "savedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "topicId"
+          ]
+        }
+      },
+      {
+        "tableName": "forum_favorites",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`forumKey` TEXT NOT NULL, `forumId` TEXT NOT NULL, `collectionId` TEXT, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `category` TEXT NOT NULL, `groupName` TEXT NOT NULL, `savedAt` INTEGER NOT NULL, PRIMARY KEY(`forumKey`))",
+        "fields": [
+          {
+            "fieldPath": "forumKey",
+            "columnName": "forumKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "forumId",
+            "columnName": "forumId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "collectionId",
+            "columnName": "collectionId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "groupName",
+            "columnName": "groupName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "savedAt",
+            "columnName": "savedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "forumKey"
+          ]
+        }
+      },
+      {
+        "tableName": "cloud_forum_favorite_order",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`forumKey` TEXT NOT NULL, `sortOrder` INTEGER NOT NULL, PRIMARY KEY(`forumKey`))",
+        "fields": [
+          {
+            "fieldPath": "forumKey",
+            "columnName": "forumKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sortOrder",
+            "columnName": "sortOrder",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "forumKey"
+          ]
+        }
+      },
+      {
+        "tableName": "positions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`topicId` TEXT NOT NULL, `page` INTEGER NOT NULL, `index` INTEGER NOT NULL, `offset` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`topicId`))",
+        "fields": [
+          {
+            "fieldPath": "topicId",
+            "columnName": "topicId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "page",
+            "columnName": "page",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "index",
+            "columnName": "index",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "offset",
+            "columnName": "offset",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "topicId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_positions_updatedAt_topicId",
+            "unique": false,
+            "columnNames": [
+              "updatedAt",
+              "topicId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_positions_updatedAt_topicId` ON `${TABLE_NAME}` (`updatedAt`, `topicId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "history",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`topicId` TEXT NOT NULL, `title` TEXT NOT NULL, `viewedAt` INTEGER NOT NULL, PRIMARY KEY(`topicId`))",
+        "fields": [
+          {
+            "fieldPath": "topicId",
+            "columnName": "topicId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "viewedAt",
+            "columnName": "viewedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "topicId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_history_viewedAt_topicId",
+            "unique": false,
+            "columnNames": [
+              "viewedAt",
+              "topicId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_history_viewedAt_topicId` ON `${TABLE_NAME}` (`viewedAt`, `topicId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "notifications",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `summary` TEXT NOT NULL, `actor` TEXT NOT NULL, `topicId` TEXT NOT NULL, `postId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `privateMessage` INTEGER NOT NULL, `read` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "summary",
+            "columnName": "summary",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actor",
+            "columnName": "actor",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "topicId",
+            "columnName": "topicId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "postId",
+            "columnName": "postId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "privateMessage",
+            "columnName": "privateMessage",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "read",
+            "columnName": "read",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_notifications_createdAt_id",
+            "unique": false,
+            "columnNames": [
+              "createdAt",
+              "id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_notifications_createdAt_id` ON `${TABLE_NAME}` (`createdAt`, `id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "user_tags",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`userId` TEXT NOT NULL, `text` TEXT NOT NULL, PRIMARY KEY(`userId`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "userId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "text",
+            "columnName": "text",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "userId"
+          ]
+        }
+      },
+      {
+        "tableName": "topic_read_states",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`topicId` TEXT NOT NULL, `lastReadReplies` INTEGER NOT NULL, `lastReadAt` INTEGER NOT NULL, PRIMARY KEY(`topicId`))",
+        "fields": [
+          {
+            "fieldPath": "topicId",
+            "columnName": "topicId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastReadReplies",
+            "columnName": "lastReadReplies",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastReadAt",
+            "columnName": "lastReadAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "topicId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_topic_read_states_lastReadAt_topicId",
+            "unique": false,
+            "columnNames": [
+              "lastReadAt",
+              "topicId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_topic_read_states_lastReadAt_topicId` ON `${TABLE_NAME}` (`lastReadAt`, `topicId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "recent_smiles",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`smileKey` TEXT NOT NULL, `usedAt` INTEGER NOT NULL, PRIMARY KEY(`smileKey`))",
+        "fields": [
+          {
+            "fieldPath": "smileKey",
+            "columnName": "smileKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "usedAt",
+            "columnName": "usedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "smileKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_recent_smiles_usedAt_smileKey",
+            "unique": false,
+            "columnNames": [
+              "usedAt",
+              "smileKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_recent_smiles_usedAt_smileKey` ON `${TABLE_NAME}` (`usedAt`, `smileKey`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '65a162bc8961612288e7031fb104c11a')"
+    ]
+  }
+}

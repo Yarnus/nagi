@@ -42,11 +42,15 @@ import dev.nagi.app.viewmodel.LibraryViewModel
 import dev.nagi.app.viewmodel.PostRatingViewModel
 import dev.nagi.app.viewmodel.ReaderViewModel
 import dev.nagi.app.viewmodel.ReplySessionViewModel
+import dev.nagi.sdk.Forum
 import dev.nagi.sdk.MemorySessionStore
+import dev.nagi.sdk.NgaClient
 import dev.nagi.sdk.NgaDomain
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -144,6 +148,43 @@ class SettingsLogicTest {
         // Same domain reuses cached delegate
         client.getForums()
         assertEquals(listOf(NgaDomain.PRIMARY, NgaDomain.LEGACY), createdDomains)
+    }
+
+    @Test fun dynamicDomainClientClosesRetiredDelegatesAfterInFlightCallsFinish() = runTest(dispatcher) {
+        val prefs = PreferenceStore(RuntimeEnvironment.getApplication())
+        val sessions = MemorySessionStore()
+        val closed = mutableListOf<NgaDomain>()
+        val inFlightGate = CompletableDeferred<Unit>()
+
+        class ClosableClient(private val domain: NgaDomain) : NgaClient by FakeClient(), AutoCloseable {
+            override suspend fun getForums(): List<Forum> {
+                if (domain == NgaDomain.PRIMARY) inFlightGate.await()
+                return emptyList()
+            }
+            override fun close() {
+                closed += domain
+            }
+        }
+
+        val client = DynamicDomainNgaClient(sessions, prefs) { domain, _ -> ClosableClient(domain) }
+        val primaryCall = launch { client.getForums() }
+        runCurrent()
+        assertTrue(closed.isEmpty())
+
+        prefs.ngaDomain(NgaDomain.APP)
+        client.getForums()
+        // Primary has an active in-flight call so it must stay open until finished.
+        assertTrue(closed.isEmpty())
+
+        inFlightGate.complete(Unit)
+        runCurrent()
+        assertTrue(primaryCall.isCompleted)
+        assertEquals(listOf(NgaDomain.PRIMARY), closed)
+
+        // Switching again when APP is idle closes APP immediately.
+        prefs.ngaDomain(NgaDomain.LEGACY)
+        client.getForums()
+        assertEquals(listOf(NgaDomain.PRIMARY, NgaDomain.APP), closed)
     }
 
     @Test fun cacheStorageFormatsAndClearsSharedImagesDir() = runBlocking {

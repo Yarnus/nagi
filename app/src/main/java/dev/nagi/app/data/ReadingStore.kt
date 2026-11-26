@@ -268,7 +268,7 @@ interface ReadingDao {
         RecentSmileEntity::class,
     ],
     version = 10,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class ReadingDatabase : RoomDatabase() {
     abstract fun readingDao(): ReadingDao

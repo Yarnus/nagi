@@ -331,12 +331,20 @@ fun TopicsScreen(
                     },
                     contentAlignment = Alignment.TopCenter,
                 ) {
-                    LaunchedEffect(listState, activeForumId, activeCollection, submitted, scope?.key, sort) {
+                    val listHeaderCount = 1 +
+                        (if (state.loading && state.items.isEmpty()) 1 else 0) +
+                        (if (cloudFavoriteNotice != null) 1 else 0) +
+                        (if (state.error != null && !loadingMore) 1 else 0)
+                    LaunchedEffect(listState, activeForumId, activeCollection, submitted, scope?.key, sort, listHeaderCount) {
                         var armed = true
                         snapshotFlow {
-                            val lastTopic = listState.layoutInfo.visibleItemsInfo.lastOrNull { it.contentType == "topic" }?.index ?: -1
-                            val scrolled = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
-                            val nearEnd = (scrolled || !listState.canScrollForward) && state.items.isNotEmpty() && lastTopic >= state.items.size - 3
+                            val nearEnd = isNearTopicListEnd(
+                                layoutInfo = listState.layoutInfo,
+                                headerCount = listHeaderCount,
+                                topicCount = state.items.size,
+                                scrolled = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0,
+                                canScrollForward = listState.canScrollForward,
+                            )
                             Triple(
                                 nearEnd,
                                 state.page > 0 && state.hasMore && !state.loading && state.error == null,
@@ -1292,6 +1300,20 @@ internal fun TopicRow(
             )
         }
     }
+}
+
+internal fun isNearTopicListEnd(
+    layoutInfo: androidx.compose.foundation.lazy.LazyListLayoutInfo,
+    headerCount: Int,
+    topicCount: Int,
+    scrolled: Boolean,
+    canScrollForward: Boolean,
+    distance: Int = 3,
+): Boolean {
+    if (topicCount <= 0 || (!scrolled && canScrollForward)) return false
+    val lastTopicLayoutIndex = layoutInfo.visibleItemsInfo.lastOrNull { it.contentType == "topic" }?.index ?: return false
+    val lastTopicPosition = lastTopicLayoutIndex - headerCount
+    return lastTopicPosition >= topicCount - distance
 }
 
 private data class ParsedTopicSubject(val tag: String?, val cleanTitle: String)

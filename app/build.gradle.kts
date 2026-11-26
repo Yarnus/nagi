@@ -2,7 +2,7 @@ plugins {
     id("com.android.application")
     kotlin("android")
     kotlin("plugin.compose")
-    kotlin("kapt")
+    id("com.google.devtools.ksp")
     id("com.google.dagger.hilt.android")
 }
 
@@ -76,7 +76,7 @@ android {
     testOptions { unitTests.isIncludeAndroidResources = true }
 }
 kotlin { jvmToolchain(21) }
-kapt { correctErrorTypes = true }
+ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 
 val verifyThirdPartyNotices by tasks.registering {
     group = "verification"
@@ -121,17 +121,17 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.9.3")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
     implementation("com.google.dagger:hilt-android:2.57.2")
-    kapt("com.google.dagger:hilt-compiler:2.57.2")
+    ksp("com.google.dagger:hilt-compiler:2.57.2")
     implementation("androidx.room:room-runtime:2.7.2")
     implementation("androidx.room:room-ktx:2.7.2")
-    kapt("androidx.room:room-compiler:2.7.2")
+    ksp("androidx.room:room-compiler:2.7.2")
     implementation("androidx.datastore:datastore-preferences:1.1.7")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("io.coil-kt:coil-gif:2.7.0")
     implementation("dev.chrisbanes.haze:haze:1.7.1")
     testImplementation("com.google.dagger:hilt-android-testing:2.57.2")
-    kaptTest("com.google.dagger:hilt-compiler:2.57.2")
+    kspTest("com.google.dagger:hilt-compiler:2.57.2")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
     testImplementation("org.robolectric:robolectric:4.14.1")

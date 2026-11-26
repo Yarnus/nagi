@@ -193,4 +193,58 @@ class PerformanceOptimizationTest {
         assertTrue(hasCopyablePlainText(listOf(ContentBlock.Divider(emptyList()))))
         assertTrue(hasCopyablePlainText(listOf(ContentBlock.Quote(children = listOf(ContentBlock.Text("nested"))))))
     }
+
+    @Test
+    fun nearTopicListEndAccountsForHeaderOffset() {
+        val fakeLayoutInfo = object : androidx.compose.foundation.lazy.LazyListLayoutInfo {
+            override val visibleItemsInfo = listOf(
+                object : androidx.compose.foundation.lazy.LazyListItemInfo {
+                    override val index = 0
+                    override val key = "heading"
+                    override val offset = 0
+                    override val size = 100
+                    override val contentType = "heading"
+                },
+                object : androidx.compose.foundation.lazy.LazyListItemInfo {
+                    override val index = 1
+                    override val key = "banner"
+                    override val offset = 100
+                    override val size = 80
+                    override val contentType = "banner"
+                },
+                object : androidx.compose.foundation.lazy.LazyListItemInfo {
+                    override val index = 4
+                    override val key = "t2"
+                    override val offset = 200
+                    override val size = 100
+                    override val contentType = "topic"
+                },
+            )
+            override val viewportStartOffset = 0
+            override val viewportEndOffset = 800
+            override val totalItemsCount = 7
+        }
+        // headerCount = 2 -> layout index 4 corresponds to topic index 2 (not yet >= 5 - 2 = 3 if distance=2)
+        assertFalse(
+            dev.nagi.app.ui.topic.isNearTopicListEnd(
+                layoutInfo = fakeLayoutInfo,
+                headerCount = 2,
+                topicCount = 5,
+                scrolled = true,
+                canScrollForward = true,
+                distance = 2,
+            ),
+        )
+        // With distance=3 -> 2 >= 5 - 3 -> true
+        assertTrue(
+            dev.nagi.app.ui.topic.isNearTopicListEnd(
+                layoutInfo = fakeLayoutInfo,
+                headerCount = 2,
+                topicCount = 5,
+                scrolled = true,
+                canScrollForward = true,
+                distance = 3,
+            ),
+        )
+    }
 }

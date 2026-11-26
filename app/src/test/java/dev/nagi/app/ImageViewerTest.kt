@@ -117,6 +117,28 @@ class ImageViewerTest {
         assertEquals(DecodedImageFormat("image/jpeg", "jpg"), detectImageFormat(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())))
     }
 
+    @Test fun streamingCopyPreservesHeaderAndEnforcesMaxSize() {
+        val payload = "GIF89a".encodeToByteArray() + ByteArray(24_000) { (it % 251).toByte() }
+        val input = payload.inputStream()
+        val (header, headerLen) = dev.nagi.app.ui.post.readFormatHeader(input)
+        assertEquals(DecodedImageFormat("image/gif", "gif"), detectImageFormat(header.copyOf(headerLen)))
+        val out = java.io.ByteArrayOutputStream()
+        dev.nagi.app.ui.post.copyStreamBounded(input, out, header, headerLen, maxBytes = 32_768L)
+        assertArrayEquals(payload, out.toByteArray())
+
+        val overflowInput = payload.inputStream()
+        val (h2, hl2) = dev.nagi.app.ui.post.readFormatHeader(overflowInput)
+        assertThrows(java.io.IOException::class.java) {
+            dev.nagi.app.ui.post.copyStreamBounded(
+                overflowInput,
+                java.io.ByteArrayOutputStream(),
+                h2,
+                hl2,
+                maxBytes = 1024L,
+            )
+        }
+    }
+
     @Test fun fitWidthScalesTallImageToViewportWidthAndStartsAtTop() {
         val fitWidth = ImageTransform().fitWidth(Size(400f, 800f), Size(200f, 1600f))
         assertEquals(4f, fitWidth.scale, 0.001f)

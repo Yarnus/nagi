@@ -77,4 +77,30 @@ class UserContentViewModelTest {
         gate.complete(TopicPage(listOf(Topic("1", "Old", "Name", "7")), 1, 1, false)); runCurrent()
         assertTrue(vm.state.value.topics.isEmpty())
     }
+
+    @Test fun paginationDeduplicatesOverlappingTopicsAndRepliesIncrementally() = runTest(dispatcher) {
+        val manager = AccountManager(MemorySessionStore(), FakeBrowserCookies()).also { it.initialize() }
+        val client = object : NgaClient by FakeClient() {
+            override suspend fun getUserTopics(userId: String, page: Int): TopicPage = when (page) {
+                1 -> TopicPage(listOf(Topic("1", "T1", "U", userId), Topic("2", "T2", "U", userId)), 1, 4, true)
+                else -> TopicPage(listOf(Topic("2", "T2", "U", userId), Topic("3", "T3", "U", userId)), 2, 4, false)
+            }
+            override suspend fun getUserReplies(userId: String, page: Int): UserReplyPage = when (page) {
+                1 -> UserReplyPage(listOf(
+                    UserReply(Topic("1", "T1", "U", userId), "p1", userId, 1, emptyList()),
+                    UserReply(Topic("1", "T1", "U", userId), "p2", userId, 2, emptyList()),
+                ), 1, true)
+                else -> UserReplyPage(listOf(
+                    UserReply(Topic("1", "T1", "U", userId), "p2", userId, 2, emptyList()),
+                    UserReply(Topic("1", "T1", "U", userId), "p3", userId, 3, emptyList()),
+                ), 2, false)
+            }
+        }
+        val vm = UserContentViewModel(client, manager, SavedStateHandle(mapOf("uid" to "7")))
+        runCurrent(); vm.next(); runCurrent()
+        assertEquals(listOf("1", "2", "3"), vm.state.value.topics.map { it.id })
+
+        vm.selectReplies(true); runCurrent(); vm.next(); runCurrent()
+        assertEquals(listOf("p1", "p2", "p3"), vm.state.value.replies.map { it.postId })
+    }
 }

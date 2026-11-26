@@ -117,12 +117,19 @@ fun SearchScreen(
             loadingMore = false
         }
     }
-    LaunchedEffect(listState, state.mode, state.submitted, state.forumId, state.collectionId) {
+    val searchHeaderCount = 1 +
+        (if (state.loading && !loadingMore) 1 else 0) +
+        (if ((!loadingMore || !state.hasMore) && state.error != null) 1 else 0)
+    LaunchedEffect(listState, state.mode, state.submitted, state.forumId, state.collectionId, searchHeaderCount) {
         var armed = true
         snapshotFlow {
-            val lastTopic = listState.layoutInfo.visibleItemsInfo.lastOrNull { it.contentType == "topic" }?.index ?: -1
-            val scrolled = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
-            val nearEnd = (scrolled || !listState.canScrollForward) && state.topics.isNotEmpty() && lastTopic >= state.topics.size - 3
+            val nearEnd = dev.nagi.app.ui.topic.isNearTopicListEnd(
+                layoutInfo = listState.layoutInfo,
+                headerCount = searchHeaderCount,
+                topicCount = state.topics.size,
+                scrolled = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0,
+                canScrollForward = listState.canScrollForward,
+            )
             Triple(
                 nearEnd,
                 state.mode == SearchMode.TOPICS && state.page > 0 && state.hasMore && !state.loading && state.error == null,

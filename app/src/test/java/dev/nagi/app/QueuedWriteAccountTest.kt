@@ -39,4 +39,48 @@ class QueuedWriteAccountTest {
         runCurrent()
         assertEquals(0, writes)
     }
+
+    @Test fun concurrentWithCurrentRevisionOperationsRunWithoutBlockingAndWriterWaits() = runTest(dispatcher) {
+        val store = MemorySessionStore().apply {
+            saveSession(NgaSession("7", "test-a"))
+            saveSession(NgaSession("8", "test-b"))
+        }
+        val accounts = AccountManager(store, FakeBrowserCookies()).also { it.initialize() }
+        val rev = accounts.state.value.revision
+        val slowGate = CompletableDeferred<Unit>()
+        val events = mutableListOf<String>()
+
+        val slowJob = launch {
+            accounts.withCurrentRevision(rev) {
+                events += "slow:start"
+                slowGate.await()
+                events += "slow:end"
+            }
+        }
+        runCurrent()
+        assertEquals(listOf("slow:start"), events)
+
+        val fastJob = launch {
+            accounts.withCurrentRevision(rev) {
+                events += "fast:ran"
+            }
+        }
+        runCurrent()
+        assertEquals(listOf("slow:start", "fast:ran"), events)
+
+        val switchJob = launch {
+            accounts.switchAccount("8")
+            events += "switch:done"
+        }
+        runCurrent()
+        assertEquals(listOf("slow:start", "fast:ran"), events)
+
+        slowGate.complete(Unit)
+        runCurrent()
+        assertEquals(listOf("slow:start", "fast:ran", "slow:end", "switch:done"), events)
+        assertTrue(slowJob.isCompleted && fastJob.isCompleted && switchJob.isCompleted)
+
+        val rejected = runCatching { accounts.withCurrentRevision(rev) { "stale" } }.exceptionOrNull()
+        assertTrue(rejected is CancellationException)
+    }
 }

@@ -70,10 +70,19 @@ class UserContentViewModel @Inject constructor(
                 saved["page"] = page
                 saved[pageKey()] = page
                 val previous = _state.value
-                _state.value = if (page == 1) result else result.copy(
-                    topics = (previous.topics + result.topics).distinctBy { it.id },
-                    replies = (previous.replies + result.replies).distinctBy { it.topic.id to it.postId },
-                )
+                _state.value = if (page == 1) result else {
+                    val mergedTopics = if (result.topics.isEmpty()) previous.topics else {
+                        val seenTopicIds = previous.topics.mapTo(HashSet(previous.topics.size + result.topics.size)) { it.id }
+                        val freshTopics = result.topics.filter { seenTopicIds.add(it.id) }
+                        if (freshTopics.isEmpty()) previous.topics else previous.topics + freshTopics
+                    }
+                    val mergedReplies = if (result.replies.isEmpty()) previous.replies else {
+                        val seenReplyKeys = previous.replies.mapTo(HashSet(previous.replies.size + result.replies.size)) { it.topic.id to it.postId }
+                        val freshReplies = result.replies.filter { seenReplyKeys.add(it.topic.id to it.postId) }
+                        if (freshReplies.isEmpty()) previous.replies else previous.replies + freshReplies
+                    }
+                    result.copy(topics = mergedTopics, replies = mergedReplies)
+                }
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) {
                 ensureActive()
