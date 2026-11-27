@@ -79,6 +79,11 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private val SettingsThemeOptions = listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色")
+private val SettingsThemeLabels = SettingsThemeOptions.map { it.second }
+private val SettingsLightThemeOptions = listOf("light" to "默认", "paper" to "暖纸")
+private val SettingsLightThemeLabels = SettingsLightThemeOptions.map { it.second }
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
@@ -93,8 +98,8 @@ fun SettingsScreen(
     val appUpdate = LocalAppUpdate.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val themeOptions = listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色")
-    val selectedThemeIndex = themeOptions.indexOfFirst { it.first == preferences.theme }.coerceAtLeast(0)
+    val selectedThemeIndex = SettingsThemeOptions.indexOfFirst { it.first == preferences.theme }.coerceAtLeast(0)
+    val selectedLightThemeIndex = SettingsLightThemeOptions.indexOfFirst { it.first == preferences.lightTheme }.coerceAtLeast(0)
     val version = remember(context) {
         runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
@@ -172,12 +177,41 @@ fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(Space.md),
             ) {
                 SettingSectionTitle("外观")
-                Box(Modifier.padding(horizontal = Space.lg)) {
-                    SegmentedCapsuleControl(
-                        options = themeOptions.map { it.second },
-                        selectedIndex = selectedThemeIndex,
-                        onSelect = { idx -> vm.theme(themeOptions[idx].first) },
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
+                    Box(Modifier.padding(horizontal = Space.lg)) {
+                        SegmentedCapsuleControl(
+                            options = SettingsThemeLabels,
+                            selectedIndex = selectedThemeIndex,
+                            onSelect = { idx -> vm.theme(SettingsThemeOptions[idx].first) },
+                        )
+                    }
+                    FlowRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Space.lg + Space.xs)
+                            .padding(top = Space.xs),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalArrangement = Arrangement.spacedBy(Space.xs),
+                        itemVerticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "浅色配色",
+                            style = typography.metadata,
+                            color = colors.textSecondary,
+                        )
+                        Text(
+                            text = if (preferences.theme == "dark") "非深色模式下生效" else "用于浅色与日间模式",
+                            style = typography.metadata,
+                            color = colors.textSecondary,
+                        )
+                    }
+                    Box(Modifier.padding(horizontal = Space.lg)) {
+                        SegmentedCapsuleControl(
+                            options = SettingsLightThemeLabels,
+                            selectedIndex = selectedLightThemeIndex,
+                            onSelect = { idx -> vm.lightTheme(SettingsLightThemeOptions[idx].first) },
+                        )
+                    }
                 }
                 SettingSectionTitle("阅读排版")
                 val sampleBlock = remember {

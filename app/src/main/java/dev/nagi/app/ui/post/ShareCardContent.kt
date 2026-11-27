@@ -4,15 +4,21 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Picture
 import androidx.core.graphics.createBitmap
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Text
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import dev.nagi.sdk.ContentBlock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+internal enum class ShareCardTheme(val label: String) {
+    LIGHT("浅色卡片"),
+    DARK("深色卡片"),
+    PAPER("暖纸卡片");
+
+    fun next(): ShareCardTheme = when (this) {
+        LIGHT -> DARK
+        DARK -> PAPER
+        PAPER -> LIGHT
+    }
+}
 
 internal const val SHARE_CARD_EXPORT_DENSITY = 3.0f
 internal const val SHARE_CARD_EXPORT_WIDTH_PX = 1200

@@ -25,11 +25,13 @@ import dev.nagi.app.ui.components.UserTagAccess
 import dev.nagi.app.ui.post.HeightBoundedShareCard
 import dev.nagi.app.ui.post.MAX_CARD_EXPORT_HEIGHT_PX
 import dev.nagi.app.ui.post.PostShareCardDialog
+import dev.nagi.app.ui.post.PostShareCardSurface
 import dev.nagi.app.ui.post.ReaderPost
 import dev.nagi.app.ui.post.ReaderTopBar
 import dev.nagi.app.ui.post.SHARE_CARD_EXPORT_WIDTH_PX
 import dev.nagi.app.ui.post.SHARE_CARD_IMAGE_WAIT_TIMEOUT_MS
 import dev.nagi.app.ui.post.ShareCardPictureRecorder
+import dev.nagi.app.ui.post.ShareCardTheme
 import dev.nagi.app.ui.post.trimShareCardBlocks
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -39,6 +41,7 @@ import dev.nagi.app.viewmodel.MainPostShareState
 import dev.nagi.app.viewmodel.UserTagsState
 import dev.nagi.sdk.ContentBlock
 import dev.nagi.sdk.InlineSmile
+import dev.nagi.sdk.MediaKind
 import dev.nagi.sdk.NgaSmile
 import dev.nagi.sdk.Post
 import dev.nagi.sdk.TextSpan
@@ -332,7 +335,7 @@ class PostShareCardTest {
                         post = mainPost,
                         preTrimmed = preTrimmed,
                         preferences = ReadingPreferences(),
-                        darkCard = false,
+                        cardTheme = ShareCardTheme.LIGHT,
                         pictureRecorder = recorder,
                     )
                 }
@@ -520,7 +523,7 @@ class PostShareCardTest {
                     post = mainPost,
                     preTrimmed = trimShareCardBlocks(mainPost.content),
                     preferences = ReadingPreferences(),
-                    darkCard = false,
+                    cardTheme = ShareCardTheme.LIGHT,
                     pictureRecorder = recorder,
                     imageTracker = tracker,
                 )
@@ -552,5 +555,84 @@ class PostShareCardTest {
         val refreshedPicture = recorder.picture
         assertNotNull(refreshedPicture)
         assertTrue("Expected Picture to be re-recorded after image settled", refreshedPicture !== firstPicture)
+    }
+
+    @Test fun shareCardCyclesThreeThemesDefaultsToPaperAndShowsQrBadge() {
+        val mainPost = Post(
+            id = "2",
+            floor = 0,
+            author = "纸面楼主",
+            authorId = "77",
+            avatar = "",
+            date = "2026-11-27 08:00",
+            content = listOf(ContentBlock.Text("暖纸主题分享测试")),
+        )
+        compose.setContent {
+            NagiTheme("light", "paper") {
+                PostShareCardDialog(
+                    topicId = "47841720",
+                    topicTitle = "暖纸默认主题测试",
+                    post = mainPost,
+                    shareState = MainPostShareState(open = true),
+                    preferences = ReadingPreferences(theme = "light", lightTheme = "paper"),
+                    onRetry = {},
+                    close = {},
+                )
+            }
+        }
+
+        compose.onNodeWithText("暖纸卡片").assertExists()
+        compose.onNodeWithTag("share-card-qr", useUnmergedTree = true).assertExists()
+        compose.onNodeWithContentDescription("原帖二维码", useUnmergedTree = true).assertExists()
+
+        compose.onNodeWithTag("share-card-theme-toggle").performClick()
+        compose.onNodeWithText("浅色卡片").assertExists()
+
+        compose.onNodeWithTag("share-card-theme-toggle").performClick()
+        compose.onNodeWithText("深色卡片").assertExists()
+
+        compose.onNodeWithTag("share-card-theme-toggle").performClick()
+        compose.onNodeWithText("暖纸卡片").assertExists()
+    }
+
+    @Test fun shareCardRendersStaticCollapseAndMediaTagsInsteadOfInteractiveControls() {
+        val mainPost = Post(
+            id = "3",
+            floor = 0,
+            author = "攻略作者",
+            authorId = "88",
+            avatar = "",
+            date = "2026-11-27 09:00",
+            content = listOf(
+                ContentBlock.Text("正文导语"),
+                ContentBlock.Collapse(
+                    title = "配装详情",
+                    children = listOf(ContentBlock.Text("隐藏细节内容")),
+                ),
+                ContentBlock.Media(
+                    kind = MediaKind.ATTACHMENT,
+                    url = "https://img.nga.cn/attachments/guide.pdf",
+                ),
+            ),
+        )
+        compose.setContent {
+            NagiTheme("paper") {
+                PostShareCardSurface(
+                    topicId = "47841721",
+                    topicTitle = "静态折叠与附件卡片测试",
+                    post = mainPost,
+                    content = trimShareCardBlocks(mainPost.content),
+                    preferences = ReadingPreferences(theme = "paper"),
+                    cardTheme = ShareCardTheme.PAPER,
+                )
+            }
+        }
+
+        compose.onNodeWithText("折叠内容：配装详情").assertExists()
+        compose.onNodeWithText("完整内容请在原帖展开查看").assertExists()
+        compose.onNodeWithText("附件 · guide.pdf").assertExists()
+        compose.onNodeWithTag("share-card-qr").assertExists()
+        compose.onNodeWithText("隐藏细节内容").assertDoesNotExist()
+        compose.onNodeWithText("打开附件：guide.pdf").assertDoesNotExist()
     }
 }

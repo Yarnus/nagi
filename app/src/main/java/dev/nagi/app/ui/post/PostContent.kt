@@ -7,12 +7,16 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
@@ -68,9 +72,12 @@ import kotlin.math.roundToInt
 private val MaxInlineImageHeight = 460.dp
 private val InlineImagePlaceholderHeight = 140.dp
 private val InlineImageFailedHeight = 120.dp
+private val ShareCardStaticMediaShape = RoundedCornerShape(8.dp)
+private val ShareCardStaticCollapseShape = RoundedCornerShape(topEnd = 10.dp, bottomEnd = 10.dp)
 private val inlineImageIntrinsicSizes = android.util.LruCache<String, Size>(128)
 
 internal val LocalAllowHardwareImages = staticCompositionLocalOf { true }
+internal val LocalShareCardMode = staticCompositionLocalOf { false }
 
 @Composable
 internal fun rememberPostImageModel(url: String, retryKey: Int = 0): Any {
@@ -320,17 +327,47 @@ private fun RenderContentBlocks(
                 }
 
                 is ContentBlock.Media -> {
-                    val label = when (block.kind) {
-                        MediaKind.AUDIO -> "打开音频"
-                        MediaKind.VIDEO -> "打开视频"
-                        MediaKind.ATTACHMENT -> "打开附件"
+                    val fileName = block.url.substringBefore('?').substringAfterLast('/').ifBlank { block.url }
+                    if (LocalShareCardMode.current) {
+                        val kindLabel = when (block.kind) {
+                            MediaKind.AUDIO -> "音频"
+                            MediaKind.VIDEO -> "视频"
+                            MediaKind.ATTACHMENT -> "附件"
+                        }
+                        Row(
+                            modifier = Modifier
+                                .clip(ShareCardStaticMediaShape)
+                                .background(colors.insetContainer)
+                                .border(0.5.dp, colors.cardBorder, ShareCardStaticMediaShape)
+                                .padding(horizontal = Space.sm, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(
+                                imageVector = NagiIcons.Link,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = colors.textSecondary,
+                            )
+                            Text(
+                                text = "$kindLabel · $fileName",
+                                style = typography.metadata,
+                                color = colors.textSecondary,
+                            )
+                        }
+                    } else {
+                        val label = when (block.kind) {
+                            MediaKind.AUDIO -> "打开音频"
+                            MediaKind.VIDEO -> "打开视频"
+                            MediaKind.ATTACHMENT -> "打开附件"
+                        }
+                        CapsuleButton(
+                            text = "$label：$fileName",
+                            onClick = { uriHandler.openUri(block.url) },
+                            icon = NagiIcons.Link,
+                            style = CapsuleStyle.Neutral,
+                        )
                     }
-                    CapsuleButton(
-                        text = "$label：${block.url.substringBefore('?').substringAfterLast('/').ifBlank { block.url }}",
-                        onClick = { uriHandler.openUri(block.url) },
-                        icon = NagiIcons.Link,
-                        style = CapsuleStyle.Neutral,
-                    )
                 }
 
                 is ContentBlock.Dice -> {
@@ -374,7 +411,39 @@ private fun RenderContentBlocks(
 
                 is ContentBlock.Quote -> ReplyReferenceCard(block, preferences, onImage)
 
-                is ContentBlock.Collapse -> {
+                is ContentBlock.Collapse -> if (LocalShareCardMode.current) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min)
+                            .clip(ShareCardStaticCollapseShape)
+                            .background(colors.insetContainer),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(2.dp)
+                                .fillMaxHeight()
+                                .background(colors.goldAccent),
+                        )
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = Space.md, vertical = Space.sm),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                text = "折叠内容：${block.title}",
+                                style = typography.capsuleLabel,
+                                color = colors.textPrimary,
+                            )
+                            Text(
+                                text = "完整内容请在原帖展开查看",
+                                style = typography.metadata,
+                                color = colors.textSecondary,
+                            )
+                        }
+                    }
+                } else {
                     var open by rememberSaveable { mutableStateOf(false) }
                     FlatCard(
                         modifier = Modifier.fillMaxWidth(),
@@ -514,9 +583,10 @@ private fun PostImageBlock(
                 )
             }
         } else {
+            val isShareCard = LocalShareCardMode.current
             AsyncImage(
                 model = rememberPostImageModel(activeUrl, attempt),
-                contentDescription = "帖子图片，点击查看",
+                contentDescription = if (isShareCard) "帖子图片" else "帖子图片，点击查看",
                 contentScale = ContentScale.FillWidth,
                 alignment = Alignment.TopCenter,
                 onSuccess = { state ->
@@ -540,7 +610,7 @@ private fun PostImageBlock(
                 },
                 modifier = Modifier
                     .fillMaxSize()
-                    .clickable { onImage(url) },
+                    .then(if (isShareCard) Modifier else Modifier.clickable { onImage(url) }),
             )
             if (isTall) {
                 Text(

@@ -230,6 +230,7 @@ class LibraryViewModel @Inject constructor(
     fun lineHeight(size: Int) = viewModelScope.launch { prefs.lineHeight(size) }
     fun resetTypography() = viewModelScope.launch { prefs.resetTypography() }
     fun theme(value: String) = viewModelScope.launch { prefs.theme(value) }
+    fun lightTheme(value: String) = viewModelScope.launch { prefs.lightTheme(value) }
     fun setClipboardLinkDetection(enabled: Boolean) = viewModelScope.launch { prefs.clipboardLinkDetection(enabled) }
     fun setAutoCheckUpdates(enabled: Boolean) = viewModelScope.launch { prefs.autoCheckUpdates(enabled) }
     fun setNgaDomain(domain: NgaDomain) = viewModelScope.launch { prefs.ngaDomain(domain) }

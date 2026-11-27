@@ -8,21 +8,21 @@ Nagi 使用中性背景、金色强调和胶囊控件。内容卡片不使用阴
 
 主要设计变量如下，其他状态色见 `NagiTheme.kt`。页面复用语义化设计变量，不自行复制色值。
 
-| 设计变量 | 浅色 | 深色 | 用途 |
-| --- | --- | --- | --- |
-| GroupedCanvas | `#F6F7F9` | `#0D0E11` | 页面背景 |
-| CardSurface | `#FFFFFF` | `#18191D` | 内容卡片 |
-| CardBorder | `#E8EAED` | `#26282E` | 边框、分隔线 |
-| InsetContainer | `#F0F2F5` | `#22242A` | 输入框、内嵌区域 |
-| TextPrimary | `#111827` | `#F3F4F6` | 标题、正文 |
-| TextSecondary | `#4B5563` | `#9CA3AF` | 作者、时间等辅助文字 |
-| TextMuted | `#9CA3AF` | `#6B7280` | 弱化状态；不用于需要正常文字对比度的信息 |
-| GoldAccent | `#B58838` | `#D6BA8B` | 强调图标 |
-| GoldText | `#8C651E` | `#E5C494` | 金色文字 |
-| GoldContainer | `#FBF5EB` | `#2D251A` | 选中、高信号标签背景 |
-| GoldSolidFill | `#1A1C20` | `#ECEEF2` | 实心主按钮 |
-| GoldSolidText | `#FFFFFF` | `#1A1C20` | 实心主按钮文字 |
-| Destructive | `#DC2626` | `#F87171` | 删除、明确拒绝等警示 |
+| 设计变量 | 浅色 | 暖纸 | 深色 | 用途 |
+| --- | --- | --- | --- | --- |
+| GroupedCanvas | `#F6F7F9` | `#F4EFE5` | `#0D0E11` | 页面背景 |
+| CardSurface | `#FFFFFF` | `#FCF9F2` | `#18191D` | 内容卡片 |
+| CardBorder | `#E8EAED` | `#E5DAC7` | `#26282E` | 边框、分隔线 |
+| InsetContainer | `#F0F2F5` | `#F3ECE0` | `#22242A` | 输入框、内嵌区域 |
+| TextPrimary | `#111827` | `#1F1B16` | `#F3F4F6` | 标题、正文 |
+| TextSecondary | `#4B5563` | `#5E5447` | `#9CA3AF` | 作者、时间等辅助文字 |
+| TextMuted | `#9CA3AF` | `#9B8F7E` | `#6B7280` | 弱化状态；不用于需要正常文字对比度的信息 |
+| GoldAccent | `#B58838` | `#A87B2F` | `#D6BA8B` | 强调图标 |
+| GoldText | `#8C651E` | `#7D5718` | `#E5C494` | 金色文字 |
+| GoldContainer | `#FBF5EB` | `#F6EAD4` | `#2D251A` | 选中、高信号标签背景 |
+| GoldSolidFill | `#1A1C20` | `#231E18` | `#ECEEF2` | 实心主按钮 |
+| GoldSolidText | `#FFFFFF` | `#FCF9F2` | `#1A1C20` | 实心主按钮文字 |
+| Destructive | `#DC2626` | `#C62828` | `#F87171` | 删除、明确拒绝等警示 |
 
 金色用于选中态、精选、楼主、合集、当前项和回复数 ≥100 的热帖。
 普通分类前缀与 0–99 回复数使用中性色；排序按钮是控件，不使用内容标签的金色背景。
@@ -63,17 +63,17 @@ Nagi 使用中性背景、金色强调和胶囊控件。内容卡片不使用阴
 - 按钮、搜索条和分段控件：胶囊或圆形；每个独立操作热区至少 48×48dp。
   圆形导航按钮（`ChromeIconButton`）默认视觉直径 42dp；行内或列表项尾部紧凑图标操作（`NagiIconAction`）默认视觉直径 36dp、外层热区 48×48dp；分段标签等宽，大字号时可换行增高。
   搜索与本地筛选输入框统一复用 `NagiSearchTextField`，使用胶囊外形与带 `nagiPressFeedback` 的 48dp 清空按钮。
-- 开关：平面白色滑块；浅色开启轨道 `#C09D73`、关闭 `#E5E7EB`，深色分别为
+- 开关：平面白色滑块；浅色开启轨道 `#C09D73`、关闭 `#E5E7EB`（暖纸为 `#E0D5C2`），深色分别为
   `#D6BA8B`、`#2A2C33`。暴露开关角色及开关状态。
 - 用户文字标记：中性胶囊，复用标签字号，水平 8dp、垂直 2.5dp 内边距；与同列作者信息居中对齐。
   不染金色以免混同楼主身份；文字自然换行，不挤占昵称或元数据。
 - 操作图标：1.6dp 单线矢量，圆角端点，不用表情符号代替。
   远程版块图片属于内容标识，保留原色，放入 32dp、10dp 圆角槽；加载或失败时只留背景。
 - 磨砂与玻璃材质：由 `NagiMaterials`、`Modifier.glassRim` 和 `Modifier.glassShadow` 统一提供，使用 `0.5x` 输入降采样：
-  - `chrome`（顶栏、底栏渐进边缘）：24dp 模糊与对称 `EaseInOut` 垂直渐进衰减（消除固定半径模糊的重影），浅色 60% 白色、深色 70% `#16171B` 叠加微饱和色调；
-  - `capsule`（浮动胶囊、`ChromeIconButton`、停靠栏、回复胶囊）：20dp 模糊，浅色 62% 白色、深色 70% `#1C1D22` 叠加微饱和色调；
-  - `menu`（`FrostedDropdownMenu`、`NagiDialog`、`NagiFrostedSheet`、剪贴板提示）：30dp 模糊，浅色 72% 白色、深色 78% `#1C1D22` 叠加微饱和色调；
-  - `fallback`（Android 31 以下、省电、关闭系统动画、禁用模糊或脱离 `HazeState` 容器时）：使用静态语义底色（`chrome` 98% `GroupedCanvas`、`capsule` 不透明白/`#1C1D22`、`menu` 96%）；
+  - `chrome`（顶栏、底栏渐进边缘）：24dp 模糊与对称 `EaseInOut` 垂直渐进衰减（消除固定半径模糊的重影），浅色 60% 当前 `CardSurface`、深色 70% `#16171B` 叠加微饱和色调；
+  - `capsule`（浮动胶囊、`ChromeIconButton`、停靠栏、回复胶囊）：20dp 模糊，浅色 62% 当前 `CardSurface`、深色 70% `#1C1D22` 叠加微饱和色调；
+  - `menu`（`FrostedDropdownMenu`、`NagiDialog`、`NagiFrostedSheet`、剪贴板提示）：30dp 模糊，浅色 72% 当前 `CardSurface`、深色 78% `#1C1D22` 叠加微饱和色调；
+  - `fallback`（Android 31 以下、省电、关闭系统动画、禁用模糊或脱离 `HazeState` 容器时）：使用静态语义底色（`chrome` 98% `GroupedCanvas`、`capsule` 不透明当前 `CardSurface`/`#1C1D22`、`menu` 96%）；
   - 玻璃描边与阴影：`0.5dp` 发丝描边（浅色 8% 黑、深色 12% 白；自定义强调态如只看楼主金底胶囊保留对应边框）+ 上方 40% 高度内高光；仅悬浮控件使用淡环境阴影（y 6dp、模糊 20dp、浅色 9% 黑、深色 3% 黑），顶栏/底栏边缘保持 `0dp` 阴影。
   - 仅深色下开启极微弱噪点（`0.04`）抑制色带，浅色关闭。模糊仅作用于有界边缘与悬浮控件自身形状；帖子正文和列表项不应用实时模糊，滚动时状态在图层阶段读取不触发重组。
 - 点击反馈：全局 `LocalIndication` 使用无扩散波纹的瞬态微压高光（浅色 4.2% `#1F1A12`、深色 6.5% 白色），`LocalRippleConfiguration` 同步收敛。悬浮按钮、圆钮、停靠栏动作、`NagiIconAction` 与 `CapsuleButton` 统一使用 `nagiPressFeedback`（按压微缩 0.90x–0.985x + 视觉轮廓内柔和按压蒙层），不在外层 48dp 触控热区溢出灰圈或裁切阴影。

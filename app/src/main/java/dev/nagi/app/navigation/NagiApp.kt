@@ -248,7 +248,7 @@ fun NagiApp(
         updateVm = updateVm,
         hardwareBlur = hardwareBlur,
     ) {
-        NagiTheme(preferences.theme) {
+        NagiTheme(preferences.theme, preferences.lightTheme) {
             val colors = NagiThemeTokens.colors
             if (!account.ready) {
                 Surface(Modifier.fillMaxSize(), color = colors.groupedCanvas, shadowElevation = 0.dp, tonalElevation = 0.dp) {

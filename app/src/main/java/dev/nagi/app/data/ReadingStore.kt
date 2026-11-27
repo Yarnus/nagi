@@ -378,6 +378,7 @@ data class ReadingPreferences(
     val fontSize: Int = DEFAULT_FONT_SIZE,
     val lineHeight: Int = DEFAULT_LINE_HEIGHT,
     val theme: String = "system",
+    val lightTheme: String = "light",
     val clipboardLinkDetection: Boolean = true,
     val autoCheckUpdates: Boolean = true,
     val ngaDomain: NgaDomain = NgaDomain.PRIMARY,
@@ -392,11 +393,26 @@ data class ReadingPreferences(
         get() = fontSize == DEFAULT_FONT_SIZE && lineHeight == DEFAULT_LINE_HEIGHT
 }
 
+internal fun resolveThemePreferences(
+    storedTheme: String?,
+    storedLightTheme: String?,
+): Pair<String, String> {
+    val theme = when (storedTheme) {
+        "system", "light", "dark" -> storedTheme
+        "paper" -> "light"
+        else -> "system"
+    }
+    val lightTheme = storedLightTheme?.takeIf { it in setOf("light", "paper") }
+        ?: if (storedTheme == "paper") "paper" else "light"
+    return theme to lightTheme
+}
+
 @Singleton
 class PreferenceStore @Inject constructor(@param:ApplicationContext private val context: Context) {
     private val fontKey = intPreferencesKey("font")
     private val lineKey = intPreferencesKey("line")
     private val themeKey = stringPreferencesKey("theme")
+    private val lightThemeKey = stringPreferencesKey("light_theme")
     private val clipboardLinkKey = booleanPreferencesKey("clipboard_link_detection")
     private val autoCheckUpdatesKey = booleanPreferencesKey("auto_check_updates")
     private val ngaDomainKey = stringPreferencesKey("nga_domain")
@@ -407,7 +423,7 @@ class PreferenceStore @Inject constructor(@param:ApplicationContext private val 
         val epoch = domainWriteEpoch.get()
         val fontSize = (it[fontKey] ?: DEFAULT_FONT_SIZE).coerceIn(MIN_FONT_SIZE, MAX_FONT_SIZE)
         val lineHeight = (it[lineKey] ?: DEFAULT_LINE_HEIGHT).coerceIn(MIN_LINE_HEIGHT, MAX_LINE_HEIGHT)
-        val theme = it[themeKey]?.takeIf { value -> value in setOf("system", "light", "dark") } ?: "system"
+        val (theme, lightTheme) = resolveThemePreferences(it[themeKey], it[lightThemeKey])
         val clipboardDetection = it[clipboardLinkKey] ?: true
         val autoUpdates = it[autoCheckUpdatesKey] ?: true
         val domainName = it[ngaDomainKey]
@@ -420,6 +436,7 @@ class PreferenceStore @Inject constructor(@param:ApplicationContext private val 
             fontSize = fontSize,
             lineHeight = lineHeight,
             theme = theme,
+            lightTheme = lightTheme,
             clipboardLinkDetection = clipboardDetection,
             autoCheckUpdates = autoUpdates,
             ngaDomain = domain,
@@ -451,6 +468,11 @@ class PreferenceStore @Inject constructor(@param:ApplicationContext private val 
     suspend fun theme(value: String) {
         val normalized = if (value in setOf("system", "light", "dark")) value else "system"
         context.readingPreferences.edit { it[themeKey] = normalized }
+    }
+
+    suspend fun lightTheme(value: String) {
+        val normalized = if (value in setOf("light", "paper")) value else "light"
+        context.readingPreferences.edit { it[lightThemeKey] = normalized }
     }
 
     suspend fun clipboardLinkDetection(enabled: Boolean) {

@@ -52,6 +52,7 @@ import dev.nagi.app.ui.components.NagiDialogActions
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.SlotImageLoadTracker
 import dev.nagi.app.ui.theme.NagiThemeTokens
+import dev.nagi.app.ui.theme.PaperSemanticColors
 import dev.nagi.app.ui.theme.Space
 import dev.nagi.app.viewmodel.MainPostShareState
 import dev.nagi.sdk.Post
@@ -77,7 +78,12 @@ internal fun PostShareCardDialog(
     val scope = rememberCoroutineScope()
     val pictureRecorder = remember(post?.id, shareState.earlyReplies) { ShareCardPictureRecorder() }
     val imageTracker = remember(post?.id, shareState.earlyReplies) { ImageLoadTracker() }
-    var cardDark by rememberSaveable { mutableStateOf(currentColors.isDark) }
+    val initialCardTheme = when {
+        currentColors.isDark -> ShareCardTheme.DARK
+        preferences.lightTheme == "paper" || currentColors.isPaper -> ShareCardTheme.PAPER
+        else -> ShareCardTheme.LIGHT
+    }
+    var cardTheme by rememberSaveable { mutableStateOf(initialCardTheme) }
     var exporting by remember { mutableStateOf(false) }
     var captureNonce by remember { mutableIntStateOf(0) }
 
@@ -102,14 +108,15 @@ internal fun PostShareCardDialog(
                 color = currentColors.textPrimary,
             )
             if (post != null) {
+                val nextTheme = cardTheme.next()
                 CapsuleButton(
-                    text = if (cardDark) "深色卡片" else "浅色卡片",
-                    onClick = { cardDark = !cardDark },
+                    text = cardTheme.label,
+                    onClick = { cardTheme = nextTheme },
                     modifier = Modifier.testTag("share-card-theme-toggle"),
                     icon = NagiIcons.Tuning,
                     style = CapsuleStyle.Neutral,
                     enabled = !exporting,
-                    stateDescription = if (cardDark) "已选深色，点击切换为浅色" else "已选浅色，点击切换为深色",
+                    stateDescription = "已选${cardTheme.label}，点击切换为${nextTheme.label}",
                 )
             }
         }
@@ -179,7 +186,7 @@ internal fun PostShareCardDialog(
                         earlyReplies = shareState.earlyReplies,
                         preTrimmed = trimmed,
                         preferences = preferences,
-                        darkCard = cardDark,
+                        cardTheme = cardTheme,
                         pictureRecorder = pictureRecorder,
                         imageTracker = imageTracker,
                         captureNonce = captureNonce,
@@ -238,7 +245,7 @@ internal fun HeightBoundedShareCard(
     earlyReplies: List<Post> = emptyList(),
     preTrimmed: ShareCardContent,
     preferences: ReadingPreferences,
-    darkCard: Boolean,
+    cardTheme: ShareCardTheme = ShareCardTheme.LIGHT,
     pictureRecorder: ShareCardPictureRecorder,
     imageTracker: ImageLoadTracker? = null,
     captureNonce: Int = 0,
@@ -272,7 +279,7 @@ internal fun HeightBoundedShareCard(
                         earlyReplies = earlyReplies,
                         content = candidate,
                         preferences = preferences,
-                        darkCard = darkCard,
+                        cardTheme = cardTheme,
                         modifier = Modifier
                             .fillMaxWidth()
                             .then(

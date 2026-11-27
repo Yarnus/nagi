@@ -83,6 +83,7 @@ class SettingsLogicTest {
             val prefs = PreferenceStore(RuntimeEnvironment.getApplication())
             prefs.resetTypography()
             prefs.theme("system")
+            prefs.lightTheme("light")
             prefs.clipboardLinkDetection(true)
             prefs.autoCheckUpdates(true)
             prefs.ngaDomain(NgaDomain.PRIMARY)
@@ -127,6 +128,25 @@ class SettingsLogicTest {
         // Unsupported ALTERNATE maps safely back to PRIMARY
         prefs.ngaDomain(NgaDomain.ALTERNATE)
         assertEquals(NgaDomain.PRIMARY, prefs.preferences.first().ngaDomain)
+
+        // Warm paper light theme persists independently from theme mode
+        prefs.theme("light")
+        prefs.lightTheme("paper")
+        val lightPaper = prefs.preferences.first()
+        assertEquals("light", lightPaper.theme)
+        assertEquals("paper", lightPaper.lightTheme)
+
+        prefs.theme("system")
+        val systemPaper = prefs.preferences.first()
+        assertEquals("system", systemPaper.theme)
+        assertEquals("paper", systemPaper.lightTheme)
+
+        prefs.theme("dark")
+        assertEquals("dark", prefs.preferences.first().theme)
+        prefs.lightTheme("invalid")
+        assertEquals("light", prefs.preferences.first().lightTheme)
+        assertEquals("light" to "paper", dev.nagi.app.data.resolveThemePreferences("paper", null))
+        assertEquals("system" to "light", dev.nagi.app.data.resolveThemePreferences("unknown", "unknown"))
     }
 
     @Test fun dynamicDomainClientSwitchesDelegateWhenPreferenceChanges() = runTest(dispatcher) {
@@ -217,6 +237,7 @@ class SettingsUiTest {
             val prefs = PreferenceStore(RuntimeEnvironment.getApplication())
             prefs.resetTypography()
             prefs.theme("system")
+            prefs.lightTheme("light")
             prefs.clipboardLinkDetection(true)
             prefs.autoCheckUpdates(true)
             prefs.ngaDomain(NgaDomain.PRIMARY)
@@ -238,7 +259,7 @@ class SettingsUiTest {
             val density = LocalDensity.current
             val currentPrefs by prefs.preferences.collectAsStateWithLifecycle(ReadingPreferences())
             CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
-                NagiTheme(currentPrefs.theme) {
+                NagiTheme(currentPrefs.theme, currentPrefs.lightTheme) {
                     SettingsScreen(
                         vm = vm,
                         preferences = currentPrefs,
@@ -250,6 +271,25 @@ class SettingsUiTest {
             }
         }
         compose.waitForIdle()
+
+        // Appearance selector switches mode and warm paper light style at 320dp + 2x fontScale
+        compose.onNodeWithText("浅色").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithText("暖纸").performScrollTo().assertIsDisplayed().performClick()
+        compose.waitUntil(5000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            runBlocking {
+                val updated = prefs.preferences.first()
+                updated.theme == "light" && updated.lightTheme == "paper"
+            }
+        }
+        compose.onNodeWithText("跟随系统").performScrollTo().performClick()
+        compose.waitUntil(5000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            runBlocking {
+                val updated = prefs.preferences.first()
+                updated.theme == "system" && updated.lightTheme == "paper"
+            }
+        }
 
         // Stepper lower bound disables decrease button
         runBlocking { prefs.font(MIN_FONT_SIZE) }
@@ -374,7 +414,7 @@ class SettingsUiTest {
 
         compose.setContent {
             val currentPrefs by prefs.preferences.collectAsStateWithLifecycle(ReadingPreferences())
-            NagiTheme(currentPrefs.theme) {
+            NagiTheme(currentPrefs.theme, currentPrefs.lightTheme) {
                 ReaderScreen(
                     id = "10",
                     preferences = currentPrefs,

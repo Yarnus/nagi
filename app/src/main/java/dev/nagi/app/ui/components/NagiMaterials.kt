@@ -31,6 +31,7 @@ import dev.chrisbanes.haze.HazeInputScale
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
 import dev.nagi.app.ui.theme.NagiThemeTokens
+import dev.nagi.app.ui.theme.PaperSemanticColors
 
 internal enum class NagiMaterialTier {
     Chrome,
@@ -53,7 +54,7 @@ internal object NagiMaterials {
     fun chrome(): NagiMaterialSpec {
         val colors = NagiThemeTokens.colors
         val isDark = colors.isDark
-        val baseColor = if (isDark) Color(0xFF16171B) else Color.White
+        val baseColor = if (isDark) Color(0xFF16171B) else colors.cardSurface
         val vibrancyTint = if (isDark) {
             HazeTint(Color(0xFF9C9C9C).copy(alpha = 0.18f), BlendMode.Overlay)
         } else {
@@ -79,14 +80,14 @@ internal object NagiMaterials {
     fun capsule(): NagiMaterialSpec {
         val colors = NagiThemeTokens.colors
         val isDark = colors.isDark
-        val baseColor = if (isDark) Color(0xFF1C1D22) else Color.White
+        val baseColor = if (isDark) Color(0xFF1C1D22) else colors.cardSurface
         val vibrancyTint = if (isDark) {
             HazeTint(Color(0xFF9C9C9C).copy(alpha = 0.18f), BlendMode.Overlay)
         } else {
             HazeTint(Color(0xFFA6A6A6).copy(alpha = 0.28f), BlendMode.ColorDodge)
         }
         val mainTint = HazeTint(baseColor.copy(alpha = if (isDark) 0.70f else 0.62f))
-        val fallbackColor = if (isDark) Color(0xFF1C1D22) else Color.White
+        val fallbackColor = if (isDark) Color(0xFF1C1D22) else colors.cardSurface
         return NagiMaterialSpec(
             style = HazeStyle(
                 backgroundColor = fallbackColor,
@@ -96,7 +97,11 @@ internal object NagiMaterials {
                 fallbackTint = HazeTint(fallbackColor),
             ),
             fallbackColor = fallbackColor,
-            fallbackBorder = if (isDark) Color(0xFF2E3138) else Color(0xFFE2E5EB),
+            fallbackBorder = when {
+                isDark -> Color(0xFF2E3138)
+                colors.isPaper -> colors.cardBorder
+                else -> Color(0xFFE2E5EB)
+            },
         )
     }
 
@@ -105,17 +110,17 @@ internal object NagiMaterials {
     fun menu(): NagiMaterialSpec {
         val colors = NagiThemeTokens.colors
         val isDark = colors.isDark
-        val baseColor = if (isDark) Color(0xFF1C1D22) else Color.White
+        val baseColor = if (isDark) Color(0xFF1C1D22) else colors.cardSurface
         val vibrancyTint = if (isDark) {
             HazeTint(Color(0xFF9C9C9C).copy(alpha = 0.16f), BlendMode.Overlay)
         } else {
             HazeTint(Color(0xFFA6A6A6).copy(alpha = 0.20f), BlendMode.ColorDodge)
         }
         val mainTint = HazeTint(baseColor.copy(alpha = if (isDark) 0.78f else 0.72f))
-        val fallbackColor = if (isDark) Color(0xFF1C1D22).copy(alpha = 0.96f) else Color.White.copy(alpha = 0.96f)
+        val fallbackColor = if (isDark) Color(0xFF1C1D22).copy(alpha = 0.96f) else colors.cardSurface.copy(alpha = 0.96f)
         return NagiMaterialSpec(
             style = HazeStyle(
-                backgroundColor = if (isDark) Color(0xFF1C1D22) else Color.White,
+                backgroundColor = if (isDark) Color(0xFF1C1D22) else colors.cardSurface,
                 tints = listOf(vibrancyTint, mainTint),
                 blurRadius = 30.dp,
                 noiseFactor = if (isDark) 0.04f else 0f,

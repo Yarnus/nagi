@@ -88,6 +88,7 @@ data class NagiSemanticColors(
     val destructiveContainer: Color,
     val switchInactiveTrack: Color,
     val switchActiveTrack: Color,
+    val isPaper: Boolean = false,
 ) {
     val chromeSurface: Color get() = frostedChrome
     val subtleContainer: Color get() = insetContainer
@@ -142,6 +143,31 @@ val DarkSemanticColors = NagiSemanticColors(
     destructiveContainer = Color(0xFF2E1719),
     switchInactiveTrack = Color(0xFF2A2C33),
     switchActiveTrack = Color(0xFFD6BA8B),
+)
+
+val PaperSemanticColors = NagiSemanticColors(
+    isDark = false,
+    groupedCanvas = Color(0xFFF4EFE5),
+    cardSurface = Color(0xFFFCF9F2),
+    cardBorder = Color(0xFFE5DAC7),
+    insetContainer = Color(0xFFF3ECE0),
+    frostedChrome = Color(0xFFFCF9F2).copy(alpha = 0.88f),
+    frostedDropdown = Color(0xFFFCF9F2).copy(alpha = 0.96f),
+    textPrimary = Color(0xFF1F1B16),
+    textSecondary = Color(0xFF5E5447),
+    textMuted = Color(0xFF9B8F7E),
+    goldAccent = Color(0xFFA87B2F),
+    goldSolidFill = Color(0xFF231E18),
+    goldSolidContent = Color(0xFFFCF9F2),
+    goldSolidText = Color(0xFFFCF9F2),
+    goldContainer = Color(0xFFF6EAD4),
+    goldText = Color(0xFF7D5718),
+    goldBorder = Color(0xFFDFC8A0),
+    destructive = Color(0xFFC62828),
+    destructiveContainer = Color(0xFFFCECEC),
+    switchInactiveTrack = Color(0xFFE0D5C2),
+    switchActiveTrack = Color(0xFFC09D73),
+    isPaper = true,
 )
 
 // Subsetting keeps only Latin, digits, and common symbols so CJK falls back to the system sans-serif font.
@@ -420,12 +446,17 @@ private val DarkRippleConfiguration = RippleConfiguration(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NagiTheme(theme: String = "system", content: @Composable () -> Unit) {
+fun NagiTheme(
+    theme: String = "system",
+    lightTheme: String = "light",
+    content: @Composable () -> Unit,
+) {
     val dark = when (theme) {
         "dark" -> true
-        "light" -> false
+        "light", "paper" -> false
         else -> isSystemInDarkTheme()
     }
+    val isPaper = !dark && (theme == "paper" || lightTheme == "paper")
     val activity = LocalActivity.current as? ComponentActivity
     SideEffect {
         val style = if (dark) {
@@ -436,7 +467,11 @@ fun NagiTheme(theme: String = "system", content: @Composable () -> Unit) {
         activity?.enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
     }
 
-    val semantic = if (dark) DarkSemanticColors else LightSemanticColors
+    val semantic = when {
+        dark -> DarkSemanticColors
+        isPaper -> PaperSemanticColors
+        else -> LightSemanticColors
+    }
     val typeTokens = DefaultTypeTokens
     val shapeTokens = NagiShapeTokens()
 
@@ -485,11 +520,11 @@ fun NagiTheme(theme: String = "system", content: @Composable () -> Unit) {
             onSurface = semantic.textPrimary,
             surfaceVariant = semantic.insetContainer,
             onSurfaceVariant = semantic.textSecondary,
-            surfaceContainerLowest = Color.White,
+            surfaceContainerLowest = semantic.cardSurface,
             surfaceContainerLow = semantic.groupedCanvas,
             surfaceContainer = semantic.insetContainer,
-            surfaceContainerHigh = Color(0xFFE8EAED),
-            surfaceContainerHighest = Color(0xFFDDE0E5),
+            surfaceContainerHigh = semantic.cardBorder,
+            surfaceContainerHighest = if (isPaper) Color(0xFFD9CBB3) else Color(0xFFDDE0E5),
             outline = semantic.cardBorder,
             outlineVariant = semantic.cardBorder,
             error = semantic.destructive,
