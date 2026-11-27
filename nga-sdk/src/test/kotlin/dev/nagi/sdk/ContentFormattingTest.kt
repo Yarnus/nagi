@@ -38,9 +38,11 @@ class ContentFormattingTest {
         assertEquals(2, list.items.size)
         assertTrue(list.items[1].any { it is ContentBlock.ListBlock })
         val table = ContentParser.parse("[table][tr][td1][b]粗体[/b][/td][td width=20][url=https://example.com]链接[/url][s:ac:哭笑][/td][/tr][/table]").single() as ContentBlock.Table
-        assertTrue((table.rows[0][0].single() as ContentBlock.Text).spans.single().bold)
-        assertTrue((table.rows[0][1].single() as ContentBlock.Text).smiles.isNotEmpty())
-        assertTrue((table.rows[0][1].single() as ContentBlock.Text).spans.any { it.url != null })
+        assertEquals(1, table.rows[0][0].widthPercent)
+        assertEquals(20, table.rows[0][1].widthPercent)
+        assertTrue((table.rows[0][0].content.single() as ContentBlock.Text).spans.single().bold)
+        assertTrue((table.rows[0][1].content.single() as ContentBlock.Text).smiles.isNotEmpty())
+        assertTrue((table.rows[0][1].content.single() as ContentBlock.Text).spans.any { it.url != null })
     }
 
     @Test fun mediaLegacyImagesAndSpecialBreaks() {
@@ -70,10 +72,10 @@ class ContentFormattingTest {
 
     @Test fun nestedTablesAndCodeKeepTheirBoundaries() {
         val table = ContentParser.parse("[table][tr][td][code]<unsafe>[/td][/code][table][tr][td]内层[/td][/tr][/table][/td][/tr][/table]").single() as ContentBlock.Table
-        assertEquals(ContentBlock.Code("<unsafe>[/td]"), table.rows[0][0][0])
-        assertTrue(table.rows[0][0][1] is ContentBlock.Table)
+        assertEquals(ContentBlock.Code("<unsafe>[/td]"), table.rows[0][0].content[0])
+        assertTrue(table.rows[0][0].content[1] is ContentBlock.Table)
         val html = ContentParser.parse("<table><tr><td><pre>[h]原文[/h]</pre></td><td>正文</td></tr></table>").single() as ContentBlock.Table
-        assertEquals(listOf(ContentBlock.Code("[h]原文[/h]")), html.rows[0][0])
+        assertEquals(listOf(ContentBlock.Code("[h]原文[/h]")), html.rows[0][0].content)
         val quote = ContentParser.parse("[quote][code][/quote][/code]正文[/quote]").single() as ContentBlock.Quote
         assertEquals(ContentBlock.Code("[/quote]"), quote.children[0])
         assertEquals(ContentBlock.Text("正文"), quote.children[1])

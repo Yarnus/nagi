@@ -48,7 +48,7 @@ class ParserRegressionTest {
     @Test fun htmlBlocksKeepStructureAndSafeInlineStyles() {
         val blocks = ContentParser.parse("<blockquote>quote</blockquote><table><tr><td>A</td><td>B</td></tr></table><b>bold</b> <a href='javascript:bad'>unsafe</a>")
         assertTrue(blocks[0] is ContentBlock.Quote)
-        assertEquals(ContentBlock.Table(listOf(listOf(listOf(ContentBlock.Text("A")), listOf(ContentBlock.Text("B"))))), blocks[1])
+        assertEquals(ContentBlock.Table(listOf(listOf(TableCell(listOf(ContentBlock.Text("A"))), TableCell(listOf(ContentBlock.Text("B")))))), blocks[1])
         val text = blocks[2] as ContentBlock.Text
         assertTrue(text.spans.first().bold)
         assertTrue(text.spans.all { it.url == null })

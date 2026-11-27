@@ -60,6 +60,8 @@ GitHub 加密保存 Secrets；工作流仅在发布构建步骤中注入密码�
 
 ## 发布一个版本
 
+UI 有较大改动时，发版前请先连接 API 33+ 设备或模拟器运行 `./gradlew :app:generateBaselineProfile` 重新生成并提交 Baseline Profile。
+
 1. 修改 `app/build.gradle.kts` 的 `versionName`，并递增 `versionCode`（首个版本可保留 `0.1.0` / `1`）。
 2. 将 `.github/release-notes.md` 替换为本版本的 changelog，只写本次用户可见的更新。
 3. 提交并推送到 `master`，等待 CI 通过。

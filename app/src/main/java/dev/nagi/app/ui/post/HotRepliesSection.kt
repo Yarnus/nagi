@@ -96,6 +96,7 @@ internal fun extractHotReplyPreview(blocks: List<ContentBlock>): HotReplyPreview
                 is ContentBlock.Heading -> walk(block.children)
                 is ContentBlock.Divider -> walk(block.children)
                 is ContentBlock.Aligned -> walk(block.children)
+                is ContentBlock.Styled -> walk(block.children)
                 is ContentBlock.ListBlock -> block.items.forEach(::walk)
                 is ContentBlock.Code -> appendPlain(block.value)
                 is ContentBlock.Table -> appendPlain("[表格]")

@@ -29,4 +29,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "Nagi"
 include(":nga-sdk")
-if (!providers.gradleProperty("sdkOnly").isPresent) include(":app")
+if (!providers.gradleProperty("sdkOnly").isPresent) include(":app", ":baselineprofile")

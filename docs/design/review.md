@@ -33,8 +33,8 @@
 | 深层链接 | 可信 NGA 源站帖子（含页码 / 楼层定位）、版块 / 合集、公开 UID 冷热启动导航；伪装域名、含凭据 URL 与操作参数链接不截获；剪贴板分享文本与 URI 提取、居中磨砂打开 / 忽略弹窗（等宽按钮与窄屏大字号纵排）、冷启动与后台切回触发、空读不污染时间戳及本机复制 / 同时间戳防重复提示 |
 | 正文链接 | 普通 / 旧式 BBCode 与 tid 引用去标签；可信主题站内打开并返回原位置；公开 UID 进入资料页；行内 pid 链接保留定位参数、用户名正确编码；外链和带定位参数链接沿用外部打开；伪装域名、凭据 URL、危险协议和匿名 UID 不作为站内导航；代码块保持原文 |
 | 引用卡片 | 摘要不展开祖先引用或加载图片；有片段时延迟读取完整原帖，无片段时加载；失败保留片段且显式重试；无目标不定位；同主题 / 跨主题定位、退出只看楼主及返回来源位置；追加 / 前插期间定位后分页不锁死、迟到成功或失败不污染状态；账号切换隔离；连续回复头不崩溃、非法显式主题不回退、过期页码不放大总页数、未知分页不猜测 |
-| 正文排版 | h 标题语义；颜色在浅深内容底色上的对比度；相对字号、窄屏大字号换行、对齐、嵌套 / 编号列表、分隔线和 stripbr；多层数字实体的 emoji / 空格及链接末尾编码空格；解码所得标签不重新解释，代码原文不变；无效样式安全降级，未知标签保持可读 |
-| 富文本表格与媒体 | td 变体、嵌套表格、单元格内链接 / 表情 / 图片 / 代码 / 折叠；横向滚动；noimg 日期路径、album 换行分隔、MP4 / 音频 / 附件入口与安全 URL；骰子确定性、上下文缺失与无效表达式 |
+| 正文排版 | h 标题语义；颜色在浅深内容底色上的对比度；相对字号、窄屏大字号换行、对齐、嵌套 / 编号列表、分隔线和 stripbr；`style` / `fixsize` 安全子集（浅深主题及作者背景下的文字对比度、字号叠加夹紧、无定位与 `dybg` 请求）；多层数字实体的 emoji / 空格及链接末尾编码空格；解码所得标签不重新解释，代码原文不变；无效样式安全降级，未知标签保持可读 |
+| 富文本表格与媒体 | td 变体、`colspan` / `rowspan` 合并单元格（含越界截断）、百分比列宽夹紧与无重叠边框、嵌套表格、单元格内链接 / 表情 / 图片 / 代码 / 折叠；横向滚动；noimg 日期路径、album 换行分隔、MP4 / 音频 / 附件入口与安全 URL；骰子确定性、上下文缺失与无效表达式 |
 | 评分 | 赞踩取消与互切；无回执不猜分；进度不改变楼层高度；失败保留状态，未知结果仅由对应楼层重读解锁；并发刷新不重复累计 |
 | 编辑 | 原始 BBCode、所有权、准备失败、草稿隔离；接受后只刷新当前页一次，拒绝保留输入，未知结果关闭重开仍不重发 |
 | 私信 | 预填未修改直接退出；有改动才确认；资料来源编辑器不请求收件箱，退出回原标签与位置；收件箱 / 会话列表自动分页，私信正文图片点击打开 `ImageViewer` |
@@ -52,6 +52,8 @@
 | NGA 收藏版块 | 游客不发请求并可引导登录；已登录读取 `forum_favor2` 区分版块与合集、匹配目录时对齐目录名称与图标（未匹配项保留服务端名称）；版块目录顶部分区、长按菜单、过滤与主题列表更多菜单；支持按账号隔离的本地排序（长按菜单进入排序态拖拽、无障碍上/下移、恢复默认，有本地顺序优先，无则回退 NGA 顺序）；收藏页双标签切换及位置保留、移除确认弹窗；写入确认后即时更新列表、拒绝保留原态、结果不明锁定至刷新核对 |
 
 ## 验证边界
+
+表格合并单元格 / 列宽与版头安全子集、`peekRevision` 会话修订检查、Compose 稳定性配置、超大 UI 文件拆分及 Baseline Profile 的本地 **模拟测试通过**：本次修订后运行 `./gradlew --no-daemon -PchinaMirror :nga-sdk:check :app:assembleDebug :app:lintDebug :app:testDebugUnitTest` 与 `./gradlew --no-daemon -PsdkOnly :nga-sdk:build` 全部通过（覆盖 `SessionPeekTest`、`TableAndStyleParsingTest`、`ContentTableTest` 及既有回归测试，lint 0 个代码错误/警告）；`BaselineProfileGenerator`（生成 `baseline-prof.txt` 与 `startup-prof.txt`）及 `StartupBenchmark` 已在 API 36 `nagi-validation` 模拟器实测（非真机）。**未验证：** 真实 NGA 帖子中合并单元格表格与版头安全子集的浅 / 深色视觉效果、真机启动与帧率收益，以及 TalkBack 实机朗读表现。
 
 并发锁、流式图片保存/分享、线路切换回收与工程基线优化（`AccountManager` 写优先异步读写锁避免跨网络持锁阻塞阅读状态落盘、`ImageViewer` 流式格式嗅探与写入消除 30MB `ByteArray` 堆内存峰值、`DynamicDomainNgaClient` 在途引用计数并在安全后回收旧域名客户端、`UserContentViewModel` 增量分页去重、`TopicsScreen`/`SearchScreen` 统一扣除前置项偏移计算自动分页边界、`kapt` 迁移至 `KSP` 并导出 Room v10 Schema）的本地 **模拟测试通过**：运行 `./gradlew --no-daemon --max-workers=1 -PchinaMirror :nga-sdk:check :app:assembleDebug :app:lintDebug :app:testDebugUnitTest :app:verifyThirdPartyNotices` 全部通过（SDK 219 项、应用 424 项单元测试 0 失败 0 跳过，lint 0 个错误、23 个警告；`QueuedWriteAccountTest`、`SettingsOptimizationTest`、`UserContentViewModelTest`、`ImageViewerTest`、`PerformanceOptimizationTest` 新增覆盖并发读写锁、引用计数延迟回收、增量去重、流式边界校验与分页头部偏移）；最新调试包已安装至 `emulator-5554`。**未验证：** 设备插桩测试、真机、Android 9 及以下 `CreateDocument` 流式回退与大图实机内存表现。
 

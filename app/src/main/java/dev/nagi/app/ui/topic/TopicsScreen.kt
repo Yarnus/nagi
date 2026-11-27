@@ -5,9 +5,7 @@ import androidx.core.net.toUri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -16,11 +14,9 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -30,16 +26,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
@@ -57,27 +47,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.nagi.app.data.ReadingPreferences
-import dev.nagi.app.data.TopicReadState
-import dev.nagi.app.data.TopicReadStatus
-import dev.nagi.app.data.accessibilityStateDescription
 import dev.nagi.app.data.formatReplySummary
 import dev.nagi.app.data.resolveTopicReadStatus
 import dev.nagi.app.ui.components.CapsuleButton
@@ -85,7 +64,6 @@ import dev.nagi.app.ui.components.LocalTopicReadStates
 import dev.nagi.app.ui.components.formatAuthorDisplayName
 import dev.nagi.app.ui.components.CapsuleStyle
 import dev.nagi.app.ui.components.ChromeIconButton
-import dev.nagi.app.ui.components.EdgeAlignedMetaRow
 import dev.nagi.app.ui.components.NeutralTagBadge
 import dev.nagi.app.ui.components.FlatCard
 import dev.nagi.app.ui.components.ForumScopePickerSheet
@@ -93,7 +71,6 @@ import dev.nagi.app.ui.components.FrostedDropdownDivider
 import dev.nagi.app.ui.components.FrostedDropdownItem
 import dev.nagi.app.ui.components.FrostedDropdownMenu
 import dev.nagi.app.ui.components.GoldSwitch
-import dev.nagi.app.ui.components.GoldTagBadge
 import dev.nagi.app.ui.components.InlineStatusBanner
 import dev.nagi.app.ui.components.LocalOpenLogin
 import dev.nagi.app.ui.components.NagiDialog
@@ -101,11 +78,9 @@ import dev.nagi.app.ui.components.NagiDialogActions
 import dev.nagi.app.ui.components.NagiFrostedSheet
 import dev.nagi.app.ui.components.NagiIcons
 import dev.nagi.app.ui.components.NagiPullToRefreshBox
-import dev.nagi.app.ui.components.NagiSearchTextField
 import dev.nagi.app.ui.components.NagiSheetHeader
 import dev.nagi.app.ui.components.Notice
 import dev.nagi.app.ui.components.ProgressiveBlurScaffold
-import dev.nagi.app.ui.components.ReplyCountPill
 import dev.nagi.app.ui.components.TopicListFloatingDock
 import dev.nagi.app.ui.post.ComposerScreen
 import dev.nagi.app.ui.post.ReaderScreen
@@ -119,10 +94,6 @@ import dev.nagi.sdk.PublishAction
 import dev.nagi.sdk.PublishTarget
 import dev.nagi.sdk.Topic
 import dev.nagi.sdk.TopicSort
-import java.time.Instant
-import java.time.LocalDateTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -919,462 +890,3 @@ fun TopicsScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun RelatedForumsSheet(
-    currentForum: Forum?,
-    directoryForums: List<Forum>,
-    onSelectForum: (Forum) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val colors = NagiThemeTokens.colors
-    val typography = NagiThemeTokens.typography
-    val related = remember(currentForum, directoryForums) {
-        if (currentForum == null || directoryForums.isEmpty()) {
-            emptyList()
-        } else {
-            val matched = directoryForums.firstOrNull { it.key == currentForum.key }
-                ?: directoryForums.firstOrNull { it.id == currentForum.id }
-            when {
-                matched != null && (matched.category.isNotBlank() || matched.group.isNotBlank()) ->
-                    directoryForums.filter { it.category == matched.category && it.group == matched.group }
-                else -> directoryForums.filter { it.id == currentForum.id }
-            }
-        }
-    }
-
-    val dividerColor = colors.cardBorder.copy(alpha = 0.55f)
-    NagiFrostedSheet(
-        onDismissRequest = onDismiss,
-        maxHeight = 520.dp,
-    ) {
-        NagiSheetHeader(
-            title = "同组版块与主题合集",
-            subtitle = "点按切换同组版块或主题合集",
-            onClose = onDismiss,
-        )
-        HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
-
-        if (related.isEmpty()) {
-            val single = currentForum
-            if (single != null) {
-                Box(Modifier.padding(bottom = Space.sm)) {
-                    RelatedForumRow(
-                        forum = single,
-                        isCurrent = true,
-                        onClick = onDismiss,
-                    )
-                }
-            } else {
-                Box(Modifier.padding(horizontal = Space.lg, vertical = Space.md)) {
-                    Notice("暂无同组版块或合集")
-                }
-            }
-        } else {
-            LazyColumn(contentPadding = PaddingValues(bottom = Space.md)) {
-                itemsIndexed(related, key = { _, forum -> forum.key }) { index, forum ->
-                    if (index > 0) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = Space.lg),
-                            thickness = 0.5.dp,
-                            color = dividerColor,
-                        )
-                    }
-                    RelatedForumRow(
-                        forum = forum,
-                        isCurrent = forum.key == currentForum?.key,
-                        onClick = { onSelectForum(forum) },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RelatedForumRow(
-    forum: Forum,
-    isCurrent: Boolean,
-    onClick: () -> Unit,
-) {
-    val colors = NagiThemeTokens.colors
-    val typography = NagiThemeTokens.typography
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .heightIn(min = 54.dp)
-            .padding(horizontal = Space.lg, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Space.md),
-    ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Space.xs),
-            ) {
-                Text(
-                    text = forum.name,
-                    style = typography.topicTitle,
-                    color = if (isCurrent) colors.goldText else colors.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (forum.collectionId != null) {
-                    NeutralTagBadge(text = "合集")
-                }
-                if (isCurrent) {
-                    GoldTagBadge(text = "当前")
-                }
-            }
-            if (forum.description.isNotBlank()) {
-                Text(
-                    text = forum.description,
-                    style = typography.metadata,
-                    color = colors.textSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        Icon(
-            imageVector = NagiIcons.ChevronRight,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp),
-            tint = colors.textSecondary,
-        )
-    }
-}
-
-@Composable
-private fun TopicSortMenu(current: TopicSort, recommendAvailable: Boolean, onSelect: (TopicSort) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    val allOptions = listOf(
-        TopicSort.NEWEST to "最新发布",
-        TopicSort.LAST_ACTIVE to "最近活跃",
-        TopicSort.RECOMMENDED to "精华区",
-    )
-    val options = allOptions.filter { it.first != TopicSort.RECOMMENDED || recommendAvailable }
-    val activeLabel = allOptions.first { it.first == current }.second
-    Box {
-        CapsuleButton(
-            text = activeLabel,
-            onClick = { expanded = true },
-            icon = NagiIcons.Sort,
-            trailingIcon = NagiIcons.ChevronDown,
-            style = CapsuleStyle.Neutral,
-            contentDescription = "排序方式",
-            stateDescription = "当前：$activeLabel",
-        )
-        FrostedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            options.forEach { (option, label) ->
-                val active = current == option
-                FrostedDropdownItem(
-                    text = label,
-                    selected = active,
-                    onClick = {
-                        expanded = false
-                        onSelect(option)
-                    },
-                    modifier = Modifier.semantics { selected = active },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SearchControls(
-    scope: Forum?,
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onChooseScope: () -> Unit,
-    onSubmit: () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
-        CapsuleButton(
-            text = scope?.let { "搜索范围：${it.name}（切换）" } ?: "选择搜索版块",
-            onClick = onChooseScope,
-            icon = NagiIcons.Forums,
-            trailingIcon = NagiIcons.ChevronDown,
-            style = if (scope != null) CapsuleStyle.SelectedGold else CapsuleStyle.Neutral,
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Space.sm),
-        ) {
-            NagiSearchTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                placeholder = "搜索主题",
-                clearDescription = "清空搜索词",
-                onSubmit = onSubmit,
-                modifier = Modifier.weight(1f),
-            )
-            CapsuleButton(
-                text = "搜索",
-                onClick = onSubmit,
-                icon = NagiIcons.Search,
-                enabled = query.isNotBlank() && scope != null,
-                style = CapsuleStyle.SolidGold,
-            )
-        }
-    }
-}
-
-@Composable
-internal fun FlatTopicCard(
-    topic: Topic,
-    sort: TopicSort,
-    selected: Boolean,
-    selectableMode: Boolean,
-    margin: Dp = Space.lg,
-    readState: TopicReadState? = LocalTopicReadStates.current[topic.id],
-    onDetails: () -> Unit,
-    onClick: () -> Unit,
-) {
-    val colors = NagiThemeTokens.colors
-    FlatCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = margin, vertical = 4.dp),
-        shape = NagiThemeTokens.shapes.topicCard,
-        containerColor = if (selected) colors.selectedRowFill else colors.cardSurface,
-        borderColor = if (selected) colors.goldAccent else colors.cardBorder,
-    ) {
-        TopicRow(
-            topic = topic,
-            sort = sort,
-            selected = selected,
-            selectableMode = selectableMode,
-            gutter = 14.dp,
-            readState = readState,
-            onDetails = onDetails,
-            onClick = onClick,
-        )
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-internal fun TopicRow(
-    topic: Topic,
-    sort: TopicSort,
-    selected: Boolean,
-    selectableMode: Boolean,
-    gutter: Dp,
-    readState: TopicReadState? = LocalTopicReadStates.current[topic.id],
-    onDetails: () -> Unit,
-    onClick: () -> Unit,
-) {
-    val colors = NagiThemeTokens.colors
-    val typography = NagiThemeTokens.typography
-    val readStatus = remember(topic.id, topic.replies, topic.lastActiveAt, readState) {
-        resolveTopicReadStatus(topic, readState)
-    }
-    val titleColor = when {
-        selected -> colors.textPrimary
-        readStatus is TopicReadStatus.Read -> colors.textSecondary
-        else -> colors.textPrimary
-    }
-    val updatedNewReplies = (readStatus as? TopicReadStatus.Updated)?.newReplies
-    val hasNewActivity = readStatus is TopicReadStatus.Updated
-    val interactionModifier = Modifier
-        .testTag("topic-${topic.id}")
-        .combinedClickable(
-            onClick = onClick,
-            onLongClick = onDetails,
-            onLongClickLabel = "查看完整标题和时间",
-        )
-        .semantics {
-            if (selectableMode) this.selected = selected
-            readStatus.accessibilityStateDescription()?.let { stateDescription = it }
-            customActions = listOf(CustomAccessibilityAction("查看主题信息") { onDetails(); true })
-        }
-
-    val parsed = remember(topic.title) { parseTopicSubject(topic.title) }
-    val hasTopBadges = topic.recommended || parsed.tag != null
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(interactionModifier),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = gutter, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(Space.sm),
-        ) {
-            if (hasTopBadges) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        if (topic.recommended) {
-                            GoldTagBadge(text = "精选")
-                        }
-                        if (parsed.tag != null) {
-                            NeutralTagBadge(text = parsed.tag)
-                        }
-                    }
-                    ReplyCountPill(
-                        count = topic.replies,
-                        newReplies = updatedNewReplies,
-                        hasNewActivity = hasNewActivity,
-                    )
-                }
-                Text(
-                    text = parsed.cleanTitle,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clearAndSetSemantics { text = AnnotatedString(topic.title) },
-                    style = typography.topicTitle,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                    color = titleColor,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.spacedBy(Space.md),
-                ) {
-                    Text(
-                        text = parsed.cleanTitle,
-                        modifier = Modifier
-                            .weight(1f)
-                            .clearAndSetSemantics { text = AnnotatedString(topic.title) },
-                        style = typography.topicTitle,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                        color = titleColor,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    ReplyCountPill(
-                        count = topic.replies,
-                        newReplies = updatedNewReplies,
-                        hasNewActivity = hasNewActivity,
-                    )
-                }
-            }
-
-            EdgeAlignedMetaRow(
-                leading = {
-                    Text(
-                        text = formatAuthorDisplayName(topic.author),
-                        style = typography.metadata,
-                        color = colors.textSecondary,
-                    )
-                },
-                trailing = {
-                    val primaryTime = if (sort == TopicSort.NEWEST || sort == TopicSort.RECOMMENDED) topic.createdAt else topic.lastActiveAt
-                    val timestamp = primaryTime.takeIf { it > 0 } ?: topic.createdAt.takeIf { it > 0 } ?: topic.lastActiveAt
-                    if (timestamp > 0) {
-                        val timeText = remember(timestamp) { formatTime(timestamp) }
-                        Text(
-                            text = timeText,
-                            style = typography.metadata,
-                            color = colors.textSecondary,
-                            maxLines = 1,
-                        )
-                    } else {
-                        Spacer(Modifier.size(0.dp))
-                    }
-                },
-            )
-        }
-    }
-}
-
-internal fun isNearTopicListEnd(
-    layoutInfo: androidx.compose.foundation.lazy.LazyListLayoutInfo,
-    headerCount: Int,
-    topicCount: Int,
-    scrolled: Boolean,
-    canScrollForward: Boolean,
-    distance: Int = 3,
-): Boolean {
-    if (topicCount <= 0 || (!scrolled && canScrollForward)) return false
-    val lastTopicLayoutIndex = layoutInfo.visibleItemsInfo.lastOrNull { it.contentType == "topic" }?.index ?: return false
-    val lastTopicPosition = lastTopicLayoutIndex - headerCount
-    return lastTopicPosition >= topicCount - distance
-}
-
-private data class ParsedTopicSubject(val tag: String?, val cleanTitle: String)
-
-private fun parseTopicSubject(rawTitle: String): ParsedTopicSubject {
-    val trimmed = rawTitle.trim()
-    if (trimmed.startsWith("[")) {
-        val end = trimmed.indexOf(']')
-        if (end in 2..16) {
-            val tag = trimmed.substring(1, end).trim()
-            val remainder = trimmed.substring(end + 1).trimStart()
-            if (tag.isNotEmpty() && remainder.isNotEmpty()) {
-                return ParsedTopicSubject(tag = tag, cleanTitle = remainder)
-            }
-        }
-    }
-    return ParsedTopicSubject(tag = null, cleanTitle = rawTitle)
-}
-
-private val SameYearDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("MM-dd HH:mm")
-private val FullYearDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-private val RawPostSecondsFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-
-fun formatTime(
-    seconds: Long,
-    nowSeconds: Long = Instant.now().epochSecond,
-    zone: ZoneId = ZoneId.systemDefault(),
-): String {
-    if (seconds <= 0L) return "—"
-    val target = Instant.ofEpochSecond(seconds).atZone(zone)
-    val now = Instant.ofEpochSecond(nowSeconds).atZone(zone)
-    if (target.toLocalDate() == now.toLocalDate()) {
-        val diffSeconds = (nowSeconds - seconds).coerceAtLeast(0L)
-        return when {
-            diffSeconds < 60L -> "刚刚"
-            diffSeconds < 3600L -> "${diffSeconds / 60L} 分钟之前"
-            else -> "${diffSeconds / 3600L} 小时之前"
-        }
-    }
-    return if (target.year == now.year) {
-        SameYearDateFormatter.format(target)
-    } else {
-        FullYearDateFormatter.format(target)
-    }
-}
-
-fun formatTimeText(
-    rawDate: String,
-    nowSeconds: Long = Instant.now().epochSecond,
-    zone: ZoneId = ZoneId.systemDefault(),
-): String {
-    val trimmed = rawDate.trim()
-    if (trimmed.isEmpty()) return rawDate
-    trimmed.toLongOrNull()?.takeIf { it > 0L }?.let { epoch ->
-        return formatTime(epoch, nowSeconds, zone)
-    }
-    val parsed = runCatching { LocalDateTime.parse(trimmed, RawPostSecondsFormatter) }.getOrNull()
-        ?: runCatching { LocalDateTime.parse(trimmed, FullYearDateFormatter) }.getOrNull()
-    return if (parsed != null) {
-        formatTime(parsed.atZone(zone).toEpochSecond(), nowSeconds, zone)
-    } else {
-        rawDate
-    }
-}

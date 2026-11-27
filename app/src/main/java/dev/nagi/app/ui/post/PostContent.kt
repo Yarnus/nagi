@@ -13,13 +13,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -106,8 +106,9 @@ internal fun collectContentImages(blocks: List<ContentBlock>): List<String> {
                 is ContentBlock.Heading -> walk(block.children)
                 is ContentBlock.Divider -> walk(block.children)
                 is ContentBlock.Aligned -> walk(block.children)
+                is ContentBlock.Styled -> walk(block.children)
                 is ContentBlock.ListBlock -> block.items.forEach(::walk)
-                is ContentBlock.Table -> block.rows.forEach { row -> row.forEach(::walk) }
+                is ContentBlock.Table -> block.rows.forEach { row -> row.forEach { walk(it.content) } }
                 is ContentBlock.Collapse -> walk(block.children)
                 is ContentBlock.Quote,
                 is ContentBlock.Text,
@@ -132,8 +133,9 @@ internal fun collectVisibleCardMediaUrls(blocks: List<ContentBlock>): List<Strin
                 is ContentBlock.Heading -> walk(block.children)
                 is ContentBlock.Divider -> walk(block.children)
                 is ContentBlock.Aligned -> walk(block.children)
+                is ContentBlock.Styled -> walk(block.children)
                 is ContentBlock.ListBlock -> block.items.forEach(::walk)
-                is ContentBlock.Table -> block.rows.forEach { row -> row.forEach(::walk) }
+                is ContentBlock.Table -> block.rows.forEach { row -> row.forEach { walk(it.content) } }
                 // Collapse blocks render closed on share cards, and Quote blocks render text-only summaries.
                 is ContentBlock.Collapse,
                 is ContentBlock.Quote,
@@ -163,10 +165,11 @@ internal fun hasCopyablePlainText(blocks: List<ContentBlock>): Boolean = blocks.
         is ContentBlock.Heading -> hasCopyablePlainText(block.children)
         is ContentBlock.Divider -> true
         is ContentBlock.Aligned -> hasCopyablePlainText(block.children)
+        is ContentBlock.Styled -> hasCopyablePlainText(block.children)
         is ContentBlock.ListBlock -> block.items.any(::hasCopyablePlainText)
         is ContentBlock.Code -> block.value.isNotBlank()
         is ContentBlock.Quote -> hasCopyablePlainText(block.children)
-        is ContentBlock.Table -> block.rows.any { row -> row.size > 1 || row.any(::hasCopyablePlainText) }
+        is ContentBlock.Table -> block.rows.any { row -> row.size > 1 || row.any { hasCopyablePlainText(it.content) } }
         is ContentBlock.Media -> block.url.isNotBlank()
         is ContentBlock.Collapse,
         is ContentBlock.Image,
@@ -185,6 +188,7 @@ internal fun contentPlainText(blocks: List<ContentBlock>): String {
                 if (title.isBlank()) "------" else "=== $title ==="
             }
             is ContentBlock.Aligned -> render(block.children).takeIf { it.isNotBlank() }
+            is ContentBlock.Styled -> render(block.children).takeIf { it.isNotBlank() }
             is ContentBlock.ListBlock -> block.items.mapIndexedNotNull { index, item ->
                 render(item).takeIf { it.isNotBlank() }?.let { body ->
                     if (block.ordered) "${index + 1}. $body" else "• $body"
@@ -197,7 +201,7 @@ internal fun contentPlainText(blocks: List<ContentBlock>): String {
                 if (body.isBlank()) null else "$header\n$body"
             }
             is ContentBlock.Table -> block.rows.joinToString("\n") { row ->
-                row.joinToString(" | ") { cell -> render(cell).replace('\n', ' ') }
+                row.joinToString(" | ") { cell -> render(cell.content).replace('\n', ' ') }
             }.takeIf { it.isNotBlank() }
             is ContentBlock.Collapse -> {
                 val body = render(block.children)
@@ -254,15 +258,58 @@ private fun RenderContentBlocks(
                         ContentAlignment.END -> TextAlign.End
                     }, isHeading)
 
+                is ContentBlock.Styled -> {
+                    val currentStyle = LocalPostStyleOverride.current
+                    val authorBg = block.style.background?.let(::Color)
+                    val nextBg = authorBg ?: currentStyle.background
+                    val effectiveBg = nextBg ?: colors.cardSurface
+                    val nextTextColor = resolveStyledTextColor(
+                        authorTextColor = block.style.textColor,
+                        authorBackground = nextBg,
+                        effectiveBackground = effectiveBg,
+                        inheritedTextColor = currentStyle.textColor,
+                        defaultTextColor = colors.textPrimary,
+                    )
+                    val nextScale = (currentStyle.fontScale * (block.style.fontScale ?: 1f)).coerceIn(0.5f, 2.5f)
+                    val nextAlign = when (block.style.alignment) {
+                        ContentAlignment.START -> TextAlign.Start
+                        ContentAlignment.CENTER -> TextAlign.Center
+                        ContentAlignment.END -> TextAlign.End
+                        null -> textAlign
+                    }
+                    CompositionLocalProvider(
+                        LocalPostStyleOverride provides PostStyleOverride(
+                            background = nextBg,
+                            textColor = nextTextColor,
+                            fontScale = nextScale,
+                        ),
+                    ) {
+                        if (authorBg != null) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(authorBg)
+                                    .padding(Space.sm),
+                            ) {
+                                RenderContentBlocks(block.children, preferences, onImage, nextAlign, isHeading)
+                            }
+                        } else {
+                            RenderContentBlocks(block.children, preferences, onImage, nextAlign, isHeading)
+                        }
+                    }
+                }
+
                 is ContentBlock.ListBlock -> Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+                    val styleOverride = LocalPostStyleOverride.current
                     block.items.forEachIndexed { index, item ->
                         Row(Modifier.fillMaxWidth()) {
                             Text(
                                 text = if (block.ordered) "${index + 1}. " else "• ",
-                                color = colors.textPrimary,
+                                color = styleOverride.textColor ?: colors.textPrimary,
                                 style = typography.postBody.copy(
-                                    fontSize = preferences.fontSize.sp,
-                                    lineHeight = preferences.effectiveLineHeight.sp,
+                                    fontSize = (preferences.fontSize * styleOverride.fontScale).sp,
+                                    lineHeight = (preferences.effectiveLineHeight * styleOverride.fontScale).sp,
                                 ),
                             )
                             Box(Modifier.weight(1f)) {
@@ -286,16 +333,19 @@ private fun RenderContentBlocks(
                     )
                 }
 
-                is ContentBlock.Dice -> Text(
-                    text = if (block.total == null) "骰子：${block.expression}（结果不可用）"
+                is ContentBlock.Dice -> {
+                    val styleOverride = LocalPostStyleOverride.current
+                    Text(
+                        text = if (block.total == null) "骰子：${block.expression}（结果不可用）"
                         else "骰子：${block.expression} = ${block.total}" +
                             if (block.rolls.isEmpty()) "" else "（投掷 ${block.rolls.joinToString(" + ")}）",
-                    color = colors.textPrimary,
-                    style = typography.postBody.copy(
-                        fontSize = preferences.fontSize.sp,
-                        lineHeight = preferences.effectiveLineHeight.sp,
-                    ),
-                )
+                        color = styleOverride.textColor ?: colors.textPrimary,
+                        style = typography.postBody.copy(
+                            fontSize = (preferences.fontSize * styleOverride.fontScale).sp,
+                            lineHeight = (preferences.effectiveLineHeight * styleOverride.fontScale).sp,
+                        ),
+                    )
+                }
 
                 is ContentBlock.Image -> PostImageBlock(block.url, onImage)
 
@@ -318,23 +368,8 @@ private fun RenderContentBlocks(
                     )
                 }
 
-                is ContentBlock.Table -> FlatCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = blockShape,
-                    containerColor = colors.insetContainer,
-                    borderColor = colors.cardBorder,
-                ) {
-                    Column(Modifier.horizontalScroll(rememberScrollState())) {
-                        block.rows.forEach { cells ->
-                            Row {
-                                cells.forEach { cell ->
-                                    Box(Modifier.width(160.dp).border(0.5.dp, colors.cardBorder).padding(Space.sm)) {
-                                        RenderContentBlocks(cell, preferences, onImage, textAlign, isHeading)
-                                    }
-                                }
-                            }
-                        }
-                    }
+                is ContentBlock.Table -> ContentTable(block, blockShape) { cellContent ->
+                    RenderContentBlocks(cellContent, preferences, onImage, textAlign, isHeading)
                 }
 
                 is ContentBlock.Quote -> ReplyReferenceCard(block, preferences, onImage)

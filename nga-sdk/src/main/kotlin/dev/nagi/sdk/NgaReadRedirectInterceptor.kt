@@ -19,9 +19,10 @@ internal class NgaReadRedirectInterceptor(
         var redirects = 0
         while (true) {
             if (chain.call().isCanceled()) throw IOException("Read cancelled")
-            val current = try { runBlocking { sessions.snapshot() } }
+            val revision = sessions.peekRevision()
+                ?: try { runBlocking { sessions.snapshot() }.revision }
                 catch (_: Exception) { throw IOException("Unable to check NGA session") }
-            if (current.revision != snapshot.revision) throw IOException("Account changed before read")
+            if (revision != snapshot.revision) throw IOException("Account changed before read")
             val response = chain.proceed(request.withNgaSession(snapshot.session))
             if (response.code !in listOf(301, 302, 303, 307, 308)) return response
             val target = response.header("Location")?.let { request.url.resolve(it) }

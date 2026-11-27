@@ -4,6 +4,7 @@ plugins {
     kotlin("plugin.compose")
     id("com.google.devtools.ksp")
     id("com.google.dagger.hilt.android")
+    id("androidx.baselineprofile")
 }
 
 val releaseSigningEnvironment = listOf(
@@ -64,6 +65,14 @@ android {
             signingConfig = signingConfigs.getByName("release")
         }
     }
+    androidComponents {
+        finalizeDsl { extension ->
+            val debugSigning = extension.signingConfigs.getByName("debug")
+            extension.buildTypes
+                .filter { it.name in setOf("nonMinifiedRelease", "benchmarkRelease") }
+                .forEach { it.signingConfig = debugSigning }
+        }
+    }
     lint {
         checkReleaseBuilds = false
         abortOnError = false
@@ -76,7 +85,19 @@ android {
     testOptions { unitTests.isIncludeAndroidResources = true }
 }
 kotlin { jvmToolchain(21) }
+composeCompiler {
+    stabilityConfigurationFiles.add(layout.projectDirectory.file("compose-stability.conf"))
+    if (providers.gradleProperty("composeReports").isPresent) {
+        val reportDir = layout.buildDirectory.dir("compose-reports")
+        reportsDestination = reportDir
+        metricsDestination = reportDir
+    }
+}
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
+baselineProfile {
+    mergeIntoMain = true
+    automaticGenerationDuringBuild = false
+}
 
 val verifyThirdPartyNotices by tasks.registering {
     group = "verification"
@@ -107,6 +128,7 @@ android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("ge
 tasks.named("preBuild") { dependsOn(copyNotices) }
 
 dependencies {
+    "baselineProfile"(project(":baselineprofile"))
     implementation(project(":nga-sdk")) { exclude(group = "org.json", module = "json") }
     implementation(platform("androidx.compose:compose-bom:2025.08.00"))
     implementation("androidx.activity:activity-compose:1.10.1")

@@ -23,7 +23,7 @@ object ContentParser {
     private val postReference = Regex("""\[pid=([^\]]+)\]""", RegexOption.IGNORE_CASE)
     private val htmlCode = Regex("""<pre\b[^>]*>.*?</pre\s*>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
     private val smileTag = Regex("""\[s:([^\]]+)\]""", RegexOption.IGNORE_CASE)
-    private val openingTag = Regex("""\[(img|noimg|album|quote|code|collapse|table|h|align|list|flash|attach|dice)(?:=([^\]]*))?\]""", RegexOption.IGNORE_CASE)
+    private val openingTag = Regex("""\[(?:(img|noimg|album|quote|code|collapse|table|h|align|list|flash|attach|dice)(?:=([^\]]*))?|(style|fixsize)(?:(?:\s+|=)([^\]]*))?)\]""", RegexOption.IGNORE_CASE)
     private val legacyTimestampRegex = Regex("""^[^/]*_([0-9a-fA-F]{8})[0-9a-fA-F]*\.[a-zA-Z0-9]+$""")
     private val inlineTag = Regex("""\[(/?)(b|i|u|del|color|size)(?:=([^\]]*))?\]""", RegexOption.IGNORE_CASE)
     private val positiveId = Regex("[1-9][0-9]*")
@@ -31,9 +31,10 @@ object ContentParser {
     private val blockTags = setOf("p", "div", "li")
     private val tableCellTags = setOf("td", "th")
     private val closingTagTokens: Map<String, Regex> = listOf(
-        "img", "noimg", "album", "quote", "code", "collapse", "table", "h", "align", "list", "flash", "attach", "dice",
+        "img", "noimg", "album", "quote", "code", "collapse", "table", "h", "align", "list", "flash", "attach", "dice", "style", "fixsize",
     ).associateWith { tag ->
-        val tagToken = """\[(/?)$tag(?:=[^\]]*)?\]"""
+        val suffix = if (tag == "style" || tag == "fixsize") """(?:[=\s][^\]]*)?""" else """(?:=[^\]]*)?"""
+        val tagToken = """\[(/?)$tag$suffix\]"""
         val protectedCode = """\[code(?:=[^\]]*)?\].*?\[/code\]|<pre\b[^>]*>.*?</pre\s*>"""
         Regex(
             if (tag == "code") tagToken else "$protectedCode|$tagToken",
@@ -60,7 +61,11 @@ object ContentParser {
     private val refBbPattern = Regex("""\[(uid|tid|pid)=([^\]]*)\](.*?)\[/\1\]""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
     private val mentionPattern = Regex("""\[@\s*([^\]]+)\]""")
     private val stripBrPattern = Regex("""\[stripbr\]""", RegexOption.IGNORE_CASE)
-    private val ignoredBbPattern = Regex("""\[/?(?:style|fixsize|randomblock)(?:\s[^\]]*)?\]""", RegexOption.IGNORE_CASE)
+    private val ignoredBbPattern = Regex("""\[/?randomblock(?:\s[^\]]*)?\]""", RegexOption.IGNORE_CASE)
+    private val bbCellAttrPattern = Regex("""\b(colspan|rowspan|width)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s\]]+))""", RegexOption.IGNORE_CASE)
+    private val bbCellShorthandWidthPattern = Regex("""^\[td(\d+)""", RegexOption.IGNORE_CASE)
+    private val widthAttrPattern = Regex("""^(\d+)%?$""")
+    private val styleWhitespace = Regex("""\s+""")
     private val titledDividerPattern = Regex("""={3,}((?:(?!={3,})[^\r\n])*?)={3,}""")
     private val plainDividerPattern = Regex("={6,}")
     private val shanghaiZone = ZoneId.of("Asia/Shanghai")
@@ -91,7 +96,7 @@ object ContentParser {
             var offset = 0
             while (offset < raw.length) {
                 val opening = openingTag.findAll(raw, offset).firstOrNull { match -> codeRanges.none { match.range.first in it } } ?: break
-                val tag = opening.groupValues[1].lowercase()
+                val tag = opening.groupValues[1].ifEmpty { opening.groupValues[3] }.lowercase()
                 val tokens = closingTagTokens[tag] ?: break
                 var nesting = 1
                 val closing = tokens.findAll(raw, opening.range.last + 1).firstOrNull {
@@ -102,7 +107,7 @@ object ContentParser {
                 } ?: break
                 blocks += html(raw.substring(offset, opening.range.first), depth)
                 val body = raw.substring(opening.range.last + 1, closing.range.first)
-                val attr = opening.groupValues[2]
+                val attr = opening.groupValues[2].ifEmpty { opening.groupValues[4] }
                 blocks += when (tag) {
                     "img", "noimg" -> listOf(image(if (tag == "noimg") legacyImage(body) else body))
                     "album" -> if (body.contains("[img]", true)) parse(body, depth + 1) else
@@ -112,6 +117,7 @@ object ContentParser {
                     "table" -> listOf(table(body, depth + 1))
                     "h" -> listOf(ContentBlock.Heading(parse(body, depth + 1)))
                     "align" -> listOf(ContentBlock.Aligned(alignment(attr), parse(body, depth + 1)))
+                    "style", "fixsize" -> styled(attr, body, depth + 1)
                     "list" -> listOf(ContentBlock.ListBlock(listItems(body).map { parse(it, depth + 1) }, attr == "1"))
                     "flash", "attach" -> {
                         val url = resourceUrl(body.trim(), base)
@@ -175,22 +181,36 @@ object ContentParser {
         }
 
         private fun table(body: String, depth: Int): ContentBlock.Table = ContentBlock.Table(
-            tableParts(body, trTableTokens).map { row -> tableParts(row, tdTableTokens).map { parse(it, depth) } },
+            tableParts(body, trTableTokens).map { row ->
+                tableParts(row.body, tdTableTokens).map { cell ->
+                    parseBbTableCell(cell.openTag, parse(cell.body, depth))
+                }
+            },
         )
 
-        private fun tableParts(raw: String, tokens: Regex): List<String> {
+        private fun styled(attr: String, body: String, depth: Int): List<ContentBlock> {
+            val children = parse(body, depth)
+            val style = parseBlockStyle(attr)
+            return if (style == null) children else listOf(ContentBlock.Styled(style, children))
+        }
+
+        private fun tableParts(raw: String, tokens: Regex): List<TablePart> {
             // Keep raw cell content intact, including code and nested tables.
-            val parts = mutableListOf<String>()
+            val parts = mutableListOf<TablePart>()
             var nesting = 0
+            var openTag = ""
             var start = 0
             for (token in tokens.findAll(raw)) {
                 if (token.value.startsWith("[code", true) || token.value.startsWith("<pre", true)) continue
                 if (token.groupValues[1].isEmpty()) {
-                    if (nesting == 0) start = token.range.last + 1
+                    if (nesting == 0) {
+                        openTag = token.value
+                        start = token.range.last + 1
+                    }
                     nesting++
                 } else if (nesting > 0) {
                     nesting--
-                    if (nesting == 0) parts += raw.substring(start, token.range.first)
+                    if (nesting == 0) parts += TablePart(openTag, raw.substring(start, token.range.first))
                 }
             }
             return parts
@@ -357,7 +377,9 @@ object ContentParser {
                         "table" -> {
                             flush()
                             blocks += ContentBlock.Table(node.children().flatMap { if (it.tagName() == "tr") listOf(it) else it.children().filter { child -> child.tagName() == "tr" } }.map { row ->
-                                row.children().filter { it.tagName() in tableCellTags }.map { parse(restoreCode(it.html()), depth + 1) }
+                                row.children().filter { it.tagName() in tableCellTags }.map { cell ->
+                                    parseHtmlTableCell(cell, parse(restoreCode(cell.html()), depth + 1))
+                                }
                             })
                         }
                         "nagi-divider", "hr" -> { flush(); blocks += ContentBlock.Divider(parse(restoreCode(node.html()), depth + 1)) }
@@ -384,6 +406,116 @@ object ContentParser {
             document.body().childNodes().forEach { visit(it) }
             flush()
             return blocks
+        }
+    }
+
+    private data class TablePart(val openTag: String, val body: String)
+
+    private fun parseBbTableCell(openTag: String, content: List<ContentBlock>): TableCell {
+        var colSpan = 1
+        var rowSpan = 1
+        var widthPercent: Int? = bbCellShorthandWidthPattern.find(openTag)
+            ?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it in 1..100 }
+        for (match in bbCellAttrPattern.findAll(openTag)) {
+            val key = match.groupValues[1].lowercase()
+            val value = match.groupValues[2].ifEmpty { match.groupValues[3] }.ifEmpty { match.groupValues[4] }.trim()
+            when (key) {
+                "colspan" -> clampSpan(value)?.let { colSpan = it }
+                "rowspan" -> clampSpan(value)?.let { rowSpan = it }
+                "width" -> parseWidthPercent(value)?.let { widthPercent = it }
+            }
+        }
+        return TableCell(content = content, colSpan = colSpan, rowSpan = rowSpan, widthPercent = widthPercent)
+    }
+
+    private fun parseHtmlTableCell(cell: Element, content: List<ContentBlock>): TableCell {
+        val colSpan = clampSpan(cell.attr("colspan")) ?: 1
+        val rowSpan = clampSpan(cell.attr("rowspan")) ?: 1
+        val widthPercent = parseWidthPercent(cell.attr("width"))
+        return TableCell(content = content, colSpan = colSpan, rowSpan = rowSpan, widthPercent = widthPercent)
+    }
+
+    private fun clampSpan(raw: String): Int? =
+        raw.trim().toIntOrNull()?.takeIf { it > 0 }?.coerceIn(1, 20)
+
+    private fun parseWidthPercent(raw: String): Int? {
+        val match = widthAttrPattern.matchEntire(raw.trim()) ?: return null
+        return match.groupValues[1].toIntOrNull()?.takeIf { it > 0 }?.coerceIn(1, 100)
+    }
+
+    private fun parseBlockStyle(attr: String): BlockStyle? {
+        val tokens = attr.trim().split(styleWhitespace).filter(String::isNotEmpty)
+        if (tokens.isEmpty()) return null
+        var background: Long? = null
+        var textColor: Long? = null
+        var fontScale: Float? = null
+        var alignment: ContentAlignment? = null
+        var i = 0
+        while (i < tokens.size) {
+            when (tokens[i].lowercase()) {
+                "background" -> {
+                    if (i + 1 < tokens.size) {
+                        parseBlockColor(tokens[i + 1])?.let { background = it }
+                        i += 2
+                        if (i < tokens.size && parseBlockColor(tokens[i]) != null) i++
+                    } else {
+                        i++
+                    }
+                }
+                "color" -> {
+                    if (i + 1 < tokens.size) {
+                        parseBlockColor(tokens[i + 1])?.let { textColor = it }
+                        i += 2
+                    } else {
+                        i++
+                    }
+                }
+                "font" -> {
+                    if (i + 1 < tokens.size) {
+                        tokens[i + 1].toFloatOrNull()?.takeIf { it.isFinite() && it in 0.5f..2.5f }?.let { fontScale = it }
+                        i += 2
+                    } else {
+                        i++
+                    }
+                }
+                "align" -> {
+                    if (i + 1 < tokens.size) {
+                        when (tokens[i + 1].lowercase()) {
+                            "left" -> alignment = ContentAlignment.START
+                            "center" -> alignment = ContentAlignment.CENTER
+                            "right" -> alignment = ContentAlignment.END
+                        }
+                        i += 2
+                    } else {
+                        i++
+                    }
+                }
+                else -> i++
+            }
+        }
+        if (background == null && textColor == null && fontScale == null && alignment == null) return null
+        return BlockStyle(
+            background = background,
+            textColor = textColor,
+            fontScale = fontScale,
+            alignment = alignment,
+        )
+    }
+
+    private fun parseBlockColor(raw: String): Long? {
+        val normalized = raw.trim().lowercase()
+        ContentColors.rgb[normalized]?.let { return 0xFF000000L or it.toLong() }
+        if (!normalized.startsWith('#')) return null
+        val hex = normalized.substring(1)
+        return when (hex.length) {
+            6 -> if (hex.all { it in '0'..'9' || it in 'a'..'f' }) 0xFF000000L or hex.toLong(16) else null
+            3 -> {
+                val r = hex[0].digitToIntOrNull(16) ?: return null
+                val g = hex[1].digitToIntOrNull(16) ?: return null
+                val b = hex[2].digitToIntOrNull(16) ?: return null
+                0xFF000000L or ((r * 17L) shl 16) or ((g * 17L) shl 8) or (b * 17L)
+            }
+            else -> null
         }
     }
 

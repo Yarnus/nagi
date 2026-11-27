@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -93,11 +94,56 @@ internal fun smileInlineContent(smiles: List<InlineSmile>): Map<String, InlineTe
         ) { SmileImage(inline.smile, Modifier.fillMaxSize()) }
     }.toMap()
 
+internal data class PostStyleOverride(
+    val background: Color? = null,
+    val textColor: Color? = null,
+    val fontScale: Float = 1f,
+)
+
+internal val LocalPostStyleOverride = staticCompositionLocalOf { PostStyleOverride() }
+
+internal fun contrastRatio(foreground: Color, background: Color): Float {
+    val l1 = maxOf(foreground.luminance(), background.luminance())
+    val l2 = minOf(foreground.luminance(), background.luminance())
+    return (l1 + 0.05f) / (l2 + 0.05f)
+}
+
+internal fun resolveStyledTextColor(
+    authorTextColor: Long?,
+    authorBackground: Color?,
+    effectiveBackground: Color,
+    inheritedTextColor: Color?,
+    defaultTextColor: Color,
+): Color? {
+    if (authorTextColor != null) {
+        val candidate = Color(authorTextColor)
+        return if (contrastRatio(candidate, effectiveBackground) >= 4.5f) {
+            candidate
+        } else if (authorBackground != null) {
+            if (authorBackground.luminance() > 0.5f) Color.Black else Color.White
+        } else {
+            null
+        }
+    }
+    if (authorBackground != null) {
+        val current = inheritedTextColor ?: defaultTextColor
+        return if (contrastRatio(current, authorBackground) >= 4.5f) {
+            inheritedTextColor
+        } else if (authorBackground.luminance() > 0.5f) {
+            Color.Black
+        } else {
+            Color.White
+        }
+    }
+    return inheritedTextColor
+}
+
 internal fun paragraphText(
     block: ContentBlock.Text,
     linkColor: Color,
     background: Color = Color.White,
     onOpenUser: ((String) -> Unit)? = null,
+    fontScale: Float = 1f,
 ): AnnotatedString = buildAnnotatedString {
     appendSmileText(block.value, block.smiles)
     block.spans.forEach { span ->
@@ -107,12 +153,15 @@ internal fun paragraphText(
             span.strikethrough -> TextDecoration.LineThrough
             else -> null
         }
+        val spanFontSize = span.scale?.let { scale ->
+            ((fontScale * scale).coerceIn(0.5f, 2.5f) / fontScale).em
+        } ?: androidx.compose.ui.unit.TextUnit.Unspecified
         addStyle(SpanStyle(
             fontWeight = if (span.bold) FontWeight.Bold else null,
             fontStyle = if (span.italic) FontStyle.Italic else null,
             textDecoration = decoration,
             color = span.color?.let { contentTextColor(it, background) } ?: Color.Unspecified,
-            fontSize = span.scale?.em ?: androidx.compose.ui.unit.TextUnit.Unspecified,
+            fontSize = spanFontSize,
         ), span.start, span.end)
         span.url?.let { url ->
             val uid = NgaUserLinks.userId(url)
@@ -134,20 +183,24 @@ internal fun PostParagraph(
 ) {
     val colors = NagiThemeTokens.colors
     val openUser = LocalOpenUser.current
-    val text = remember(block, colors.goldText, colors.insetContainer, openUser) {
-        paragraphText(block, colors.goldText, colors.insetContainer, openUser)
+    val styleOverride = LocalPostStyleOverride.current
+    val effectiveBackground = styleOverride.background ?: colors.insetContainer
+    val text = remember(block, colors.goldText, effectiveBackground, styleOverride.fontScale, openUser) {
+        paragraphText(block, colors.goldText, effectiveBackground, openUser, styleOverride.fontScale)
     }
     val inlineContent = remember(block.smiles) { smileInlineContent(block.smiles) }
-    val fontSize = preferences.fontSize + if (heading) 2 else 0
-    val largestScale = (block.spans.maxOfOrNull { it.scale ?: 1f } ?: 1f).coerceAtLeast(1f)
+    val fontSize = (preferences.fontSize + if (heading) 2 else 0) * styleOverride.fontScale
+    val largestScale = (block.spans.maxOfOrNull { span ->
+        span.scale?.let { (styleOverride.fontScale * it).coerceIn(0.5f, 2.5f) / styleOverride.fontScale } ?: 1f
+    } ?: 1f).coerceAtLeast(1f)
     Text(
         text = text,
         modifier = if (textAlign == TextAlign.Start) Modifier else Modifier.fillMaxWidth(),
         inlineContent = inlineContent,
-        color = colors.textPrimary,
+        color = styleOverride.textColor ?: colors.textPrimary,
         style = NagiThemeTokens.typography.postBody.copy(
             fontSize = fontSize.sp,
-            lineHeight = (preferences.effectiveLineHeight * largestScale).sp,
+            lineHeight = (preferences.effectiveLineHeight * styleOverride.fontScale * largestScale).sp,
             fontWeight = if (heading) FontWeight.SemiBold else FontWeight.Normal,
             textAlign = textAlign,
         ),

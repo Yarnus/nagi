@@ -80,15 +80,30 @@ sealed interface ContentBlock {
         val reference: PostReference? = null,
     ) : ContentBlock
     data class Code(val value: String) : ContentBlock
-    data class Table(val rows: List<List<List<ContentBlock>>>) : ContentBlock
+    data class Table(val rows: List<List<TableCell>>) : ContentBlock
     data class Heading(val children: List<ContentBlock>) : ContentBlock
     data class Divider(val children: List<ContentBlock> = emptyList()) : ContentBlock
     data class Aligned(val alignment: ContentAlignment, val children: List<ContentBlock>) : ContentBlock
+    data class Styled(val style: BlockStyle, val children: List<ContentBlock>) : ContentBlock
     data class ListBlock(val items: List<List<ContentBlock>>, val ordered: Boolean = false) : ContentBlock
     data class Media(val url: String, val kind: MediaKind) : ContentBlock
     data class Dice(val expression: String, val rolls: List<Int> = emptyList(), val total: Long? = null) : ContentBlock
     data class Collapse(val title: String, val children: List<ContentBlock>) : ContentBlock
 }
+
+data class TableCell(
+    val content: List<ContentBlock>,
+    val colSpan: Int = 1,
+    val rowSpan: Int = 1,
+    val widthPercent: Int? = null,
+)
+
+data class BlockStyle(
+    val background: Long? = null,
+    val textColor: Long? = null,
+    val fontScale: Float? = null,
+    val alignment: ContentAlignment? = null,
+)
 
 data class CommunityItem(
     val id: String, val title: String, val summary: String, val actor: String,

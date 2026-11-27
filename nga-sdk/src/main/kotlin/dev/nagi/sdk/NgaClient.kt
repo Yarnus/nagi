@@ -171,9 +171,10 @@ internal class HttpNgaClient(
                 if (ctx.isWrite && !ctx.sent.compareAndSet(false, true)) {
                     throw IOException("Automatic request replay blocked")
                 }
-                val current = try { runBlocking { sessions.snapshot() } }
-                catch (_: Exception) { throw IOException("Unable to check NGA session") }
-                if (current.revision != ctx.snapshot.revision) {
+                val revision = sessions.peekRevision()
+                    ?: try { runBlocking { sessions.snapshot() }.revision }
+                    catch (_: Exception) { throw IOException("Unable to check NGA session") }
+                if (revision != ctx.snapshot.revision) {
                     throw IOException("Account changed before transmission")
                 }
                 chain.proceed(chain.request()).also { ctx.responseStatus = it.code }

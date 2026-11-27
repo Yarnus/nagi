@@ -50,6 +50,7 @@ internal fun referencePreview(blocks: List<ContentBlock>): String = blocks.mapNo
         is ContentBlock.Heading -> referencePreview(block.children)
         is ContentBlock.Divider -> referencePreview(block.children)
         is ContentBlock.Aligned -> referencePreview(block.children)
+        is ContentBlock.Styled -> referencePreview(block.children)
         is ContentBlock.ListBlock -> block.items.joinToString("\n") { referencePreview(it) }
         is ContentBlock.Collapse -> "[${block.title}]"
         is ContentBlock.Dice -> "[骰子]"

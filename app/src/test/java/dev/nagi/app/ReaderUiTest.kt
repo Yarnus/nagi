@@ -20,6 +20,7 @@ import dev.nagi.app.ui.post.*
 import dev.nagi.app.ui.components.AccountMenuButton
 import dev.nagi.app.ui.theme.*
 import dev.nagi.sdk.ContentBlock
+import dev.nagi.sdk.TableCell
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -76,7 +77,7 @@ class ReaderUiTest {
                                 ContentBlock.Text("Body text with an intentional, readable line length."),
                                 ContentBlock.Quote(listOf(ContentBlock.Text("Quoted text"))),
                                 ContentBlock.Code("val reader = Nagi()"),
-                                ContentBlock.Table(listOf(listOf(listOf(ContentBlock.Text("Column A")), listOf(ContentBlock.Text("Column B"))))),
+                                ContentBlock.Table(listOf(listOf(TableCell(listOf(ContentBlock.Text("Column A"))), TableCell(listOf(ContentBlock.Text("Column B")))))),
                             ), ReadingPreferences(), {})
                         }
                     }

@@ -45,6 +45,8 @@ class AndroidSessionStore(context: Context, fileName: String = "nga-sessions") :
         }
     }
 
+    override fun peekRevision(): Long? = cachedAccounts?.revision
+
     override suspend fun snapshot(): SessionSnapshot {
         val accounts = loadAccounts()
         return SessionSnapshot(accounts.revision, accounts.active?.let { accounts.sessions.getValue(it) })

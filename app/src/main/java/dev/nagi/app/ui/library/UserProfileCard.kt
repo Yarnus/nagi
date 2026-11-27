@@ -38,10 +38,11 @@ internal fun contentPreview(blocks: List<ContentBlock>): String = blocks.joinToS
         is ContentBlock.Code -> block.value
         is ContentBlock.Quote -> contentPreview(block.children)
         is ContentBlock.Collapse -> block.title + "\n" + contentPreview(block.children)
-        is ContentBlock.Table -> block.rows.joinToString("\n") { row -> row.joinToString(" ") { contentPreview(it) } }
+        is ContentBlock.Table -> block.rows.joinToString("\n") { row -> row.joinToString(" ") { contentPreview(it.content) } }
         is ContentBlock.Heading -> contentPreview(block.children)
         is ContentBlock.Divider -> contentPreview(block.children)
         is ContentBlock.Aligned -> contentPreview(block.children)
+        is ContentBlock.Styled -> contentPreview(block.children)
         is ContentBlock.ListBlock -> block.items.joinToString("\n") { contentPreview(it) }
         is ContentBlock.Media -> block.url
         is ContentBlock.Dice -> block.expression + (block.total?.let { " = $it" } ?: "")
